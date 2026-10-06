@@ -81,6 +81,52 @@ def _name(value: str) -> str:
     return re.sub(r"[^0-9a-z]", "", value.casefold())
 
 
+def fold(name: str) -> str:
+    """A written name trimmed, with inner whitespace collapsed to one space, lowercase."""
+    return " ".join(name.split()).lower()
+
+
+def read_corrections(
+    corrections: dict[str, Any], records: list[dict[str, Any]]
+) -> tuple[dict[str, date], dict[str, str]]:
+    """The reviewed dates by source key and kept names by folded spelling, checked whole.
+
+    A date only dates a record the page leaves undated; a key that names no
+    record of the batch is ignored. A kept name is never itself corrected.
+    """
+    dates = corrections.get("dates", {})
+    names = corrections.get("names", {})
+    if (
+        corrections.keys() - {"dates", "names"}
+        or not isinstance(dates, dict)
+        or not isinstance(names, dict)
+    ):
+        raise ValueError("The corrections file holds only a dates map and a names map")
+    undated = {record["event_id"]: not record["date"] for record in records}
+    days: dict[str, date] = {}
+    for key, value in dates.items():
+        if not undated.get(key, True):
+            raise ValueError(
+                f"The corrections file dates {key}, which has its own date"
+            )
+        try:
+            days[key] = date.fromisoformat(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"The corrections date of {key} is not a YYYY-MM-DD date"
+            ) from None
+    for key, kept in names.items():
+        if key != fold(key) or not key:
+            raise ValueError(f"The corrections name {key!r} is not a folded spelling")
+        if not isinstance(kept, str) or not kept.strip():
+            raise ValueError(f"The corrections name {key!r} keeps an empty name")
+        if fold(kept) in names:
+            raise ValueError(
+                f"The corrections name {key!r} keeps {kept!r}, which is itself corrected"
+            )
+    return days, names
+
+
 def _note(raw: str) -> bool:
     """Whether the source text carries a note, such as a player who left."""
     return any(_name(tag) not in RACE_TAGS for tag in re.findall(r"\(([^)]*)\)", raw))
@@ -171,14 +217,18 @@ def _between(month_day: tuple[int, int], after: date, before: date) -> date | No
     return fits[0] if len(fits) == 1 else None
 
 
-def record_days(records: list[dict[str, Any]]) -> dict[str, date | None]:
-    """The day of every record by source key: its own date, or one read from page order.
+def record_days(
+    records: list[dict[str, Any]], dates: dict[str, date] | None = None
+) -> dict[str, date | None]:
+    """The day of every record by source key: its own, a reviewed one, or page order's.
 
+    A reviewed date from the corrections file dates an undated record first.
     A page lists its nights newest first. A label with a month and a day but no
     year takes the one date between the nearest dated records above and below
     it on the same page. Anything else without a date stays None.
     """
     days: dict[str, date | None] = {}
+    reviewed = dates or {}
     pages: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in records:
         pages[record["source_url"]].append(record)
@@ -186,9 +236,9 @@ def record_days(records: list[dict[str, Any]]) -> dict[str, date | None]:
         page.sort(key=lambda record: record["source_order"])
         dated = [date.fromisoformat(r["date"]) if r["date"] else None for r in page]
         for index, record in enumerate(page):
-            days[record["event_id"]] = dated[index]
+            days[record["event_id"]] = dated[index] or reviewed.get(record["event_id"])
             month_day = _month_day(record["date_text"])
-            if dated[index] is not None or month_day is None:
+            if days[record["event_id"]] is not None or month_day is None:
                 continue
             newer = next((d for d in reversed(dated[:index]) if d), None)
             older = next((d for d in dated[index + 1 :] if d), None)
@@ -275,11 +325,39 @@ def validate(records: list[dict[str, Any]]) -> Counter[str]:
     return counts
 
 
+def _written(section: dict[str, Any]) -> list[str]:
+    """Every name a bracket writes, in page order: sides, explicit winners, crowns."""
+    played = [row for row in section["matches"] if row["record_type"] == "match"]
+    return [
+        *(
+            name
+            for row in played
+            for name in (row["player_1"], row["player_2"], row["winner"])
+            if name is not None
+        ),
+        *(crown["player"] for crown in section["crowns"]),
+    ]
+
+
 def import_capture(
-    records: list[dict[str, Any]], *, apply: bool = False
+    records: list[dict[str, Any]],
+    *,
+    apply: bool = False,
+    corrections: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Dry-run by default; each new event commits atomically, and reruns never overwrite."""
+    """Dry-run by default; each new event commits atomically, and reruns never overwrite.
+
+    Corrections change what is written to the archive, never the stored source record.
+    """
     counts = validate(records)
+    dates, names = read_corrections(corrections or {}, records)
+    written = [
+        name
+        for record in records
+        for section in record["sections"]
+        if section["kind"] == "bracket"
+        for name in _written(section)
+    ]
     with Session() as session:
         existing = {
             row.source_key: row for row in session.scalars(select(KothHistoryEvent))
@@ -306,29 +384,44 @@ def import_capture(
     mapping = {key: row.event_id for key, row in existing.items()}
     inserted = 0
     if apply:
-        days = record_days(records)
+        days = record_days(records, dates)
         for record in sorted(
             records, key=lambda row: (row["date"] or "", row["event_id"])
         ):
             if record["event_id"] in mapping:
                 continue
             with Session.begin() as session:
-                event_id = _insert_event(session, record, days[record["event_id"]])
+                event_id = _insert_event(
+                    session, record, days[record["event_id"]], names
+                )
             mapping[record["event_id"]] = event_id
             inserted += 1
     return {
         "mode": "apply" if apply else "dry_run",
         "counts": dict(counts),
+        "corrected_dates": sum(record["event_id"] in dates for record in records),
+        "corrected_names": sum(fold(name) in names for name in written),
         "inserted_events": inserted,
         "existing_events": sum(record["event_id"] in existing for record in records),
         "event_ids": mapping,
     }
 
 
-def _insert_event(session: OrmSession, record: dict[str, Any], day: date | None) -> int:
-    # A day read from page order puts its year in the name, as the dated labels do
+def _insert_event(
+    session: OrmSession,
+    record: dict[str, Any],
+    day: date | None,
+    names: dict[str, str] | None = None,
+) -> int:
+    """Write one record; names maps a folded spelling to the name kept for it."""
+    names = names or {}
+
+    def kept(name: str) -> str:
+        return names.get(fold(name), name)
+
+    # A day the record does not carry puts the full date in the name, as dated labels do
     label = (
-        f"{record['date_text']}, {day.year}"
+        f"{calendar.month_name[day.month]} {day.day}, {day.year}"
         if day is not None and not record["date"]
         else record["date_text"]
     )
@@ -390,19 +483,29 @@ def _insert_event(session: OrmSession, record: dict[str, Any], day: date | None)
         )
         session.add(division)
         session.flush()
+        played = [row for row in section["matches"] if row["record_type"] == "match"]
+        # One participant per folded kept name, under the kept name or its first spelling
+        spellings: dict[str, str] = {}
+        for name in _written(section):
+            if fold(name) in names:
+                spellings[fold(kept(name))] = kept(name)
+            else:
+                spellings.setdefault(fold(name), name)
         entrants: dict[str, EventEntrant] = {}
 
         def participant(
             name: str,
             entrants: dict[str, EventEntrant] = entrants,
+            spellings: dict[str, str] = spellings,
             section_no: int = section_no,
             division: EventDivision = division,
         ) -> EventEntrant:
+            name = fold(kept(name))
             if name not in entrants:
                 person = HistoricalParticipant(
                     event_id=event_id,
                     source_key=f"{section_no}:{len(entrants) + 1}",
-                    source_name=name,
+                    source_name=spellings[name],
                 )
                 session.add(person)
                 session.flush()
@@ -416,10 +519,18 @@ def _insert_event(session: OrmSession, record: dict[str, Any], day: date | None)
                 entrants[name] = entrant
             return entrants[name]
 
-        played = [row for row in section["matches"] if row["record_type"] == "match"]
-        king_name = section["crowns"][-1]["player"] if section["crowns"] else None
+        read = [
+            row
+            | {
+                "player_1": kept(row["player_1"]),
+                "player_2": kept(row["player_2"]),
+                "winner": row["winner"] and kept(row["winner"]),
+            }
+            for row in played
+        ]
+        king_name = kept(section["crowns"][-1]["player"]) if section["crowns"] else None
         inferred = dict(
-            zip(map(id, played), infer_winners(played, king_name), strict=True)
+            zip(map(id, played), infer_winners(read, king_name), strict=True)
         )
         for ordinal, row in enumerate(section["matches"], 1):
             if row["record_type"] != "match":
@@ -509,10 +620,13 @@ def main() -> None:
     parser.add_argument("capture", type=Path)
     parser.add_argument("--database-url", required=True, type=local_url)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--corrections", type=Path, help="reviewed dates and names")
     args = parser.parse_args()
     records = load_capture(args.capture)
+    corrections = json.loads(args.corrections.read_text()) if args.corrections else None
     init_engine(args.database_url)
-    print(json.dumps(import_capture(records, apply=args.apply), indent=2))
+    report = import_capture(records, apply=args.apply, corrections=corrections)
+    print(json.dumps(report, indent=2))
 
 
 if __name__ == "__main__":
