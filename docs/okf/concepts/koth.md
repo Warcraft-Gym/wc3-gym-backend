@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T10:15:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py

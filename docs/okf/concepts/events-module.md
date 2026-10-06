@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T10:15:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
