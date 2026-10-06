@@ -4,7 +4,7 @@ title: How this bundle is written
 description: The rules for every file under docs/okf, and the one rule for talking about the other repositories.
 resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md
 tags: [tooling]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T08:38:15Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:33:55Z }
 sources:
   - id: okf-spec
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md
@@ -79,6 +79,6 @@ The bundle is public. Never write a secret, a token, a database URL, an account 
 - A pull request that changes a fact this bundle states changes the concept in the same pull request and updates `generated.at`.
 - A concept that no longer holds gets `status: deprecated` and one line naming what replaced it. It is not deleted, so links keep working.
 - `log.md` gets one line per change, newest first.
-- GitHub Pages serves a graph viewer of this bundle, built from the bundle by the `pages.yml` workflow on every push to `main` with the viewer from the OKF reference repository. Nothing is committed for it: `just okf-graph` writes a local preview to `docs/okf/index.html`, which git ignores.
+- GitHub Pages serves a graph viewer of this bundle, built from the bundle by the `pages.yml` workflow on every push to `main` that changes `docs/`, the `justfile` or the workflow itself, with the viewer from the OKF reference repository. Nothing is committed for it: `just okf-graph` writes a local preview to `docs/okf/index.html`, which git ignores.
 - `uv run just test` runs `tests/test_okf.py`. It checks that every concept has a `type`, a `title`, a `description` and a `tags` list, that no value holds an unquoted `: `, that `index.md` files carry no frontmatter except the root one, that every concept is listed in its directory index with its own description, and that every relative link resolves to a file. `just okf-validate` checks the bundle with a third-party validator as well. `just okf-drift` lists the concepts whose sources changed after they were written. `just okf-verify` stamps the table concepts `verified` by `process:test_okf` once the test proves their columns; a human `verified` entry sits beside it.
 - Every table has one `Data Model` concept under `data/tables/`, named after the table. Its `# Schema` section lists every column with its meaning, one row per column, the column name backticked in the first cell. `tests/test_okf.py` fails when a column is added, dropped or renamed without the concept, and when a concept names a table that does not exist. A pull request that changes a column changes the concept.
