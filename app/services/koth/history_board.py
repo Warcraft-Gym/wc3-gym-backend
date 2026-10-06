@@ -1,5 +1,7 @@
 """The bounded archive board, with no live queue or current ladder lookups."""
 
+from typing import Literal
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlmodel import col
@@ -20,36 +22,57 @@ from app.models.koth_night import (
 )
 from app.models.season import Season
 from app.models.series import Series
-from app.services.koth.history_import import FORFEIT, bounds
+from app.services.koth.board import Throne
+from app.services.koth.history_import import BREAK, bounds
 from app.services.koth.night import divisions_of, series_of
 
 
-def _history_row(
-    row: Series,
+def _written(row: Series) -> Literal[1, 2] | None:
+    """The side the source page names as the winner."""
+    if row.result_unavailable:
+        return None
+    return 1 if (row.player1_score or 0) > (row.player2_score or 0) else 2
+
+
+def _history(
+    chain: list[Series],
     people: dict[int, KothPlayer],
-    inferred_winner: int | None,
-    note: str | None,
-) -> KothHistoricalSeries:
-    """One pairing: the source result, else the one the play order infers."""
-    return KothHistoricalSeries(
-        series_id=ident(row),
-        sequence=row.sequence or 0,
-        side1=people[row.entrant1_id or 0],
-        side2=people[row.entrant2_id or 0],
-        result_unavailable=row.result_unavailable,
-        winner_side=None
-        if row.result_unavailable
-        else 1
-        if (row.player1_score or 0) > (row.player2_score or 0)
-        else 2,
-        inferred_winner_side=1
-        if inferred_winner == 1
-        else 2
-        if inferred_winner
-        else None,
-        forfeit=note == FORFEIT,
-        review_note=None if note == FORFEIT else note,
-    )
+    inferred: dict[int, tuple[int | None, str | None]],
+) -> list[KothHistoricalSeries]:
+    """A bracket's pairings in play order, each with what its winner, written
+    else inferred, did to the crown: the holder who wins holds it, any other
+    winner takes it, a pairing with no winner leaves it to whoever wins next,
+    held only by the last known holder, and a winner who left empties it."""
+    rows: list[KothHistoricalSeries] = []
+    holder: int | None = None
+    for row in chain:
+        inferred_winner, note = inferred.get(ident(row), (None, None))
+        read: Literal[1, 2] | None = (
+            1 if inferred_winner == 1 else 2 if inferred_winner else None
+        )
+        written = _written(row)
+        won = written or read
+        winner = (row.entrant1_id, row.entrant2_id)[won - 1] if won else None
+        throne: Throne = (
+            "none" if winner is None else "held" if winner == holder else "moved"
+        )
+        left = note is not None and note.startswith(BREAK)
+        holder = None if left else winner or holder
+        rows.append(
+            KothHistoricalSeries(
+                series_id=ident(row),
+                sequence=row.sequence or 0,
+                side1=people[row.entrant1_id or 0],
+                side2=people[row.entrant2_id or 0],
+                result_unavailable=row.result_unavailable,
+                winner_side=written,
+                inferred_winner_side=read,
+                throne=throne,
+                winner_left=left,
+                review_note=None if left else note,
+            )
+        )
+    return rows
 
 
 def read_archive(session: Session, night: Season, date_label: str) -> KothBoard:
@@ -87,11 +110,11 @@ def read_archive(session: Session, night: Season, date_label: str) -> KothBoard:
                 upper_bound=bounds(division.name or "")[1],
                 historical=True,
                 historical_king=people.get(division.king_entrant_id or 0),
-                history=[
-                    _history_row(row, people, *inferred.get(ident(row), (None, None)))
-                    for row in series
-                    if row.division_id == ident(division)
-                ],
+                history=_history(
+                    [row for row in series if row.division_id == ident(division)],
+                    people,
+                    inferred,
+                ),
             )
         )
     videos = [

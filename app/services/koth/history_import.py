@@ -134,7 +134,9 @@ def _note(raw: str) -> bool:
     return any(_name(tag) not in RACE_TAGS for tag in re.findall(r"\(([^)]*)\)", raw))
 
 
-FORFEIT = "Neither side plays on; read as a forfeit"
+# Every break note starts with BREAK, including one stored under older wording
+BREAK = "Neither side plays on"
+WITHDREW = f"{BREAK}; the winner is read as withdrawn"
 
 
 def _near(pair: tuple[str, ...], following: tuple[str, ...]) -> bool:
@@ -153,12 +155,12 @@ def infer_winners(
     """(inferred winner side, note) per BO1 of one bracket, in source order.
 
     Winner stays on: the side that plays the next series won this one, and the
-    last series was won by the reported king. When neither side plays on, a
-    player left or two others played instead; the organisers read that as a
-    forfeit, so that result stays unknown and the order restarts with the next
-    pair. Any other doubt (a source note, a rematch, a name that only nearly
-    matches, a missing king, a disagreeing source result) leaves every winner
-    of the bracket to a human.
+    last series was won by the reported king. When neither side plays on, the
+    winner withdrew after it: the winner of the series before, if he plays in
+    it, won it, else its winner stays unknown, and the order restarts with the
+    next pair. Any other doubt (a source note, a rematch, a name that only
+    nearly matches, a missing king, a disagreeing source result) leaves every
+    winner of the bracket to a human.
     """
     if not rows:
         return []
@@ -167,12 +169,15 @@ def infer_winners(
     winners: list[int | None] = []
     notes: list[str | None] = []
     doubt = False
+    holder: str | None = None
     for index, (row, pair, following) in enumerate(
         zip(rows, pairs, after, strict=True)
     ):
         stays = [side for side, name in enumerate(pair, 1) if name in following]
         last = index == len(rows) - 1
         winner = stays[0] if len(stays) == 1 else None
+        if not stays and not last and holder in pair:
+            winner = pair.index(holder) + 1
         explicit = row["winner"]
         if _note(row["raw_text"]):
             note = "The source adds a note to this series"
@@ -182,17 +187,19 @@ def infer_winners(
             note = "The reported king is not in the last series"
         elif not stays and _near(pair, following):
             note = "A name only nearly matches the next series"
+        elif explicit and winner and _name(explicit) != pair[winner - 1]:
+            note = "The source result differs from the order"
         elif not stays:
-            note = FORFEIT
+            note = WITHDREW
         elif winner is None:
             note = "Both sides play the next series"
-        elif explicit and _name(explicit) != pair[winner - 1]:
-            note = "The source result differs from the order"
         else:
             note = None
-        doubt = doubt or note not in (None, FORFEIT)
+        doubt = doubt or note not in (None, WITHDREW)
         winners.append(None if explicit else winner)
         notes.append(note)
+        # A break empties the throne, so nobody holds it going into the next pair
+        holder = pair[winner - 1] if winner and stays else None
     if doubt:
         return [(None, note) for note in notes]
     return list(zip(winners, notes, strict=True))
