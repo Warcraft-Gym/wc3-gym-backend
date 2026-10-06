@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-three route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T10:57:03Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -90,7 +90,7 @@ A write does not clear the edge. A reader sees a change up to `s-maxage` plus `s
 - A list route answers a list row, never the entity's detail; an open list with many rows or heavy egress is a noun read computed in SQL. See [rule 7 of the response shapes](response-shapes.md#the-rules).
 - `X-DB-Rows` on the response, the egress ledger and `tests/test_query_budget.py` give the rows per call. A pull request that adds or widens a consumer's read states the rows per call and the cache time. See [Consumers of the API](consumers.md) for the consumer's side.
 
-`GET /koth/board` and `GET /koth/nights/{night_id}/board` Both answer `KothBoard`, keyed `night_id` with a `closed` flag, and every write of a live night answers the same shape, so the run page needs no second read. See [KOTH night](../concepts/koth.md).
+`GET /koth/board` and `GET /koth/nights/{night_id}/board` Both answer `KothBoard`, keyed `night_id` with a `closed` flag, and every write of a live night answers the same shape, so the run page needs no second read. `GET /koth/winners` lists the closed nights, a page of nights at a time, each with the king of every bracket and none of its series. See [KOTH night](../concepts/koth.md).
 
 # Examples
 
