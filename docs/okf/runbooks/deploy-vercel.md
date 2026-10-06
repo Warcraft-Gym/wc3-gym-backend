@@ -4,7 +4,7 @@ title: Deploy to Vercel
 description: A merge to main deploys production and migrates in the build; staging mirrors main; previews use the staging database; the Hobby plan sets the limits.
 resource: ../../../vercel.json
 tags: [deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
 stale_after: 2027-04-06T00:00:00Z
 sources:
   - id: vercel-json
@@ -27,7 +27,7 @@ sources:
 
 # Environment
 
-The README's variable table is the deploy list, plus `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET` for the Battle.net link. Vercel adds `VERCEL_ENV` and `VERCEL_GIT_COMMIT_REF`. `DB_URL` in production and preview uses the transaction pooler on port 6543; the session pooler on 5432 holds 15 clients and a few warm functions fill it. See [the pitfall](../pitfalls/transaction-pooler.md). An environment change applies only to deployments built after it: redeploy.
+The README's variable table is the whole deploy list. Vercel adds `VERCEL_ENV` and `VERCEL_GIT_COMMIT_REF`. `DB_URL` in production and preview uses the transaction pooler on port 6543; the session pooler on 5432 holds 15 clients and a few warm functions fill it. See [the pitfall](../pitfalls/transaction-pooler.md). An environment change applies only to deployments built after it: redeploy.
 
 # Previews
 

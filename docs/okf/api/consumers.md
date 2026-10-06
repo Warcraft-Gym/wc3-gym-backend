@@ -4,11 +4,11 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
-    title: The fields the WordPress shortcodes read
+    title: The fields of eight public routes
   - id: contract
     resource: ../../../tests/test_contract.py
     title: The fields the offline leaderboard reads
@@ -22,19 +22,16 @@ sources:
 | Consumer | Repository | Reads | Auth |
 |---|---|---|---|
 | the web app | `wc3-gym-frontend` | most routes | Clerk session or the admin token |
-| the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams/summary`, `/matches`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}/summary`, `GET /users/{user_id}/seasons`, `GET /users/{user_id}/series?event_id=` and `GET /stats/career/{user_id}` | none |
-| the WordPress site | `gym_website_scripts` | eight paths on every page view, no cache, against the older backend host: `GET /stats/career`, `GET /config/settings`, `GET /teams/season/{id}`, `GET /teams/{id}/image`, `GET /seasons/{id}`, `POST /matches/search`, `POST /series/season/{id}/playday/{n}/search`, `POST /fantasy/teams/search` | none |
+| the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams/summary`, `/matches`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}/summary`, `GET /users/{user_id}/seasons`, `GET /users/{user_id}/series?event_id=` and `GET /stats/career/{stat_id}` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CLOUDFLARE_CRON_SECRET` bearer |
 | Vercel cron | this repository's `vercel.json` | `GET /jobs/w3c-sync` and `GET /jobs/egress-snapshot`, each once a day | `CRON_SECRET` bearer |
 | Nightbot | no repository | `GET /koth/signup`: the chat form with `q` answers one plain-text line, the parameter form with `battletag` answers JSON; and the deprecated `/koth/*` reads | the Nightbot token |
 | the stream overlay and bookmarks | none | the deprecated `/koth/*` reads | none |
 
-The WordPress shortcodes today call the older backend host, not this deployment, and that host answers 502, so the shortcodes show no data. Three of their paths do not exist here: `GET /teams/season/{id}`, `GET /seasons/{id}` and `POST /series/season/{id}/playday/{n}/search`. Before the shortcodes point at this deployment, those calls move to `GET /events/{id}/teams`, `GET /events/{id}`, and `GET /events/{id}/matches` with `GET /events/{id}/series?match_id={id}`. `GET /events/{id}` is not the old season payload: it has no `user_signup` or `signup_race`, and its `phase` and `signups_open` follow the event model, so the PHP that reads those fields changes with the move.
-
 # What pins the shapes
 
-- `tests/test_public_contract.py`: presence and shape of the fields the PHP reads, route by route.
+- `tests/test_public_contract.py`: presence and shape of the fields of eight public routes, route by route.
 - `tests/test_contract.py`: the fields the offline leaderboard reads.
 - `tests/test_event_season_parity.py`: GNL creation through `/events`, the GNL fields on `EventPublic`, the event routes for season subresources, and that no `/seasons` route exists.
 - `tests/test_error_envelope.py`: the `error` key every client reads.

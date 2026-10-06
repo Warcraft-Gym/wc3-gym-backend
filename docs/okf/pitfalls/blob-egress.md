@@ -3,7 +3,7 @@ type: Pitfall
 title: A bytes column drives egress
 description: A picture stored as bytes on a row is read by every query that touches the row, invisible to statement counts and response sizes, and it drove database egress.
 tags: [data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
 sources:
   - id: source
     resource: ../../PICTURES.md
@@ -18,4 +18,3 @@ sources:
 
 - A picture is a URL. `tests/test_blob_budget.py` fails on any mapped binary column; keep it.
 - Measure this class of problem with a byte-counting relay in front of Postgres, never by reading response sizes.
-- The older self-hosted backend serves the WordPress site from another host; never scale a production figure from that host.

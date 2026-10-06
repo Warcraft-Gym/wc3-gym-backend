@@ -4,7 +4,7 @@ title: Seed a database and build a review season
 description: Load the private seed repository into a target, or build a season two accounts can click through on staging.
 resource: ../../../app/core/seed.py
 tags: [deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
 stale_after: 2027-04-06T00:00:00Z
 sources:
   - id: seed
@@ -22,7 +22,7 @@ sources:
 
 The seed is a private repository of one CSV per table plus `logos/<team id>.<ext>` and a `manifest.json`. `uv run just vercel export-seed <dir> prod` writes it from production: every base table, rows ordered by primary key, NULL as `\N`, the secret settings blanked, and the manifest carrying the alembic revision of the database it came from. Run it after every schema change the seed must carry, then commit the directory to the seed repository.
 
-`uv run just local seed`, `uv run just vercel seed <env>` and the azure recipe migrate the target, truncate every table, copy the CSVs with foreign keys off and set every sequence. The local and vercel recipes then clear every team's `icon_url` and, when `BLOB_STORE_ID` is set, push the logos through the upload path; the azure recipe loads the CSVs alone. A directory with a manifest loads only when the database sits at the manifest's revision. A directory without one is a snapshot from before the event model, and the load rebuilds its GNL score system, leagues, stages, rounds and catalogue prices.
+`uv run just local seed` and `uv run just vercel seed <env>` migrate the target, truncate every table, copy the CSVs with foreign keys off and set every sequence. They then clear every team's `icon_url` and, when `BLOB_STORE_ID` is set, push the logos through the upload path. A directory with a manifest loads only when the database sits at the manifest's revision. A directory without one is a snapshot from before the event model, and the load rebuilds its GNL score system, leagues, stages, rounds and catalogue prices.
 
 `just vercel seed` has no default environment, because it truncates: name `prod` or `staging` every time. For staging the recipe rebuilds the locked template first and then the shared database from it, so new previews start from the fresh copy. Open branch copies are untouched.
 

@@ -2,7 +2,6 @@
 #
 # One module per place the backend runs. A recipe exists in a module only if it makes sense there;
 # `just <module> --list` shows what a place supports. README.md, "Where the backend runs", has the table.
-# Production is EAShibby's box, reached only through Portainer, so it has no module.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
@@ -11,9 +10,6 @@ default:
 
 # The Docker stack on this machine: up, down, logs, psql, serve, alembic, seed.
 mod local './just/local.just'
-
-# The Terraform staging box, over SSH: deploy, logs, status, alembic, seed.
-mod azure './just/azure.just'
 
 # The Vercel project, prod or staging: deploy, logs, status, migrate, seed, import-maps, list, drop.
 mod vercel './just/vercel.just'

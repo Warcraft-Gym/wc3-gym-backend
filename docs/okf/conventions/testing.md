@@ -4,7 +4,7 @@ title: Testing
 description: The suite migrates a temporary SQLite file with Alembic, opens no socket, and holds guard tests that pin contracts, statement counts and memory.
 resource: ../../../tests/conftest.py
 tags: [testing]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
 sources:
   - id: conftest
     resource: ../../../tests/conftest.py
@@ -30,7 +30,7 @@ These tests encode a lesson each. Keep them green and extend them when the lesso
 |---|---|
 | `test_migrations.py` | the models and the migrated schema describe the same tables; one Alembic head |
 | `test_error_envelope.py` | every error answers `{"error": ...}` and a 500 exposes nothing |
-| `test_public_contract.py` | the fields the WordPress shortcodes read from eight routes |
+| `test_public_contract.py` | the fields eight public routes answer |
 | `test_contract.py` | the fields the offline leaderboard reads |
 | `test_query_budget.py` | the number of SQL statements one list answer costs is a constant; `GET /me` and `GET /me/events` are pinned for a player and a captain |
 | `test_memory_budget.py` | the peak memory of the fantasy bets list |

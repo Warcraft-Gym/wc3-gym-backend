@@ -44,28 +44,26 @@ Port 5432 is the session pooler, which behaves like a direct connection and is t
 
 ## Where the backend runs
 
-One code, two mechanisms, three places you can reach from a laptop. Docker runs the image with `alembic upgrade head` at every start; Vercel runs `api/index.py` as a function and migrates in the build.
+One code, two mechanisms, two places you can reach from a laptop. Docker runs the image with `alembic upgrade head` at every start; Vercel runs `api/index.py` as a function and migrates in the build.
 
-**One just module per place.** A recipe exists in a module only if it makes sense there, so `just azure --list` is the list of what the box supports, and nothing else. Production is EAShibby's box, reached only through Portainer, so it has no module and no recipes.
+**One just module per place.** A recipe exists in a module only if it makes sense there, so `just vercel --list` is the list of what Vercel supports, and nothing else.
 
-| | `just local` | `just azure` | `just vercel` |
-|---|---|---|---|
-| Where | Docker on this machine | the Terraform staging box, over SSH | the Vercel project |
-| Runs | the image, built from your working tree | the GHCR image published outside this repository | `api/index.py` as a function |
-| `deploy` | — build with `up` | pins the box to an image tag | `vercel deploy`, prod or a preview |
-| `logs`, `status` | `docker logs`, `docker ps` | `compose logs`, `compose ps` over SSH | `vercel logs`, `vercel ls` |
-| `alembic` | against `LOCAL_DB_URL` | inside the backend container | against the pooler URL |
-| `migrate` | — | — | against the pooler URL |
-| `seed` | the private seed repo | the seed repo, loaded in the container | the seed repo |
-| Only here | `up`, `down`, `restart`, `psql`, `serve`, `import-xlsx`, `revision`, `reset` | — | `list`, `drop` (the preview databases), `url` |
+| | `just local` | `just vercel` |
+|---|---|---|
+| Where | Docker on this machine | the Vercel project |
+| Runs | the image, built from your working tree | `api/index.py` as a function |
+| `deploy` | — build with `up` | `vercel deploy`, prod or a preview |
+| `logs`, `status` | `docker logs`, `docker ps` | `vercel logs`, `vercel ls` |
+| `alembic` | against `LOCAL_DB_URL` | against the pooler URL |
+| `migrate` | — | against the pooler URL |
+| `seed` | the private seed repo | the seed repo |
+| Only here | `up`, `down`, `restart`, `psql`, `serve`, `import-xlsx`, `revision`, `reset` | `list`, `drop` (the preview databases), `url` |
 
 `just vercel` takes an environment, `prod` by default: `just vercel migrate` is production, `just vercel migrate staging` is the preview project. A push to `main` deploys production on its own; `just vercel deploy` is the same deploy from a working tree.
 
-The values come from `.env`, copied from `.env.example` and gitignored: `LOCAL_DB_URL`, `VERCEL_PROD_DB_URL`, `VERCEL_STAGING_DB_URL`, and `AZURE_STAGING_HOST`, which is `terraform -chdir=infra output -raw fqdn` in the gym-root workspace.
+The values come from `.env`, copied from `.env.example` and gitignored: `LOCAL_DB_URL`, `VERCEL_PROD_DB_URL` and `VERCEL_STAGING_DB_URL`.
 
 `just db` tracks Supabase egress, which follows rows returned: `snapshot` records `pg_stat_statements` and the pooler counters of each project into `data/egress/` (gitignored), `report` diffs the last two snapshots, and `check` exits 2 over a daily budget. It reads the two `VERCEL_*_DB_URL` values plus `SUPABASE_PROD_PROJECT_REF`, `SUPABASE_STAGING_PROJECT_REF`, `SUPABASE_PROD_SECRET_KEY` and `SUPABASE_STAGING_SECRET_KEY`. One snapshot reads about 0.4 MB per project, so run it at most twice a day.
-
-The gym-root workspace owns what spans two repositories: Terraform for the Azure box, the box files, and the frontend. Its `just azure deploy` calls `just azure deploy <tag>` here for the backend half.
 
 ## Deploying to Vercel
 
@@ -76,97 +74,6 @@ The production build runs `alembic upgrade head` (`vercel.json`) before the new 
 Use the transaction pooler on port 6543 for `DB_URL`. The session pooler on port 5432 allows 15 clients in total, and every warm function instance holds pooled connections, so a few instances fill it and every other request answers `Database error`.
 
 A full-season `POST /import` takes longer than the Vercel function timeout. Import a season from a machine that runs the server itself, or against the pooler URL directly.
-
-## Deploying to a Docker host
-
-The Azure VM runs the same image next to Postgres under Docker Compose. This is the stack with the values a deployment has to fill in; the secrets belong in the stack environment (Portainer, a `.env` next to the file), not in the file.
-
-```yaml
-# GNL prod stack on Postgres. Same shape as gnl_docker_compose/docker-compose.yml with the
-# database swapped and the backend mount removed. Put the secrets in Portainer's stack env, not here.
-name: gnl
-
-services:
-  gnl-postgres:
-    container_name: gnl-postgres
-    image: postgres:17-alpine
-    restart: always
-    command: ["postgres", "-c", "log_min_duration_statement=200", "-c", "effective_cache_size=512MB"]
-    environment:
-      POSTGRES_DB: GYM_BACKEND
-      POSTGRES_USER: gnl_user
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      # Case-insensitive text order, as MySQL had. Only read on first start of an empty volume.
-      POSTGRES_INITDB_ARGS: --locale-provider=icu --icu-locale=en-US
-    volumes:
-      - gnl-pgdata:/var/lib/postgresql/data
-    networks:
-      - gnl-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gnl_user -d GYM_BACKEND"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-
-  gnl-backend:
-    container_name: backend
-    image: eashibby/gnl_backend:latest
-    restart: always
-    environment:
-      - DB_URL=postgresql+psycopg://gnl_user:${DB_PASSWORD}@gnl-postgres:5432/GYM_BACKEND
-      - ADMIN_TOKEN=${ADMIN_TOKEN}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - JWT_ALGORITHM=HS256
-      - FRONTEND_URL=${FRONTEND_URL}
-      - LOG_LEVEL=INFO
-    ports:
-      - 5002:5002
-    depends_on:
-      gnl-postgres:
-        condition: service_healthy
-    networks:
-      - gnl-network
-
-  gnl-discord-bot:
-    container_name: discord-bot
-    image: eashibby/gnl_discord_bot:latest
-    restart: always
-    environment:
-      - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - BACKEND_URL=http://backend:5002
-      - ADMIN_TOKEN=${ADMIN_TOKEN}
-    depends_on:
-      - gnl-backend
-    networks:
-      - gnl-network
-
-  gnl-admin-ui:
-    container_name: admin-ui
-    image: eashibby/gnl_admin_ui:latest
-    restart: always
-    ports:
-      - "5003:5003"
-    depends_on:
-      - gnl-backend
-    networks:
-      - gnl-network
-
-volumes:
-  gnl-pgdata:
-
-networks:
-  gnl-network:
-    driver: bridge
-```
-
-What this changes against a MySQL stack of the original app:
-
-- `DB_URL` uses the `postgresql+psycopg` scheme, port 5432 and the Postgres service name.
-- The backend mounts no volume over `/app`. The image carries the code, so a new image is a new version; a volume there would shadow it.
-- The container runs `alembic upgrade head` before the server, so it creates the schema on an empty database. `depends_on` with `service_healthy` keeps it from starting before Postgres answers.
-- `POSTGRES_INITDB_ARGS` picks the ICU collation, which orders text without regard to case as MySQL did. It is read once, on the first start of an empty volume.
-- The data moves by workbook, not by dump: export every season from the old app, `POST /import` each here, newest season first. Then set the `settings` rows and upload the team icons.
-- A backup is one command: `docker compose exec -T gnl-postgres pg_dump -U gnl_user -Fc GYM_BACKEND > gnl.dump`; restore with `pg_restore -U gnl_user -d GYM_BACKEND < gnl.dump` on the same service.
 
 ## Season workbooks
 
@@ -203,7 +110,7 @@ Dependencies live in `pyproject.toml`: runtime packages under `[project] depende
 
 The backend reads its configuration from the environment. `just up` passes development-only values, so nothing here needs setting by hand to run the project locally. Read this table before deploying, and when a container starts but behaves oddly.
 
-`.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. The three `just` modules load it (`set dotenv-load`); the root justfile does not, so its own recipes pass `--env-file .env` when they need a value (`just discord-commands`, `just discord-emojis`). A root recipe a module calls still sees the module's values, inherited from the calling recipe. `api/index.py` loads it for a bare `uvicorn api.index:app`. `create_app` and the migrations read the process environment only, so the tests never see a `.env` value. Each value has a default in the code. The deployment secrets are passed in by the stack.
+`.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. The three `just` modules load it (`set dotenv-load`); the root justfile does not, so its own recipes pass `--env-file .env` when they need a value (`just discord-commands`, `just discord-emojis`). A root recipe a module calls still sees the module's values, inherited from the calling recipe. `api/index.py` loads it for a bare `uvicorn api.index:app`. `create_app` and the migrations read the process environment only, so the tests never see a `.env` value. Each value has a default in the code. The deployment secrets live in the Vercel project settings.
 
 More values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_w3c_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions), `KOTH_NIGHTBOT_TOKEN`, `current_gnl_season` (the season the captain check and the role sync read; when the row is missing they take the newest season), `results_channel_id` (the channel the bot posts a series result card in; when the row is missing no card is posted), and `content_channel_id` (the channel the bot posts a cast claim and its start reminder in; when the row is missing neither card is posted). The Discord roles the app owns are rows of `discord_role_binding`, not settings, and the site admins are rows of `admin_grant`, managed under Config -> Access with `ADMIN_DISCORD_IDS` as the bootstrap. Discord grants no site admin: the guild owner, a role with the ADMINISTRATOR bit and the `admin_role` setting all read as members, and `admin_role` stays a setting because the Discord bot reads it for its own commands. `GET /config/w3c` shows the URL and season the backend resolved.
 
@@ -238,6 +145,8 @@ FRONTEND_URL="http://localhost:5003"
 | `DISCORD_BOT_TOKEN` | Optional bot token; when set, the app mirrors the roles of `discord_role_binding` into the guild (admin bindings excepted: those roles are hand-managed) and Config -> Discord roles reports the difference. Unset, every sync is a no-op | `MTIz...` |
 | `DISCORD_PUBLIC_KEY` | The app's public key from the Discord Developer Portal; `POST /discord/interactions` checks Discord's signature with it and answers 503 while it is unset | 64-character hex string |
 | `DISCORD_APPLICATION_ID` | The Discord application id; `just discord-commands` registers the slash commands on the guild with it | `123456789012345678` |
+| `BNET_CLIENT_ID` | The Blizzard OAuth client the Battle.net link authorizes with; unset, starting a link answers 503 | the client id from the Blizzard developer portal |
+| `BNET_CLIENT_SECRET` | That client's secret, sent when the link exchanges its code; unset, starting a link answers 503 | the client secret from the same portal |
 | `CRON_SECRET` | Bearer token the `/jobs` routes check, except `/jobs/cast-reminders`; Vercel Cron sends it by this exact name. Unset, those routes answer 503 | 64-character hex string |
 | `CLOUDFLARE_CRON_SECRET` | Bearer token `/jobs/cast-reminders` checks; each cast-reminder Worker holds its value as `CRON_SECRET`, the production Worker's on Production and the staging Worker's on Preview. Unset, that route answers 503 | 64-character hex string |
 | `DEV_ALERTS_WEBHOOK_URL` | Optional Discord channel webhook for dev alerts; the egress snapshot posts its daily digest there, and an alert when the cycle is on track to pass the cap or the run fails. Unset, nothing posts | `https://discord.com/api/webhooks/<id>/<token>` |
@@ -282,16 +191,12 @@ uv run just local seed               # migrate, then load the private seed repo
 uv run just local revision "message" # write a migration for the current models
 uv run just local alembic current    # any alembic command against the database
 
-uv run just azure deploy sha-77f9280a  # pin the staging box to a published image tag
-uv run just azure logs                 # follow the backend log on the box
-uv run just azure seed                 # migrate the box, then load the seed repo
-
 uv run just vercel deploy            # deploy the working tree to production
 uv run just vercel migrate staging   # migrate the preview project
 uv run just vercel list              # list the preview databases
 ```
 
-`up`, `down`, `restart`, `logs`, `status`, `psql` and `serve` are aliases for the `local` recipes of the same name, because that is where the daily work happens. `just local --list`, `just azure --list` and `just vercel --list` show what each place supports; "Where the backend runs" above is the table.
+`up`, `down`, `restart`, `logs`, `status`, `psql` and `serve` are aliases for the `local` recipes of the same name, because that is where the daily work happens. `just local --list` and `just vercel --list` show what each place supports; "Where the backend runs" above is the table.
 
 `up` covers the full PostgreSQL setup from above: on first use it creates the `gnl-net` Docker network and the `gnl-postgres` container with a named volume (`gnl-postgres-data`), so the database survives `down` and container removal. It then builds the image and starts it on port 5002. Run it again after a code change to rebuild and restart the backend.
 
@@ -313,11 +218,11 @@ If `just` is installed system-wide, the `uv run` prefix is optional.
 
 ### Manual Docker Commands
 
-The image name is the only difference from what `just up` runs. `gnl-backend:local` is the tag `up` builds for this machine; `eashibby/gnl_backend:latest` is the published name a deployment pulls. One Dockerfile builds both, so the tag records where an image is meant to run and nothing else.
+These are the commands `just up` runs, typed by hand. `gnl-backend:local` is the tag `up` builds for this machine.
 
 ```bash
 # Build image
-docker build -t eashibby/gnl_backend:latest .
+docker build -t gnl-backend:local .
 
 # Run container
 docker run -d \
@@ -326,7 +231,7 @@ docker run -d \
   -e ADMIN_TOKEN="your-token" \
   -e JWT_SECRET_KEY="your-secret" \
   -e JWT_ALGORITHM="HS256" \
-  eashibby/gnl_backend:latest
+  gnl-backend:local
 ```
 
 ## Database Migrations
@@ -341,7 +246,7 @@ uv run alembic current             # show the revision the database is on
 uv run alembic history             # list the revisions
 ```
 
-Each place wraps these in its own module: `just local alembic upgrade head`, `just local alembic history`, `just vercel migrate staging`, `just azure alembic upgrade head`. The URLs come from `.env` (`LOCAL_DB_URL`, `VERCEL_PROD_DB_URL`, `VERCEL_STAGING_DB_URL`), gitignored, copied from `.env.example`; `just vercel url staging` prints one. The Azure box has no URL reachable from a laptop, so its recipes run alembic and the seed script inside the backend container over SSH. `seed` also uploads the seed repo's `logos/` through the logo upload path when `BLOB_STORE_ID` and `VERCEL_OIDC_TOKEN` are set (in `.env`, from `vercel env pull`), so a seeded database owns its blobs.
+Each place wraps these in its own module: `just local alembic upgrade head`, `just local alembic history`, `just vercel migrate staging`. The URLs come from `.env` (`LOCAL_DB_URL`, `VERCEL_PROD_DB_URL`, `VERCEL_STAGING_DB_URL`), gitignored, copied from `.env.example`; `just vercel url staging` prints one. `seed` also uploads the seed repo's `logos/` through the logo upload path when `BLOB_STORE_ID` and `VERCEL_OIDC_TOKEN` are set (in `.env`, from `vercel env pull`), so a seeded database owns its blobs.
 
 ### DB_URL names the same database twice
 
@@ -400,7 +305,7 @@ Both commands need the network that reaches PostgreSQL, and both need `DB_URL` i
 
 `gnl-backend:local` stands in for the image here because this repository builds no other. A deployment substitutes its own image name.
 
-This is where the deployment differs from the official FastAPI template, which runs `alembic upgrade head` from a `prestart` step of its own and leaves the container command as the server alone. That shape is the right destination. Today this repository ships no compose file of its own (the stack above is one to copy) and no deploy pipeline — CI runs lint, typecheck, a runtime-dependency import check and the tests, and nothing here publishes an image — so the single `docker run` carries both, and the commands above are what splitting them looks like by hand. The tag `just azure deploy` pulls comes from the `Azure image` workflow in the fork `tanghyd/wc3-gym-backend`, which builds `ghcr.io/tanghyd/gnl-backend:staging` and `:sha-<8>` on every push to its `main`.
+This is where the deployment differs from the official FastAPI template, which runs `alembic upgrade head` from a `prestart` step of its own and leaves the container command as the server alone. That shape is the right destination. Today this repository ships no compose file of its own and no deploy pipeline — CI runs lint, typecheck, a runtime-dependency import check and the tests, and nothing here publishes an image — so the single `docker run` carries both, and the commands above are what splitting them looks like by hand.
 
 ## Troubleshooting
 
@@ -441,8 +346,8 @@ backend/
 ├── Dockerfile             # Docker image definition
 ├── vercel.json            # The Vercel build command, which migrates by environment
 ├── justfile               # test, lint, fmt, and one module per place the backend runs
-├── just/                  # One module per place: local.just, azure.just, vercel.just
-├── .env                   # Database URLs and the staging host; gitignored, copy .env.example
+├── just/                  # One module per place: local.just, vercel.just
+├── .env                   # Database URLs; gitignored, copy .env.example
 ├── api/                   # The Vercel entry point and its preview-database choice
 ├── tests/                 # pytest suite
 ├── app/
