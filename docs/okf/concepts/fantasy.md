@@ -4,7 +4,7 @@ title: Fantasy league
 description: A member drafts players, one team and one race for a season, places bets on series, and scores six derived parts.
 resource: ../../../app/core/fantasy.py
 tags: [fantasy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T13:36:34Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: rule
     resource: ../../../app/core/fantasy.py
@@ -41,7 +41,7 @@ Players are grouped into fantasy tiers by MMR. The season stores the ascending M
 
 # Routes
 
-Admin routes under `/fantasy/...` manage teams, bets and tiers. Member routes `POST /fantasy-team`, `POST /fantasy-bet`, `PUT /fantasy-bet/{id}`, `DELETE /fantasy-bet/{id}` are ownership-checked on the rows. `POST /fantasy-team` creates or updates the captain's team of the season and sets its roster in one transaction. Every team and bet answer comes from one read, `FantasyTeamService.get` or `FantasyBetService.get`, built once after the last write; the captain and the drafted players are player summaries with the record of the team's season (see [Response shapes](../api/response-shapes.md)). `GET /events/{event_id}/fantasy/teams/{team_id}/breakdown` answers the per-part breakdown; its `team_id` and `team_name` are the fantasy team's, which carries no logo, and its `team_breakdown` names the drafted GNL team with `team_id`, `team_name` and `team_icon_url`. The leaderboard is read by the site and the Discord `/leaderboard` command. Workbooks import fantasy teams and bets in one transaction each.
+Admin routes under `/fantasy/...` manage teams and bets, and `PUT /events/{event_id}/fantasy/tiers` sets the tiers. Member routes `POST /fantasy-team`, `POST /fantasy-bet`, `PUT /fantasy-bet/{id}`, `DELETE /fantasy-bet/{id}` are ownership-checked on the rows. `POST /fantasy-team` creates or updates the captain's team of the season and sets its roster in one transaction. Every team and bet answer comes from one read, `FantasyTeamService.get` or `FantasyBetService.get`, built once after the last write; the captain and the drafted players are player summaries with the record of the team's season (see [Response shapes](../api/response-shapes.md)). `GET /events/{event_id}/fantasy/teams/{team_id}/breakdown` answers the per-part breakdown; its `team_id` and `team_name` are the fantasy team's, which carries no logo, and its `team_breakdown` names the drafted GNL team with `team_id`, `team_name` and `team_icon_url`. The leaderboard is read by the site and the Discord `/leaderboard` command. Workbooks import fantasy teams and bets in one transaction each.
 
 # Words
 

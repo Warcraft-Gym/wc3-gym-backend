@@ -5,19 +5,15 @@ from time import monotonic
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
-from sqlmodel import col, select
 
 from app.api.deps import Credentials, LadderServiceDep
-from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.models.egress_ledger import EgressLedger
 from app.models.egress_snapshot import EgressSnapshotResult, EgressWindow
-from app.models.relationships import DBUserSeasonSignup
 from app.models.types import utcnow
-from app.models.user import User, UserReduced
 from app.models.w3c_stats import W3CSyncResult
 from app.services import casts, discord_posts, egress, egress_monitor, egress_snapshot
-from app.services.users import W3C_SYNC_WORKERS
+from app.services.users import stalest_members
 
 log = logging.getLogger(__name__)
 
@@ -65,28 +61,9 @@ def sync_w3c_cron(credentials: Credentials, service: LadderServiceDep) -> W3CSyn
     deadline = monotonic() + DRAIN_SECONDS
     result = W3CSyncResult()
     while True:
-        with Session() as session:
-            rows = session.execute(
-                select(
-                    col(User.id),
-                    col(User.name),
-                    col(User.battleTag),
-                    col(User.ladder_synced_at),
-                )
-                .where(
-                    col(User.id).in_(select(col(DBUserSeasonSignup.user_id)).distinct())
-                )
-                .order_by(col(User.ladder_synced_at).asc().nulls_first(), col(User.id))
-                .limit(W3C_SYNC_WORKERS)
-            ).all()
-        rows = [
-            r
-            for r in rows
-            if r.ladder_synced_at is None or r.ladder_synced_at < started
-        ]
-        if not rows:
+        users = stalest_members(started)
+        if not users:
             return result
-        users = [UserReduced(id=r.id, name=r.name, battleTag=r.battleTag) for r in rows]
         wave = service.sync_members(users, timedelta(0))
         result.synced += wave.synced
         result.failed += wave.failed

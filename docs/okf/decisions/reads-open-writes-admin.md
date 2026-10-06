@@ -3,7 +3,7 @@ type: Decision
 title: Reads open, writes admin
 description: Every GET serves any session; writes need an admin or the owning member, and the frontend hides the buttons of writes a role cannot make.
 tags: [auth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: source
     resource: Maintainers' decision, 2026-08-31
@@ -22,4 +22,4 @@ The admin gates on reads were leftovers from before Clerk. Hiding the button mat
 
 - A new GET needs no guard unless it answers something personal.
 - A sync or import stays admin-only in the route and in the button.
-- Ownership is a row check in the service, never a role. See [roles](../concepts/roles-and-permissions.md).
+- Ownership is a row check, never a role. Most checks run in the service; a captain's add, edit and delete of a fixture's series check the seat in the route (`own_match` in `app/api/deps.py`). See [roles](../concepts/roles-and-permissions.md).

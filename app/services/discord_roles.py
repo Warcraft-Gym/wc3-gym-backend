@@ -35,7 +35,7 @@ from app.models.discord_role_binding import (
     GuildRole,
     RoleGroup,
 )
-from app.models.enums import RoleKind, RoleScope
+from app.models.enums import EventKind, RoleKind, RoleScope
 from app.models.fantasy_team import FantasyTeam
 from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
@@ -55,7 +55,9 @@ def _current_season(session: OrmSession) -> int | None:
     )
     if value and value.isdigit():
         return int(value)
-    return session.scalar(select(func.max(col(Season.id))))
+    return session.scalar(
+        select(func.max(col(Season.id))).where(col(Season.kind) == EventKind.gnl)
+    )
 
 
 def current_season() -> int | None:

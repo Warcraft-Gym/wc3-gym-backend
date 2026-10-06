@@ -4,7 +4,7 @@ title: event_entrant
 description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
 resource: ../../../../app/models/event_entrant.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T08:36:30Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -46,9 +46,9 @@ sources:
 
 # Keys and joins
 
-Primary key `id`. Foreign keys: `event_id` to [event](event.md), cascade; `user_id` to [users](users.md), cascade; `team_id` to [teams](teams.md), cascade; `division_id` to [event_division](event_division.md), set null; `qualified_from_event_id` to [event](event.md), set null. Unique constraints on (`event_id`, `user_id`, `race`) and (`event_id`, `team_id`); an event with `multi_entry` off keeps one row per player through the entrant write. Check constraint `one_entrant`: exactly one of `user_id` and `team_id` is set.
+Primary key `id`. Foreign keys: `event_id` to [event](event.md), cascade; `user_id` to [users](users.md), cascade; `team_id` to [teams](teams.md), cascade; `division_id` to [event_division](event_division.md), set null; `qualified_from_event_id` to [event](event.md), set null; `historical_participant_id` to [historical_participant](historical_participant.md), cascade, and unique. Unique constraints on (`event_id`, `user_id`, `race`) and (`event_id`, `team_id`); an event with `multi_entry` off keeps one row per player through the entrant write. Check constraint `one_entrant`: exactly one of `user_id`, `team_id` and `historical_participant_id` is set.
 
-Pointed at by [series](series.md) (`entrant1_id`, `entrant2_id`), [series_side](series_side.md) and [event_award](event_award.md) through `entrant_id`.
+Pointed at by [series](series.md) (`entrant1_id`, `entrant2_id`), [series_side](series_side.md) and [event_award](event_award.md) through `entrant_id`. [koth_crown_event](koth_crown_event.md) points at it through `entrant_id` too, set null on delete.
 
 # Rules
 

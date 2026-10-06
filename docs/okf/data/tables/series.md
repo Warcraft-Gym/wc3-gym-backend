@@ -4,7 +4,7 @@ title: series
 description: One series between two sides, a best-of with its scores, time, host, off races, result kind and the feeder graph a bracket runs on.
 resource: ../../../../app/models/series.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-26T04:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -38,7 +38,7 @@ The first block is on `SeriesBase`, which the series payloads carry. The rest st
 | `is_fantasy_match` | BOOLEAN | yes | On: the series counts for the fantasy game. The `/upcoming` command filters on it. Null means unmarked. |
 | `player1_off_race` | VARCHAR | yes | The race side A played when it was not the signup race. Null means the signup race. |
 | `player2_off_race` | VARCHAR | yes | The same for side B. |
-| `entrant1_id` | INTEGER | yes | The entrant on side A. A solo entrant also fills `player1_id`; a team entrant leaves it null and its roster plays the side. Only the engine writes it. |
+| `entrant1_id` | INTEGER | yes | The entrant on side A. A solo entrant also fills `player1_id`; a team entrant leaves it null and its roster plays the side. The stage engine and the KOTH services write it. |
 | `entrant2_id` | INTEGER | yes | The entrant on side B. |
 | `round_id` | INTEGER | yes | The round the series is played in. Resolved on flush for a GNL series. |
 | `sequence` | INTEGER | yes | The place of the series inside its round, its fixture or its chain. |
@@ -56,7 +56,7 @@ The first block is on `SeriesBase`, which the series payloads carry. The rest st
 
 Primary key `id`. Foreign keys: `match_id` to [matches](matches.md), cascade; `player1_id` and `player2_id` to [users](users.md), cascade; `entrant1_id` and `entrant2_id` to [event_entrant](event_entrant.md), set null; `round_id` to [event_round](event_round.md), cascade; `slot1_from_series_id` and `slot2_from_series_id` to [series](series.md), set null; `division_id` to [event_division](event_division.md), set null. Unique index on (`match_id`, `player1_id`, `player2_id`).
 
-Pointed at by [series_side](series_side.md), [series_game](series_game.md), [series_replay](series_replay.md), [series_veto_step](series_veto_step.md), [series_cast](series_cast.md), [fantasy_bets](fantasy_bets.md) and [draft_series](draft_series.md) (`replaces_series_id`).
+Pointed at by [series_side](series_side.md), [series_game](series_game.md), [series_replay](series_replay.md), [series_veto_step](series_veto_step.md), [series_cast](series_cast.md), [fantasy_bets](fantasy_bets.md), [draft_series](draft_series.md) (`replaces_series_id`) and [koth_history_series](koth_history_series.md).
 
 # Rules
 

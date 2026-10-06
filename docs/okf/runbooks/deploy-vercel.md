@@ -4,8 +4,8 @@ title: Deploy to Vercel
 description: A merge to main deploys production and migrates in the build; staging mirrors main; previews use the staging database; the Hobby plan sets the limits.
 resource: ../../../vercel.json
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:00:00Z }
-stale_after: 2027-03-14T00:00:00Z
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
+stale_after: 2027-04-06T00:00:00Z
 sources:
   - id: vercel-json
     resource: ../../../vercel.json
@@ -31,11 +31,11 @@ The README's variable table is the whole deploy list. Vercel adds `VERCEL_ENV` a
 
 # Previews
 
-Every push builds a preview against the staging Supabase project. A branch with no migration uses the shared staging database; a branch with a migration gets a copy of the locked template and migrates it. A branch that does not know the shared database's revision fails its build with "rebase onto main". The copy is dropped when the branch is deleted. See [preview databases](../../PREVIEW-DATABASES.md). Previews sign in on the Clerk dev instance and are public.
+Git builds only `main` and `staging`, so a pull request has no preview. A preview build runs against the staging Supabase project. A branch with no migration uses the shared staging database; a branch with a migration gets a copy of the locked template and migrates it. A branch that does not know the shared database's revision fails its build with "rebase onto main". The copy is dropped when the branch is deleted. See [preview databases](../../PREVIEW-DATABASES.md). Previews sign in on the Clerk dev instance and are public.
 
 # The recipes
 
-`uv run just vercel deploy [prod|staging]` deploys the working tree; `logs`, `status`, `migrate`, `alembic`, `seed`, `export-seed`, `import-maps`, `review-season`, `list` and `drop` are the rest. Run them only from the linked main checkout, never from a worktree: the `.vercel/` link folder is gitignored, and a run elsewhere creates a stray project that builds every push. A CLI deploy from a commit whose author is not a Vercel team member is silently blocked; export the tree with `git archive` first. Never run the Vercel CLI outside the recipes: without the token it starts a device authorization flow.
+`uv run just vercel deploy [prod|staging]` deploys the working tree; `url`, `logs`, `status`, `migrate`, `alembic`, `seed`, `export-seed`, `import-maps`, `review-season`, `season-badges`, `list` and `drop` are the rest. Run them only from the linked main checkout, never from a worktree: the `.vercel/` link folder is gitignored, and a run elsewhere creates a stray project that builds every push. A CLI deploy from a commit whose author is not a Vercel team member is silently blocked; export the tree with `git archive` first. Never run the Vercel CLI outside the recipes: without the token it starts a device authorization flow.
 
 # The Hobby limits
 

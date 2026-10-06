@@ -1,10 +1,10 @@
 ---
 type: Repository
 title: wc3-gym-backend
-description: The FastAPI backend of the Warcraft Gym league app, on Vercel with a Supabase Postgres, serving the web app, the WordPress site, the Discord adapter and Nightbot.
+description: The FastAPI backend of the Warcraft Gym league app, on Vercel with a Supabase Postgres, serving the web app, the GNL website, the Discord adapter and Nightbot.
 resource: https://github.com/Warcraft-Gym/wc3-gym-backend
 tags: [data, api, deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
 sources:
   - id: readme
     resource: ../../README.md
@@ -24,10 +24,8 @@ The one backend of the Gym Newbie League (GNL) and the other Warcraft Gym events
 |---|---|
 | production | Vercel project `wc3-gym-backend`, built from `main`, database on the production Supabase project through the transaction pooler |
 | staging | the `staging` branch, force-pushed to the merged commit on every push to `main`; a preview at a fixed alias against the shared staging database |
-| previews | every pull request; a branch that adds a migration gets its own copy of the staging database |
+| previews | `staging` alone; Git builds no other branch, so a pull request has no preview |
 | local | `uv run just up` (Docker) or `uv run just serve` (the Vercel entry point from the working tree) |
-
-The Azure VM and Docker Compose paragraphs in the README describe the older self-hosted line; this repository no longer supports it.
 
 # Layout
 
@@ -41,8 +39,8 @@ app/
   models/   SQLModel table classes and their Create, Update and Public shapes
 migrations/ Alembic
 tests/      pytest, on a migrated SQLite file
-just/       one module per place the backend runs: local, azure, vercel
-docs/       PICTURES.md, PREVIEW-DATABASES.md, and this bundle
+just/       one module per place the backend runs (local, vercel), plus db and monitor for the egress reads
+docs/       PICTURES.md, PREVIEW-DATABASES.md, the Discord emoji images, and this bundle
 ```
 
 # Start here

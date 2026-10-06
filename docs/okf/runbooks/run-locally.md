@@ -4,8 +4,8 @@ title: Run locally
 description: Install with uv, copy the example environment, start Postgres and the backend with just, run the tests.
 resource: ../../../README.md
 tags: [deploy, tooling]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T10:00:00Z }
-stale_after: 2027-03-14T00:00:00Z
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+stale_after: 2027-04-06T00:00:00Z
 sources:
   - id: readme
     resource: ../../../README.md
@@ -20,7 +20,7 @@ sources:
 1. Install `uv`. Run `uv sync`. That installs the right Python, the dependencies and the dev tools, including `just`.
 2. `cp .env.example .env`. The example holds development values; the deployment reads none of this file.
 3. Run the tests: `uv run just test`. They need no database server and no environment.
-4. Start the stack in Docker: `uv run just up`. It creates the network and the Postgres container once, builds the image from the working tree, runs the migrations and serves on port 5002. The API docs are at `http://localhost:5002/docs`. Log in with the admin token from your `.env`.
+4. Start the stack in Docker: `uv run just up`. It creates the network and the Postgres container once, builds the image from the working tree, runs the migrations and serves on port 5002. The API docs are at `http://localhost:5002/docs`. Log in with the admin token the recipe sets, which it prints once the backend answers; `.env` sets the token only under `uv run just serve`.
 5. Or run the code as Vercel runs it, without Docker: `uv run just serve`. Migrate first with `uv run just local alembic upgrade head`.
 6. Load real data: `uv run just local seed` clones the private seed repository, if you have access, and loads it. Or `uv run just local import-xlsx` imports the two real workbooks from `tests/data`.
 7. Read the log with `uv run just logs`, open psql with `uv run just psql`, stop with `uv run just down`. The data stays in the named volume.
@@ -35,7 +35,7 @@ WSL and some laptops have no Docker. A real Postgres runs from the `pgserver` wh
 
 # Test as a player
 
-Set `DEV_LOGIN=1` in `.env` and restart the backend; with its own `NEXT_PUBLIC_DEV_LOGIN=1` set, the frontend offers "Sign in as a player" on `/admin-login` once the admin token is accepted. Pick a seeded player with a Discord id and a role. See [authentication](../api/auth.md#local-dev-login). Set it on a local machine only.
+Set `DEV_LOGIN=1` in `.env` and run the backend with `uv run just serve`, which reads `.env` (the Docker stack does not); with its own `NEXT_PUBLIC_DEV_LOGIN=1` set, the frontend offers "Sign in as a player" on `/admin-login` once the admin token is accepted. Pick a seeded player with a Discord id and a role. See [authentication](../api/auth.md#local-dev-login). Set it on a local machine only.
 
 # Daily loop
 

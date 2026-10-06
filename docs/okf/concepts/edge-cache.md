@@ -4,7 +4,7 @@ title: Edge cache
 description: Every open read the edge caches uses one of four timer classes, live, running, settled or finished, and an event read picks running or finished from the event's phase; nothing is purged.
 resource: ../../../app/api/deps.py
 tags: [api, deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -55,7 +55,7 @@ Each route's deprecated aliases carry the same header.
 | `GET /events/{event_id}/teams`, its `basic` and `summary` twins, `GET /events/{event_id}/teams/{team_id}` | by the event's phase |
 | `GET /events/{event_id}/ladder`, `GET /events/{event_id}/ladder/players` | by the event's phase |
 | `GET /events/{event_id}/fantasy/teams`, `GET /events/{event_id}/fantasy/teams/{team_id}/breakdown` | by the event's phase |
-| `GET /stats/career`, `GET /stats/career/{user_id}` | settled |
+| `GET /stats/career`, `GET /stats/career/{stat_id}` | settled |
 | `GET /users/{user_id}/seasons`, `GET /users/{user_id}/series` | settled |
 | `GET /events`, for an anonymous caller only | settled |
 | `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | settled |

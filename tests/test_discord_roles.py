@@ -15,7 +15,7 @@ from app.core.db import Session
 from app.models.admin_grant import AdminGrant
 from app.models.base import ident
 from app.models.discord_role_binding import DiscordRoleBinding
-from app.models.enums import Race, RoleKind, RoleScope
+from app.models.enums import EventKind, Race, RoleKind, RoleScope
 from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.user import User
@@ -231,6 +231,16 @@ def test_a_season_binding_outlives_its_season(seeded: dict[str, Any]) -> None:
 
     # P1 played, drafted and won in season 1; the team role reads the current season
     assert _expected(seeded["player_ids"][0]) == {"gnl-1", "fantasy-1", "champion-1"}
+
+
+def test_with_no_setting_the_roles_follow_the_newest_gnl_season(
+    seeded: dict[str, Any],
+) -> None:
+    """A KOTH night newer than the GNL season is not the current season."""
+    with Session() as session:
+        session.add(Season(name="KOTH 1", kind=EventKind.koth, series_per_round=1))
+        session.commit()
+    assert discord_roles.current_season() == seeded["season_id"]
 
 
 def test_a_captain_binding_scoped_to_every_season_reads_an_old_seat(

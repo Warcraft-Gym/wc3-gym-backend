@@ -4,7 +4,7 @@ title: Layering
 description: Routes call services, services own their transactions, models hold the schema and the shapes, and pure rules live in app/core.
 resource: ../../../app/main.py
 tags: [events, data, api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T17:45:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
 sources:
   - id: main
     resource: ../../../app/main.py
@@ -21,7 +21,7 @@ sources:
 
 | Layer | Where | What it does |
 |---|---|---|
-| Routes | `app/api/routes/*.py` | One module per API area. A route validates the request through a typed body model, picks the guard, calls one service method, and returns a Public model. No SQL here. |
+| Routes | `app/api/routes/*.py` | One module per API area. A route validates the request through a typed body model, picks the guard, calls one service method, and returns a Public model. No SQL here: a service owns its session and its transaction, and a job or a Discord command calls the same service as the route. |
 | Services | `app/services/*.py` | One service per entity, plus a few that compute across entities. A service opens its own session with `Session.begin()`, one transaction per call, and never commits by hand. To share a transaction, pass the session down. |
 | Models | `app/models/*.py` | SQLModel table classes and their request and response shapes. See [model families](../data/model-families.md). |
 

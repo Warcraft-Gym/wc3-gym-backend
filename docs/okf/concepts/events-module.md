@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -43,7 +43,7 @@ In a single elimination that plays a third-place series, that series decides pla
 
 # Phase
 
-An event's phase is derived on every read and never stored. The rungs, read from the last one back: `draft` while the event is unpublished; `finished` when an admin closed the event (`event.closed_at`), when the last stage by position holds series, every one of them is scored and the stage does not plan as a chain, or when the event has no series and its end has passed (its end date, else the day it starts); `running` once a series has started; `signups_open`; `checkin` while the check-in window of the next dated round is open; `seeded` otherwise. A scored stage with an empty stage after it reads `running`, so a cup whose playoff is still to be drawn is not finished. A chain grows while its admin names series, so a scored chain reads `running` until the close stamps the event. An event whose teams are drafted (`entrant_kind` is `drafted_teams`) is finished by the close alone: its series are drafted round by round, so neither the last result it holds nor its end date ends it. A list read answers the phase of a page of events from one grouped count, never one query per event.
+An event's phase is derived on every read and never stored. The rungs, read from the last one back: `draft` while the event is unpublished; `finished` when an admin closed the event (`event.closed_at`), when the last stage by position holds series, every one of them is scored and the stage does not plan as a chain, or when its end date has passed, or, for an event with no end date and no series, when the day it starts has passed; `running` once a series has started; `signups_open`; `checkin` while the check-in window of the next dated round is open; `seeded` otherwise. A scored stage with an empty stage after it reads `running`, so a cup whose playoff is still to be drawn is not finished. A chain grows while its admin names series, so a scored chain reads `running` until the close stamps the event. An event whose teams are drafted (`entrant_kind` is `drafted_teams`) is finished by the close alone: its series are drafted round by round, so neither the last result it holds nor its end date ends it. A list read answers the phase of a page of events from one grouped count, never one query per event.
 
 # The member read
 
@@ -88,7 +88,7 @@ Closing an event freezes the table of its last stage into `event_award`, one row
 
 # Discord card
 
-Every event has one card the app posts and edits in Discord, with a sign-up, a withdraw and a check-in button. A press writes through the same entrant service the site uses. The check-in button is enabled only while the event's check-in window is open, which the full event read answers as `checkin_open`; a press outside the window answers that the check-in is not open yet, or that it has closed. See [Discord integration](discord-integration.md).
+Every event has one card the app posts and edits in Discord, with two buttons, Sign up and Check in. A press writes through the same entrant service the site uses. The check-in button is enabled only while the event's check-in window is open, which the full event read answers as `checkin_open`; a press outside the window answers that the check-in is not open yet, or that it has closed. See [Discord integration](discord-integration.md).
 
 # Managing an event
 

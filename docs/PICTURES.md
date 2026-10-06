@@ -35,5 +35,3 @@ An upload wins over an import: the import fills `image` only where it is empty. 
 ## Seeded databases
 
 A seeded database gets its logos from the seed repo, which carries `logos/<team id>.png` or `.jpg`. `just _load-seed` pushes each through `TeamService.update_icon` after the CSVs load, so the database owns its blobs and a replaced production logo cannot break it. Without `BLOB_STORE_ID` the upload is skipped and teams show the default logo.
-
-The WordPress shortcodes are not part of this. They call `backend.warcraft-gym.com`, which is the Azure box running the older Flask app against MySQL, so they never read Supabase and never blocked any of it.
