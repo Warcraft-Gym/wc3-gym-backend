@@ -58,14 +58,16 @@ def get_events(
     kind: EventKind | None = None,
     league_id: int | None = None,
     published: bool | None = None,
+    archived: bool | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[EventPublic]:
-    """Return one page of events, at most 500, newest first, each with its
-    computed phase. The header counts every event the filter keeps.
+    """Return one page of events, at most 500, newest start first, each with
+    its computed phase. The header counts every event the filter keeps.
 
-    A draft reads for an admin only; every other caller sees the published
-    events whatever the filter asks for.
+    `archived=false` leaves out the archived KOTH nights, `archived=true` keeps
+    only them. A draft reads for an admin only; every other caller sees the
+    published events whatever the filter asks for.
     """
     if claims is None:
         # An anonymous caller always sees the published-only page; an admin's
@@ -75,6 +77,7 @@ def get_events(
         kind=kind,
         league_id=league_id,
         published=published,
+        archived=archived,
         limit=limit,
         offset=offset,
         claims=claims,
