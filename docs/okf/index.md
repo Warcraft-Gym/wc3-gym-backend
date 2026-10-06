@@ -29,4 +29,4 @@ The app is three repositories. Each carries its own bundle at `docs/okf/`. This 
 
 * [README](../../README.md) - Setup, the environment variable table, running, migrations, paging.
 * [Pictures](../PICTURES.md) - Where pictures live and why.
-* [Preview databases](../PREVIEW-DATABASES.md) - How every pull request gets a database.
+* [Preview databases](../PREVIEW-DATABASES.md) - How a preview build gets its database.

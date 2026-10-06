@@ -3,7 +3,7 @@ type: Decision
 title: Vercel and Supabase
 description: The backend runs as one Vercel function on a Supabase Postgres, and the self-hosted Azure line is frozen.
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T13:00:52Z }
 sources:
   - id: source
     resource: Maintainers' decisions, 2026-08-25 to 2026-09-03
@@ -16,7 +16,7 @@ Since 2026-08-30 the live backend is this repository on Vercel, with the databas
 
 # Why
 
-The self-hosted line was deployed by hand on a shared machine. Vercel builds every merge and every pull request; Supabase runs Postgres without a server to keep. Clerk sessions and the Discord roles made the Vercel line diverge from anything that could merge back.
+The self-hosted line was deployed by hand on a shared machine. Vercel builds every merge; Supabase runs Postgres without a server to keep. Clerk sessions and the Discord roles made the Vercel line diverge from anything that could merge back.
 
 # Consequences
 
