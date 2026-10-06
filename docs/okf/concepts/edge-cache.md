@@ -4,7 +4,7 @@ title: Edge cache
 description: Every open read the edge caches uses one of four timer classes, live, running, settled or finished, and an event read picks running or finished from the event's phase; nothing is purged.
 resource: ../../../app/api/deps.py
 tags: [api, deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T10:57:03Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -44,6 +44,7 @@ Each route's deprecated aliases carry the same header.
 | Route | Class |
 |---|---|
 | `GET /koth/board`, `GET /koth/nights/{night_id}/board` | live while the night is open, settled once it is closed |
+| `GET /koth/winners` | settled |
 | `GET /home/series`, `GET /home/series/upcoming` | running |
 | `GET /users/{key}`, for an anonymous caller only | running |
 | `GET /users/{user_id}/summary` | running |

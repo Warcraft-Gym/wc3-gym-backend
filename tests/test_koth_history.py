@@ -26,7 +26,8 @@ from app.services.koth.history_import import (
     local_url,
     record_days,
 )
-from tests.test_koth_night import open_night
+from tests.test_koth_live import bracket_ids, place, play
+from tests.test_koth_night import NIGHT, open_night
 
 
 def capture() -> list[dict[str, Any]]:
@@ -544,3 +545,140 @@ def test_admin_delete_removes_an_archived_night(
     with Session() as session:
         for model in (EventAward, EventEntrant, HistoricalParticipant):
             assert session.scalar(select(func.count()).select_from(model)) == 0
+
+
+def archived(key: str, order: int, day: str | None, label: str) -> dict[str, Any]:
+    """The capture's night under its own key, label and day."""
+    record = deepcopy(capture()[0])
+    record.update(event_id=key, source_order=order, date=day, date_text=label)
+    return record
+
+
+def crowned_night(client: Client, headers: dict[str, str]) -> tuple[int, int]:
+    """A night run in the app whose strongest bracket crowned one player, closed."""
+    night = open_night(client, headers)
+    top = bracket_ids(night)[0]
+    first = place(client, headers, night, "One#1", 1700, top)
+    second = place(client, headers, night, "Two#2", 1700, top, race="OC")
+    play(client, headers, night["id"], first, second)
+    closed = client.post(f"/koth/nights/{night['id']}/close", headers=headers)
+    assert closed.status_code == 200, closed.text
+    return night["id"], first
+
+
+def winners(client: Client, query: str = "") -> tuple[list[dict[str, Any]], Any]:
+    response = client.get(f"/koth/winners{query}")
+    assert response.status_code == 200, response.text
+    return response.json(), response.headers
+
+
+@pytest.mark.usefixtures("quiet_w3c")
+def test_winners_list_the_king_of_every_bracket_of_a_closed_night(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """An archived night names the source spelling, a native night the account."""
+    record = archived("dated", 1, "2024-11-30", "November 30, 2024")
+    old = import_capture([record], apply=True)["event_ids"]["dated"]
+    native, first = crowned_night(client, auth_headers)
+    with Session() as session:
+        king = session.get(EventEntrant, first)
+        assert king is not None and king.user_id is not None
+        user_id = king.user_id
+    brackets = client.get(f"/koth/nights/{native}/board").json()["brackets"]
+
+    rows, headers = winners(client)
+
+    assert headers["X-Total-Count"] == "2"
+    assert headers["cache-control"] == (
+        "public, s-maxage=3600, stale-while-revalidate=86400"
+    )
+    assert headers["access-control-allow-origin"] == "*"
+    assert [row["event_id"] for row in rows] == [native, old]
+    assert rows[0]["date"] == NIGHT[:10]
+    assert rows[0]["date_label"] is None
+    assert rows[0]["winners"] == [
+        {
+            "bracket": bracket["name"],
+            "lower_bound": bracket["lower_bound"],
+            "name": "One" if index == 0 else None,
+            "user_id": user_id if index == 0 else None,
+            "race": "HU" if index == 0 else None,
+        }
+        for index, bracket in enumerate(brackets)
+    ]
+    assert rows[1] == {
+        "event_id": old,
+        "date": "2024-11-30",
+        "date_label": "November 30, 2024",
+        "winners": [
+            {
+                "bracket": "1500 to ~1700 MMR",
+                "lower_bound": 1500,
+                "name": "OTHER",
+                "user_id": None,
+                "race": None,
+            },
+            {
+                "bracket": "Gold and below",
+                "lower_bound": None,
+                "name": None,
+                "user_id": None,
+                "race": None,
+            },
+        ],
+    }
+
+
+@pytest.mark.usefixtures("quiet_w3c")
+def test_an_open_or_unpublished_night_has_no_winners(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    hidden = import_capture(capture(), apply=True)["event_ids"]["capture-first"]
+    with Session.begin() as session:
+        event = session.get(Season, hidden)
+        assert event is not None
+        event.published = False
+    open_night(client, auth_headers)
+
+    rows, headers = winners(client)
+    assert rows == []
+    assert headers["X-Total-Count"] == "0"
+
+
+@pytest.mark.usefixtures("quiet_w3c")
+def test_winners_page_by_night_newest_start_first(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A native night dates by its start time, an archived one by its start date;
+    an undated night stands last and a night with no bracket lists empty."""
+    undated = archived("undated", 1, None, "Some night")
+    ids = import_capture([undated], apply=True)["event_ids"]
+    _, alone = winners(client)
+    empty = archived("empty", 2, "2025-01-04", "January 4, 2025")
+    empty["sections"] = [s for s in empty["sections"] if s["kind"] != "bracket"]
+    older = archived("older", 3, "2023-05-06", "May 6, 2023")
+    ids |= import_capture([empty, older], apply=True)["event_ids"]
+    native, _ = crowned_night(client, auth_headers)
+    order = [native, ids["empty"], ids["older"], ids["undated"]]
+
+    rows, headers = winners(client)
+    assert [row["event_id"] for row in rows] == order
+    assert [row["date"] for row in rows] == [
+        NIGHT[:10],
+        "2025-01-04",
+        "2023-05-06",
+        None,
+    ]
+    assert rows[1]["winners"] == []
+    assert [len(row["winners"]) for row in rows] == [3, 0, 2, 2]
+    assert headers["X-Total-Count"] == "4"
+    assert int(headers["X-DB-Statements"]) == int(alone["X-DB-Statements"]) <= 1
+
+    page, headers = winners(client, "?limit=2&offset=1")
+    assert [row["event_id"] for row in page] == order[1:3]
+    assert headers["X-Total-Count"] == "4"
+    last, _ = winners(client, "?limit=2&offset=3")
+    assert [row["event_id"] for row in last] == order[3:]
+    past, headers = winners(client, "?offset=4")
+    assert past == []
+    assert headers["X-Total-Count"] == "4"

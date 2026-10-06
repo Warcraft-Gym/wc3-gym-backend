@@ -21,6 +21,7 @@ ROUTES = [
     ("/users/{player}/series?event_id={season_id}", SETTLED),
     ("/config/w3c", SETTLED),
     ("/config/settings/score_system", SETTLED),
+    ("/koth/winners", SETTLED),
     ("/users/{player}", RUNNING),
     ("/users/{player}/summary", RUNNING),
     ("/users/{player}/ladder", RUNNING),

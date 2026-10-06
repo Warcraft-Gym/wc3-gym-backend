@@ -142,7 +142,7 @@ _MEMBER_COLUMNS = load_only(
 )
 
 # Newest first by when the event starts; an event with neither date sorts last
-_NEWEST_FIRST = (
+NEWEST_FIRST = (
     func.coalesce(col(Season.starts_at), col(Season.start_date)).desc().nulls_last(),
     col(Season.id).desc(),
 )
@@ -374,7 +374,7 @@ class EventService:
             select(Season)
             .options(*_EVENT_OPTIONS)
             .where(*filters)
-            .order_by(*_NEWEST_FIRST)
+            .order_by(*NEWEST_FIRST)
         )
         with Session.begin() as session:
             total = (
@@ -549,7 +549,7 @@ class EventService:
                 select(Season)
                 .options(*_EVENT_OPTIONS)
                 .where(col(Season.league_id) == league_id)
-                .order_by(*_NEWEST_FIRST)
+                .order_by(*NEWEST_FIRST)
             )
             if archived is not None:
                 statement = statement.where(archived_filter(archived))
