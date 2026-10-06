@@ -1,6 +1,6 @@
 # Preview databases
 
-Every pull request gets a Vercel preview deployment. Vercel calls these deployments previews; the database project they use is the staging project. Previews used to run against the production Supabase database with the production admin token, so a preview of a migration served new code on the old schema, and anything written through a preview URL landed in real data. Previews now run against a separate Supabase project, the staging project, and this page says how.
+Vercel builds a preview only when someone makes one by hand; no push builds one. Vercel calls these deployments previews; the database project they use is the staging project. Previews used to run against the production Supabase database with the production admin token, so a preview of a migration served new code on the old schema, and anything written through a preview URL landed in real data. Previews now run against a separate Supabase project, the staging project, and this page says how.
 
 ## The three databases on the staging project
 
@@ -28,7 +28,7 @@ A copy carries a sha1 of the branch's `migrations/versions` files as its databas
 
 At cold start `api/index.py` makes one lookup: if `wc3gym_<branch>` exists the preview uses it, otherwise `wc3gym_staging`. The app can only pick a database the build created.
 
-The database name is `wc3gym_<slug>_<hash>`: the slug is the branch name lower-cased with runs of non-alphanumerics folded to `_` and cut to 16 characters, for reading; the hash is the first 8 hex digits of the sha1 of the exact branch name, so `feature/foo-bar` and `feature/foo_bar` never share a database. 32 characters at most, inside Postgres's 63-byte identifier limit. The branch name, not the pull request number, is the key: Vercel builds a branch as soon as it is pushed, which is before its pull request exists, and does not rebuild when the pull request opens.
+The database name is `wc3gym_<slug>_<hash>`: the slug is the branch name lower-cased with runs of non-alphanumerics folded to `_` and cut to 16 characters, for reading; the hash is the first 8 hex digits of the sha1 of the exact branch name, so `feature/foo-bar` and `feature/foo_bar` never share a database. 32 characters at most, inside Postgres's 63-byte identifier limit. The branch name, not the pull request number, is the key: a preview can be built for a branch before its pull request exists.
 
 ## When a copy is removed
 

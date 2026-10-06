@@ -4,7 +4,7 @@ title: Git and pull requests
 description: One branch and one pull request per change, squash merged to main, with a migration rule that keeps the previous deploy alive during the build.
 resource: ../../../vercel.json
 tags: [tooling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T12:53:50Z }
 sources:
   - id: vercel-json
     resource: ../../../vercel.json
@@ -31,10 +31,10 @@ sources:
 - Alembic owns the schema. A model change ships with its migration, and `tests/test_migrations.py` fails when the migrated schema and the models differ.
 - The production build runs `alembic upgrade head` while the previous deployment keeps serving. Every migration must work with the code before it and the code after it: add a column nullable or with a default; drop a column, or change its type, only in a later pull request, merged after the code that stopped reading it is live. See [the pitfall](../pitfalls/column-drop-two-deploys.md).
 - One migration in flight at a time. Two open pull requests that both add a migration produce two Alembic heads on `main` after the second squash, which breaks CI and the staging migrate job. After merging `main` into a branch that carries a migration, run `uv run alembic heads` and re-point the revision before pushing.
-- A pull request builds no preview: Git deploys only `main` and `staging`. [Preview databases](../../PREVIEW-DATABASES.md) says which database a preview build of a branch takes.
+- A pull request builds no preview: Vercel builds only `main`, and no preview from a push. [Preview databases](../../PREVIEW-DATABASES.md) says which database a preview build of a branch takes.
 
 # Checks before a merge
 
 - CI runs lint, typecheck, a runtime-only import check and the tests on every pull request. `main` should be green by construction.
-- A Vercel preview check that fails with a daily build quota message is not a code failure and does not block a merge. A check that names a real build error does.
+- A Vercel build that fails with a daily build quota message is not a code failure. A build that names a real build error is.
 - When two open pull requests touch one module, refresh the second from `main` and let CI run again before merging it.
