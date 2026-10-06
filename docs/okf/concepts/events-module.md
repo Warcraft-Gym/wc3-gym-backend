@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T13:49:37Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -47,7 +47,7 @@ An event's phase is derived on every read and never stored. The rungs, read from
 
 # The list reads
 
-`GET /events` and the events of `GET /leagues/{league_id}` read newest start first: by the start time, else the start date, with an event that has neither last and the newer id first on a tie. The order and the page are cut in SQL. Both reads take `archived`: `false` leaves out every event that has a [koth_history_event](../data/tables/koth_history_event.md) row, `true` keeps only those, and no value keeps both. `X-Total-Count` on `GET /events` counts the filtered set.
+`GET /events` and the events of `GET /leagues/{league_id}` read newest start first: by the start time, else the start date, with an event that has neither last and the newer id first on a tie. The order and the page are cut in SQL. Both reads take `archived`: `false` leaves out every event that has a [koth_history_event](../data/tables/koth_history_event.md) row, `true` keeps only those, and no value keeps both. Each listed event carries `archived`: `true` when it has that row, else `false`, read as a column of the page statement. `POST /events/search` carries it the same way. `X-Total-Count` on `GET /events` counts the filtered set.
 
 # The member read
 
