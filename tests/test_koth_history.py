@@ -1,5 +1,6 @@
 """Archive conservation, ambiguity and lifecycle checks on both supported databases."""
 
+import json
 from copy import deepcopy
 from datetime import date
 from typing import Any
@@ -13,7 +14,12 @@ from app.core.db import Session
 from app.models.event_award import EventAward
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
-from app.models.event_history import EventVideo, HistoricalParticipant, KothHistoryEvent
+from app.models.event_history import (
+    EventVideo,
+    HistoricalParticipant,
+    KothHistoryEvent,
+    KothHistorySeries,
+)
 from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
@@ -23,6 +29,7 @@ from app.models.user import User
 from app.services.koth.history_import import (
     bounds,
     digest,
+    fold,
     import_capture,
     infer_winners,
     local_url,
@@ -96,9 +103,7 @@ def test_import_keeps_unknowns_and_every_competitive_bo1(client: Client) -> None
         assert session.scalar(select(func.count()).select_from(User)) == 0
         people = list(session.scalars(select(HistoricalParticipant)))
         assert [p.source_name for p in people].count("short") == 2
-        assert (
-            len(people) == 5
-        )  # the crown's spelling is a separate unresolved identity
+        assert len(people) == 4  # the crown's spelling folds into its player
         assert all(
             row.race is None and row.user_id is None
             for row in session.scalars(select(EventEntrant))
@@ -402,8 +407,8 @@ def test_full_offline_capture(client: Client) -> None:
                 row for row in section["matches"] if row["record_type"] == "match"
             ]
             for row, source in zip(bracket["history"], matches, strict=True):
-                assert row["side1"]["name"] == source["player_1"]
-                assert row["side2"]["name"] == source["player_2"]
+                assert fold(row["side1"]["name"]) == fold(source["player_1"])
+                assert fold(row["side2"]["name"]) == fold(source["player_2"])
                 assert row["side1"]["race"] is None and row["side2"]["race"] is None
                 assert (
                     row["side1"]["user_id"] is None and row["side2"]["user_id"] is None
@@ -711,3 +716,177 @@ def test_winners_page_by_night_newest_start_first(
     past, headers = winners(client, "?offset=4")
     assert past == []
     assert headers["X-Total-Count"] == "4"
+
+
+def bracket(*rows: dict[str, Any], king: str) -> list[dict[str, Any]]:
+    crown = {"player": king, "raw_text": f"{king} is crowned King"}
+    return [
+        {"kind": "bracket", "title": "Gold", "matches": list(rows), "crowns": [crown]}
+    ]
+
+
+def people(event_id: int) -> list[str]:
+    with Session() as session:
+        return list(
+            session.scalars(
+                select(col(HistoricalParticipant.source_name))
+                .where(col(HistoricalParticipant.event_id) == event_id)
+                .order_by(col(HistoricalParticipant.source_key))
+            )
+        )
+
+
+def test_a_corrected_typo_is_one_participant_and_frees_the_order_of_play(
+    client: Client,
+) -> None:
+    """The kept name joins a typo pair; the stored source stays as written."""
+    plain = archived("plain", 1, "2024-11-30", "November 30, 2024")
+    plain["sections"] = bracket(
+        bo1("Regitheth", "Bo"), bo1("Regitheht", "Cy"), king="Cy"
+    )
+    joined = deepcopy(plain)
+    joined["event_id"] = "joined"
+    untouched = deepcopy([plain, joined])
+    fixes = {"names": {"regitheth": "Regitheht"}}
+
+    dry = import_capture([joined], corrections=fixes)
+    assert (dry["corrected_names"], dry["corrected_dates"]) == (1, 0)
+    import_capture([plain], apply=True)
+    result = import_capture([plain, joined], apply=True, corrections=fixes)
+    ids = result["event_ids"]
+    assert result["inserted_events"] == 1 and result["corrected_names"] == 2
+
+    assert people(ids["plain"]) == ["Regitheth", "Bo", "Regitheht", "Cy"]
+    assert people(ids["joined"]) == ["Regitheht", "Bo", "Cy"]  # Bo, Cy as written
+
+    def inferred(key: str) -> list[int | None]:
+        board = client.get(f"/koth/nights/{ids[key]}/board").json()
+        return [row["inferred_winner_side"] for row in board["brackets"][0]["history"]]
+
+    assert inferred("plain") == [None, None]
+    assert inferred("joined") == [1, 2]
+    with Session() as session:
+        archive = session.get(KothHistoryEvent, ids["joined"])
+        assert archive is not None
+        assert archive.source_record == untouched[1]
+        assert archive.source_digest == digest(untouched[1])
+        stored = session.scalars(
+            select(col(KothHistorySeries.source_record))
+            .where(col(KothHistorySeries.event_id) == ids["joined"])
+            .order_by(col(KothHistorySeries.series_id))
+        ).all()
+        assert stored == untouched[1]["sections"][0]["matches"]
+    assert [plain, joined] == untouched
+    again = import_capture([plain, joined], apply=True, corrections=fixes)
+    assert again["inserted_events"] == 0 and again["event_ids"] == ids
+
+
+def test_two_casings_of_one_name_are_one_participant(client: Client) -> None:
+    record = archived("cased", 1, "2024-11-30", "November 30, 2024")
+    record["sections"] = bracket(bo1("Elu", "Bo"), bo1("elu ", "Cy"), king="CY")
+    event_id = import_capture([record], apply=True)["event_ids"]["cased"]
+    assert people(event_id) == ["Elu", "Bo", "CY"]
+
+
+def test_a_king_keeps_the_spelling_of_the_crown_line(client: Client) -> None:
+    """A kept name first, then the crown line, then the first spelling in the series."""
+    crowned = archived("crowned", 1, "2024-11-30", "November 30, 2024")
+    crowned["sections"] = bracket(
+        bo1("glaive", "bo"), bo1("BO", "glaive"), king="Glaive"
+    )
+    corrected = archived("corrected", 2, "2024-11-23", "November 23, 2024")
+    corrected["sections"] = bracket(
+        bo1("glaiev", "bo"), bo1("BO", "glaive"), king="Glaive"
+    )
+    fixes = {"names": {"glaiev": "glaive"}}
+    ids = import_capture([crowned, corrected], apply=True, corrections=fixes)[
+        "event_ids"
+    ]
+
+    assert people(ids["crowned"]) == ["Glaive", "bo"]
+    assert people(ids["corrected"]) == ["glaive", "bo"]
+    for key, king in (("crowned", "Glaive"), ("corrected", "glaive")):
+        board = client.get(f"/koth/nights/{ids[key]}/board").json()
+        assert board["brackets"][0]["historical_king"]["name"] == king
+        assert {row["side2"]["name"] for row in board["brackets"][0]["history"]} == {
+            "bo",
+            king,
+        }
+    rows, _ = winners(client)
+    assert [row["event_id"] for row in rows] == [ids["crowned"], ids["corrected"]]
+    assert [row["winners"][0]["name"] for row in rows] == ["Glaive", "glaive"]
+
+
+def test_a_reviewed_date_dates_an_undated_night_before_page_order(
+    client: Client,
+) -> None:
+    records = [
+        archived("newer", 1, "2022-03-06", "March 6, 2022"),
+        archived("between", 2, None, "February 26"),
+        archived("impossible", 3, None, "November 31, 2021"),
+        archived("older", 4, "2021-10-23", "October 23, 2021"),
+    ]
+    with pytest.raises(ValueError, match="has its own date"):
+        import_capture(
+            records, apply=True, corrections={"dates": {"newer": "2022-03-06"}}
+        )
+    assert counts() == (0, 0, 0, 0)
+    fixes = {
+        "dates": {
+            "between": "2022-02-25",
+            "impossible": "2021-11-30",
+            "elsewhere": "2020-01-01",
+        }
+    }
+    days = record_days(
+        records, {key: date.fromisoformat(day) for key, day in fixes["dates"].items()}
+    )
+    assert days["between"] == date(2022, 2, 25)
+    assert days["impossible"] == date(2021, 11, 30)
+    assert record_days(records)["between"] == date(2022, 2, 26)
+
+    result = import_capture(records, apply=True, corrections=fixes)
+    assert result["corrected_dates"] == 2
+    with Session() as session:
+        for key, name, day in (
+            ("between", "KOTH February 25, 2022", date(2022, 2, 25)),
+            ("impossible", "KOTH November 30, 2021", date(2021, 11, 30)),
+        ):
+            event = session.get(Season, result["event_ids"][key])
+            assert event is not None and event.name == name
+            assert event.start_date == event.end_date == day
+            round_ = session.scalars(
+                select(DBEventRound).where(
+                    col(DBEventRound.season_id) == result["event_ids"][key]
+                )
+            ).one()
+            assert round_.start_date == round_.end_date == day
+            archive = session.get(KothHistoryEvent, result["event_ids"][key])
+            assert archive is not None
+            assert archive.date_label == {"between": "February 26"}.get(
+                key, "November 31, 2021"
+            )
+
+
+@pytest.mark.parametrize(
+    ("names", "error"),
+    [
+        ({"elusieri": "elusirei", "elusirei": "Elusirel"}, "itself corrected"),
+        ({"elu": " "}, "empty name"),
+        ({"Elu": "Elusirel"}, "folded spelling"),
+    ],
+)
+def test_a_bad_corrections_file_fails_before_any_write(
+    client: Client, names: dict[str, str], error: str
+) -> None:
+    with pytest.raises(ValueError, match=error):
+        import_capture(capture(), apply=True, corrections={"names": names})
+    assert counts() == (0, 0, 0, 0)
+
+
+def test_a_corrections_file_that_is_not_an_object_fails_before_any_write(
+    client: Client,
+) -> None:
+    with pytest.raises(ValueError, match="not a JSON object"):
+        import_capture(capture(), apply=True, corrections=json.loads('[{"names": {}}]'))
+    assert counts() == (0, 0, 0, 0)
