@@ -18,6 +18,7 @@ from app.models.base import ident
 from app.models.enums import EntrantKind, EventKind, Race
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
+from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage
 from app.models.league import League
 from app.models.relationships import DBEventRound, round_row
@@ -407,6 +408,72 @@ def test_a_league_lists_its_events_newest_first(client: Client) -> None:
 
     body = client.get(f"/leagues/{league_id}").json()
     assert [event["id"] for event in body["events"]] == [second, first]
+
+
+def archive(event_id: int) -> None:
+    """Map one event to a KOTH archive record, as the history import does."""
+    with Session.begin() as session:
+        session.add(
+            KothHistoryEvent(
+                event_id=event_id,
+                source_key=f"night-{event_id}",
+                source_url="https://example.com/koth",
+                source_digest="0" * 64,
+                date_label="Night",
+                source_record={},
+            )
+        )
+
+
+def test_the_list_reads_mark_each_archived_event(client: Client) -> None:
+    with Session.begin() as session:
+        league = League(name="Gym KOTH", short_name="KOTH")
+        session.add(league)
+        session.flush()
+        league_id = league.id
+    native = add_event(name="Night 2", league_id=league_id, kind=EventKind.koth)
+    archived = add_event(name="Night 1", league_id=league_id, kind=EventKind.koth)
+    archive(archived)
+
+    rows = client.get("/events").json()
+    assert {row["id"]: row["archived"] for row in rows} == {
+        native: False,
+        archived: True,
+    }
+    found = client.post("/events/search?query=id > 0").json()
+    assert {row["id"]: row["archived"] for row in found} == {
+        native: False,
+        archived: True,
+    }
+    events = client.get(f"/leagues/{league_id}").json()["events"]
+    assert {event["id"]: event["archived"] for event in events} == {
+        native: False,
+        archived: True,
+    }
+    assert client.get(f"/events/{archived}").json()["archived"] is True
+    assert client.get(f"/events/{native}").json()["archived"] is False
+
+
+def test_the_archived_flag_costs_the_list_no_statement_per_row(
+    client: Client,
+) -> None:
+    """The flag is a column of the page statement, so the count holds as rows grow."""
+    archive(add_event(name="Night 0", kind=EventKind.koth))
+    one = client.get("/events")
+    assert len(one.json()) == 1
+    for index in range(1, 5):
+        night = add_event(name=f"Night {index}", kind=EventKind.koth)
+        if index % 2:
+            archive(night)
+    several = client.get("/events")
+    assert [row["archived"] for row in several.json()] == [
+        False,
+        True,
+        False,
+        True,
+        True,
+    ]
+    assert several.headers["X-DB-Statements"] == one.headers["X-DB-Statements"]
 
 
 def test_the_lists_order_events_by_when_they_start_not_by_id(client: Client) -> None:
