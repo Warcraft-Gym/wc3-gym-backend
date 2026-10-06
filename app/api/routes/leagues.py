@@ -17,13 +17,17 @@ def get_leagues(service: EventServiceDep, response: Response) -> list[LeaguePubl
 
 @router.get("/leagues/{league_id}")
 def get_league(
-    league_id: int, service: EventServiceDep, claims: OptionalLogin
+    league_id: int,
+    service: EventServiceDep,
+    claims: OptionalLogin,
+    archived: bool | None = None,
 ) -> LeaguePublic:
-    """Return one league and the events that are its runs, newest first.
+    """Return one league and the events that are its runs, newest start first.
 
-    A draft run is in the list for an admin only.
+    `archived` filters the runs as it does the event list. A draft run is in
+    the list for an admin only.
     """
-    return service.get_league(league_id, claims=claims)
+    return service.get_league(league_id, archived=archived, claims=claims)
 
 
 @router.post("/leagues", status_code=201, dependencies=[Depends(require_admin)])

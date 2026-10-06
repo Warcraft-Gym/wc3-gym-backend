@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-06
+
+* **Update**: `GET /events` and `GET /leagues/{league_id}` list events newest start first (the start time, else the start date, undated last) and take `archived` to keep or drop the archived KOTH nights; `GET /me/events` and `GET /koth/events` leave archived nights out; the KOTH history import dates a night labelled with a month and a day but no year from its place on the source page. [Events module](concepts/events-module.md#the-list-reads) and [KOTH night](concepts/koth.md#historical-imports) state it.
+
 ## 2026-10-05
 
 * **Update**: every key that points at an event cascades, except the two that set null, and so do `draft_series.match_id` and `fantasy_team_player.fantasy_team_id`, so `DELETE /events/{id}` deletes the event with every row under it and leaves the users, teams and maps it named. [event](data/tables/event.md#keys-and-joins) and the key lines of [team_season_captain](data/tables/team_season_captain.md), [round_availability](data/tables/round_availability.md), [user_season_signup](data/tables/user_season_signup.md), [map_season](data/tables/map_season.md), [event_round](data/tables/event_round.md), [team_season](data/tables/team_season.md), [user_team_season](data/tables/user_team_season.md), [draft_series](data/tables/draft_series.md) and [fantasy_team_player](data/tables/fantasy_team_player.md) state it.

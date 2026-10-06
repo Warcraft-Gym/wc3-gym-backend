@@ -1,6 +1,7 @@
 """Archive conservation, ambiguity and lifecycle checks on both supported databases."""
 
 from copy import deepcopy
+from datetime import date
 from typing import Any
 
 import pytest
@@ -12,14 +13,18 @@ from app.core.db import Session
 from app.models.event_award import EventAward
 from app.models.event_entrant import EventEntrant
 from app.models.event_history import EventVideo, HistoricalParticipant, KothHistoryEvent
+from app.models.relationships import DBEventRound
+from app.models.season import Season
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame
 from app.models.user import User
 from app.services.koth.history_import import (
     bounds,
+    digest,
     import_capture,
     infer_winners,
     local_url,
+    record_days,
 )
 from tests.test_koth_night import open_night
 
@@ -41,6 +46,7 @@ def capture() -> list[dict[str, Any]]:
             "date": None,
             "date_text": "November 31, 2024",
             "source_url": "https://example.com/history/",
+            "source_order": 1,
             "sections": [
                 {
                     "kind": "bracket",
@@ -209,6 +215,96 @@ def test_import_does_not_treat_unmapped_existing_events_as_duplicates(
     assert counts() == (0, 0, 0, 0)
 
 
+def test_archived_nights_filter_the_lists_and_stay_off_the_live_reads(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The archive filter keeps or drops the imported night; live reads drop it."""
+    archived = import_capture(capture(), apply=True)["event_ids"]["capture-first"]
+    native = open_night(client, auth_headers)["id"]
+    league = client.get(f"/events/{native}").json()["league_id"]
+
+    def listed(path: str) -> tuple[set[int], str | None]:
+        resp = client.get(path, headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        return {row["id"] for row in resp.json()}, resp.headers.get("X-Total-Count")
+
+    assert listed("/events") == ({archived, native}, "2")
+    assert listed("/events?archived=false") == ({native}, "1")
+    assert listed("/events?archived=true") == ({archived}, "1")
+
+    def runs(query: str = "") -> set[int]:
+        body = client.get(f"/leagues/{league}{query}", headers=auth_headers).json()
+        return {event["id"] for event in body["events"]}
+
+    assert runs() == {archived, native}
+    assert runs("?archived=false") == {native}
+    assert runs("?archived=true") == {archived}
+
+    mine = client.get("/me/events", headers=auth_headers)
+    assert mine.status_code == 200, mine.text
+    assert native in {row["id"] for row in mine.json()}
+    assert archived not in {row["id"] for row in mine.json()}
+    assert [row["id"] for row in client.get("/koth/events").json()] == [native]
+
+
+def test_a_yearless_night_takes_its_year_from_the_page_order(client: Client) -> None:
+    """Only a month and a day between two dated nights of one page get a date."""
+
+    def night(key: str, order: int, day: str | None, label: str) -> dict[str, Any]:
+        record = deepcopy(capture()[0])
+        record.update(event_id=key, source_order=order, date=day, date_text=label)
+        return record
+
+    records = [
+        night("newer", 1, "2022-03-06", "March 6, 2022"),
+        night("between", 2, None, "February 26"),
+        night("unparsed", 3, None, "November 31, 2024"),
+        night("older", 4, "2021-10-23", "October 23, 2021"),
+        night("last", 5, None, "October 16"),
+    ]
+    wide = [
+        night("wide-newer", 1, "2022-12-31", "December 31, 2022"),
+        night("wide-between", 2, None, "June 1"),
+        night("wide-older", 3, "2020-01-01", "January 1, 2020"),
+    ]
+    for record in wide:
+        record["source_url"] = "https://example.com/other/"
+    records += wide
+    untouched = deepcopy(records)
+    days = record_days(records)
+    assert days["between"] == date(2022, 2, 26)
+    assert days["unparsed"] is None and days["last"] is None
+    assert days["wide-between"] is None  # two years fit
+    assert days["newer"] == date(2022, 3, 6)
+
+    result = import_capture(records, apply=True)
+    assert records == untouched
+    ids = result["event_ids"]
+    with Session() as session:
+        event = session.get(Season, ids["between"])
+        assert event is not None
+        assert event.name == "KOTH February 26, 2022"
+        assert event.start_date == event.end_date == date(2022, 2, 26)
+        round_ = session.scalars(
+            select(DBEventRound).where(col(DBEventRound.season_id) == ids["between"])
+        ).one()
+        assert round_.start_date == round_.end_date == date(2022, 2, 26)
+        for key, name in (
+            ("unparsed", "KOTH November 31, 2024"),
+            ("last", "KOTH October 16"),
+            ("newer", "KOTH March 6, 2022"),
+        ):
+            other = session.get(Season, ids[key])
+            assert other is not None and other.name == name
+            assert (other.start_date is None) == (key != "newer")
+        archive = session.get(KothHistoryEvent, ids["between"])
+        assert archive is not None
+        assert archive.date_label == "February 26"
+        assert archive.source_digest == digest(untouched[1])
+        assert archive.source_record == untouched[1]
+    assert import_capture(records, apply=True)["inserted_events"] == 0
+
+
 @pytest.mark.parametrize(
     ("label", "expected"),
     [
@@ -265,6 +361,28 @@ def test_full_offline_capture(client: Client) -> None:
     assert report["counts"]["excluded_rows"] == 136
     assert counts() == (168, 1937, 1937, 33)
     assert import_capture(records, apply=True)["inserted_events"] == 0
+    with Session() as session:
+        starts = {
+            event.id: event.start_date for event in session.scalars(select(Season))
+        }
+    read = sorted(
+        str(starts[report["event_ids"][record["event_id"]]])
+        for record in records
+        if record["date"] is None
+    )
+    assert read == [
+        "2021-11-06",
+        "2021-11-13",
+        "2021-11-20",
+        "2021-11-27",
+        "2021-12-18",
+        "2022-01-08",
+        "2022-01-15",
+        "2022-02-05",
+        "2022-02-12",
+        "2022-02-26",
+        "None",
+    ]
     for event in records:
         event_id = report["event_ids"][event["event_id"]]
         response = client.get(f"/koth/nights/{event_id}/board")

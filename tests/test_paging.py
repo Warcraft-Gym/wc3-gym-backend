@@ -194,8 +194,12 @@ def summary(players: int) -> str:
 
 # The ORDER BY every route writes when no sort parameter is sent
 DEFAULT_ORDER = {
-    # Newest first; the collection statements order the rounds and the map pool
-    "GET /events": ["event.id DESC", "event_round.number", "map_season.position"],
+    # Newest start first; the collection statements order the rounds and the map pool
+    "GET /events": [
+        "coalesce(event.starts_at, event.start_date) DESC NULLS LAST, event.id DESC",
+        "event_round.number",
+        "map_season.position",
+    ],
     "POST /events/search?query=id > 0": [
         "event.id DESC",
         "event_round.number",

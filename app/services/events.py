@@ -141,6 +141,18 @@ _MEMBER_COLUMNS = load_only(
     raiseload=True,
 )
 
+# Newest first by when the event starts; an event with neither date sorts last
+_NEWEST_FIRST = (
+    func.coalesce(col(Season.starts_at), col(Season.start_date)).desc().nulls_last(),
+    col(Season.id).desc(),
+)
+
+
+def archived_filter(archived: bool) -> ColumnElement[bool]:
+    """Keep only the events the KOTH archive maps, or only the others."""
+    mapped = col(Season.id).in_(select(col(KothHistoryEvent.event_id)))
+    return mapped if archived else ~mapped
+
 
 def phase_of(
     session: OrmSession,
@@ -336,12 +348,13 @@ class EventService:
         kind: EventKind | None = None,
         league_id: int | None = None,
         published: bool | None = None,
+        archived: bool | None = None,
         limit: int | None = None,
         offset: int = 0,
         claims: dict[str, Any] | None = None,
     ) -> tuple[list[EventPublic], int]:
-        """One page of events, newest first, each with its computed phase, and
-        the count of every event the filter keeps.
+        """One page of events, newest start first, each with its computed phase,
+        and the count of every event the filter keeps.
 
         An unpublished event is a draft only an admin reads, so a caller who
         is not one sees the published rows whatever the filter asks for.
@@ -353,13 +366,15 @@ class EventService:
             filters.append(col(Season.league_id) == league_id)
         if published is not None:
             filters.append(col(Season.published).is_(published))
+        if archived is not None:
+            filters.append(archived_filter(archived))
         if not is_admin(claims):
             filters.append(col(Season.published).is_(True))
         statement = (
             select(Season)
             .options(*_EVENT_OPTIONS)
             .where(*filters)
-            .order_by(col(Season.id).desc())
+            .order_by(*_NEWEST_FIRST)
         )
         with Session.begin() as session:
             total = (
@@ -517,9 +532,12 @@ class EventService:
             return [LeaguePublic.model_validate(league) for league in leagues]
 
     def get_league(
-        self, league_id: int, claims: dict[str, Any] | None = None
+        self,
+        league_id: int,
+        archived: bool | None = None,
+        claims: dict[str, Any] | None = None,
     ) -> LeaguePublic:
-        """One league and the events that are its runs, newest first.
+        """One league and the events that are its runs, newest start first.
 
         A draft run reads for an admin only, as the event list does.
         """
@@ -531,8 +549,10 @@ class EventService:
                 select(Season)
                 .options(*_EVENT_OPTIONS)
                 .where(col(Season.league_id) == league_id)
-                .order_by(col(Season.id).desc())
+                .order_by(*_NEWEST_FIRST)
             )
+            if archived is not None:
+                statement = statement.where(archived_filter(archived))
             if not is_admin(claims):
                 statement = statement.where(col(Season.published).is_(True))
             events = session.scalars(statement).all()
@@ -560,6 +580,7 @@ class EventService:
         """The member home's published events, newest first, every kind in one list.
 
         One function over the event rows replaces the season and KOTH split.
+        An archived KOTH night has no account behind its entrants, so it is left out.
         The caller's own state rides on each row: the entrant, the check-in
         shape and window, the next round and the one action the page offers.
         A caller with no id has joined nothing and reads a signup or a view.
@@ -569,7 +590,7 @@ class EventService:
         with Session.begin() as session:
             events = session.scalars(
                 select(Season)
-                .where(col(Season.published).is_(True))
+                .where(col(Season.published).is_(True), archived_filter(False))
                 .options(
                     _MEMBER_COLUMNS,
                     selectinload(
