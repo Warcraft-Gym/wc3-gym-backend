@@ -161,6 +161,6 @@ okf-verify:
         p.write_text(t)
     print("stamped every table concept")
 
-# Verify and import an offline KOTH capture into an explicitly named local Postgres database.
+# Verify and import an offline KOTH capture, with an optional --corrections file, into an explicitly named local Postgres database.
 koth-import capture database_url *args:
     uv run python -m app.services.koth.history_import {{ quote(capture) }} --database-url {{ quote(database_url) }} {{ args }}
