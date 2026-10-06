@@ -11,12 +11,14 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.models.event_award import EventAward
+from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_history import EventVideo, HistoricalParticipant, KothHistoryEvent
 from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame
+from app.models.types import utcnow
 from app.models.user import User
 from app.services.koth.history_import import (
     bounds,
@@ -627,6 +629,33 @@ def test_winners_list_the_king_of_every_bracket_of_a_closed_night(
             },
         ],
     }
+
+
+@pytest.mark.usefixtures("quiet_w3c")
+def test_a_withdrawn_or_moved_crown_is_no_winner_as_on_the_board(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A crowned row that withdrew or stands in another bracket names no king."""
+    native, first = crowned_night(client, auth_headers)
+    with Session.begin() as session:
+        king = session.get(EventEntrant, first)
+        assert king is not None
+        top, lower = session.scalars(
+            select(EventDivision)
+            .where(col(EventDivision.event_id) == native)
+            .order_by(col(EventDivision.position))
+            .limit(2)
+        ).all()
+        assert top.king_entrant_id == first
+        king.withdrawn_at = utcnow()
+        lower.king_entrant_id = first
+    brackets = client.get(f"/koth/nights/{native}/board").json()["brackets"]
+
+    rows, _ = winners(client)
+
+    assert [bracket["king"] for bracket in brackets[:2]] == [None, None]
+    assert [winner["name"] for winner in rows[0]["winners"][:2]] == [None, None]
+    assert {winner["user_id"] for winner in rows[0]["winners"]} == {None}
 
 
 @pytest.mark.usefixtures("quiet_w3c")
