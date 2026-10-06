@@ -4,7 +4,7 @@ title: koth_history_series
 description: The source row behind one imported competitive BO1 series.
 resource: ../../../../app/models/event_history.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T15:11:43Z }
 sources:
   - id: model
     resource: ../../../../app/models/event_history.py
@@ -20,4 +20,4 @@ sources:
 | `source_key` | Section and row ordinal, unique within the event. |
 | `source_record` | Private original pairing and annotations; independent of inferred identity. |
 | `inferred_winner` | Side 1 or 2 inferred from winner-stays-on order; shown on the board, never written to the series score. |
-| `review_note` | A forfeit that restarts the order, or why the bracket was not inferred, on the series where it starts. |
+| `review_note` | A series neither side played on after, whose winner withdrew and where the order restarts, or why the bracket was not inferred, on the series where it starts. |

@@ -27,6 +27,7 @@ from app.models.series_game import DBSeriesGame
 from app.models.types import utcnow
 from app.models.user import User
 from app.services.koth.history_import import (
+    WITHDREW,
     bounds,
     digest,
     fold,
@@ -412,6 +413,12 @@ def test_full_offline_capture(client: Client) -> None:
             ]
             assert all(won == (throne != "none") for won, throne in marks)
             assert [throne for won, throne in marks if won][:1] in ([], ["moved"])
+            # a winner read at a break held the crown going in, then left it
+            assert all(
+                throne == "held"
+                for (won, throne), row in zip(marks, bracket["history"], strict=True)
+                if won and row["winner_left"] and not row["winner_side"]
+            )
             for row, source in zip(bracket["history"], matches, strict=True):
                 assert fold(row["side1"]["name"]) == fold(source["player_1"])
                 assert fold(row["side2"]["name"]) == fold(source["player_2"])
@@ -448,7 +455,7 @@ def test_full_offline_capture(client: Client) -> None:
         assert {row["id"] for row in series.json()} == series_ids
         assert int(response.headers["X-DB-Statements"]) <= 6
         assert int(response.headers["X-DB-Rows"]) <= 98
-        assert len(response.content) < 11500
+        assert len(response.content) < 12000
 
 
 def bo1(
@@ -463,14 +470,35 @@ def bo1(
     }
 
 
-def test_a_break_reads_as_a_forfeit_and_the_order_restarts() -> None:
+def test_at_a_break_the_holder_wins_withdraws_and_the_order_restarts() -> None:
     rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Di", "Ed"), bo1("Di", "Fay")]
     assert infer_winners(rows, "Fay") == [
         (1, None),
-        (None, "Neither side plays on; read as a forfeit"),
+        (1, WITHDREW),
         (1, None),
         (2, None),
     ]
+
+
+def test_a_break_with_nobody_holding_the_crown_has_no_winner() -> None:
+    # on the first pairing, and right after a break with no winner
+    rows = [bo1("Ann", "Bo"), bo1("Cy", "Di"), bo1("Ed", "Fay")]
+    assert infer_winners(rows, "Fay") == [
+        (None, WITHDREW),
+        (None, WITHDREW),
+        (2, None),
+    ]
+
+
+def test_a_written_result_against_the_holder_at_a_break_is_a_doubt() -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy", winner="Cy"), bo1("Di", "Ed")]
+    assert infer_winners(rows, "Ed") == [
+        (None, None),
+        (None, "The source result differs from the order"),
+        (None, None),
+    ]
+    rows[1]["winner"] = "Ann"
+    assert infer_winners(rows, "Ed") == [(1, None), (None, WITHDREW), (2, None)]
 
 
 def test_winner_stays_on_infers_a_whole_bracket() -> None:
@@ -511,6 +539,11 @@ def test_winner_stays_on_infers_a_whole_bracket() -> None:
             "Cy",
             "A name only nearly matches the next series",
         ),
+        (
+            [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Di", "Ed"), bo1("Ed", "Di")],
+            "Di",
+            "Both sides play the next series",
+        ),
     ],
 )
 def test_any_doubt_leaves_the_whole_bracket_to_review(
@@ -542,12 +575,12 @@ def test_an_inferred_winner_shows_on_the_board_and_stays_out_of_records(
     history = client.get(f"/koth/nights/{event_id}/board").json()["brackets"][0][
         "history"
     ]
-    assert [r["inferred_winner_side"] for r in history] == [1, None, 2]
-    assert [r["forfeit"] for r in history] == [False, True, False]
+    # Ann holds the crown into a break, so she wins it and then withdraws
+    assert [r["inferred_winner_side"] for r in history] == [1, 1, 2]
+    assert [r["winner_left"] for r in history] == [False, True, False]
     assert [r["review_note"] for r in history] == [None, None, None]
     assert [r["winner_side"] for r in history] == [None, None, None]
-    # the order restarts after the forfeit, so the next winner takes the crown
-    assert [r["throne"] for r in history] == ["moved", "none", "moved"]
+    assert [r["throne"] for r in history] == ["moved", "held", "moved"]
 
 
 def test_admin_delete_removes_an_archived_night(
@@ -900,15 +933,60 @@ def test_a_corrections_file_that_is_not_an_object_fails_before_any_write(
     assert counts() == (0, 0, 0, 0)
 
 
-def thrones(client: Client, *rows: dict[str, Any], king: str) -> list[str]:
-    """What each row of a one-bracket archived night did to the crown."""
+def history(client: Client, *rows: dict[str, Any], king: str) -> list[dict[str, Any]]:
+    """The board rows of a one-bracket archived night."""
     record = archived("marks", 1, "2024-11-30", "November 30, 2024")
     record["sections"] = bracket(*rows, king=king)
     event_id = import_capture([record], apply=True)["event_ids"]["marks"]
     response = client.get(f"/koth/nights/{event_id}/board")
     assert response.status_code == 200, response.text
     assert int(response.headers["X-DB-Statements"]) == 6
-    return [row["throne"] for row in response.json()["brackets"][0]["history"]]
+    return response.json()["brackets"][0]["history"]
+
+
+def thrones(client: Client, *rows: dict[str, Any], king: str) -> list[str]:
+    """What each row of a one-bracket archived night did to the crown."""
+    return [row["throne"] for row in history(client, *rows, king=king)]
+
+
+def test_a_winner_who_left_empties_the_throne(client: Client) -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Di", "Ed"), bo1("Ann", "Fay")]
+    marks = [
+        (row["inferred_winner_side"], row["winner_left"], row["throne"])
+        for row in history(client, *rows, king="Ann")
+    ]
+    assert marks == [
+        (1, False, "moved"),
+        (1, True, "held"),
+        (None, True, "none"),  # nobody holds the crown going in
+        (1, False, "moved"),  # Ann left after the second, so she takes it anew
+    ]
+
+
+def test_a_break_on_the_first_pairing_has_no_winner(client: Client) -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Cy", "Di"), bo1("Cy", "Ed")]
+    marks = [
+        (row["inferred_winner_side"], row["winner_left"], row["throne"])
+        for row in history(client, *rows, king="Ed")
+    ]
+    assert marks == [(None, True, "none"), (1, False, "moved"), (2, False, "moved")]
+
+
+def test_an_old_break_note_reads_as_a_winner_who_left(client: Client) -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Cy", "Di"), bo1("Cy", "Ed")]
+    history(client, *rows, king="Ed")
+    with Session() as session:
+        first = session.scalars(
+            select(KothHistorySeries).order_by(col(KothHistorySeries.series_id))
+        ).first()
+        assert first is not None
+        first.review_note = "Neither side plays on; stored under an older wording"
+        session.add(first)
+        session.commit()
+        event_id = first.event_id
+    rows = client.get(f"/koth/nights/{event_id}/board").json()["brackets"][0]
+    assert [r["winner_left"] for r in rows["history"]] == [True, False, False]
+    assert [r["review_note"] for r in rows["history"]] == [None, None, None]
 
 
 @pytest.mark.parametrize("written", [False, True])

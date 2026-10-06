@@ -154,8 +154,8 @@ class KothHistoricalSeries(SQLModel):
     inferred_winner_side: Literal[1, 2] | None = None
     # What the winner, written else inferred, did to the crown; none without one
     throne: Literal["moved", "held", "none"]
-    # Neither side played on, which the organisers read as a forfeit
-    forfeit: bool = False
+    # Neither side played on, so the winner, known or not, left the throne after it
+    winner_left: bool = False
     review_note: str | None = None
 
 

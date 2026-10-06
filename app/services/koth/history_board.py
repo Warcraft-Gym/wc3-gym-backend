@@ -23,7 +23,7 @@ from app.models.koth_night import (
 from app.models.season import Season
 from app.models.series import Series
 from app.services.koth.board import Throne
-from app.services.koth.history_import import FORFEIT, bounds
+from app.services.koth.history_import import BREAK, bounds
 from app.services.koth.night import divisions_of, series_of
 
 
@@ -41,8 +41,8 @@ def _history(
 ) -> list[KothHistoricalSeries]:
     """A bracket's pairings in play order, each with what its winner, written
     else inferred, did to the crown: the holder who wins holds it, any other
-    winner takes it, and a pairing with no winner leaves it to whoever wins
-    next, held only by the last known holder."""
+    winner takes it, a pairing with no winner leaves it to whoever wins next,
+    held only by the last known holder, and a winner who left empties it."""
     rows: list[KothHistoricalSeries] = []
     holder: int | None = None
     for row in chain:
@@ -56,7 +56,8 @@ def _history(
         throne: Throne = (
             "none" if winner is None else "held" if winner == holder else "moved"
         )
-        holder = winner or holder
+        left = note is not None and note.startswith(BREAK)
+        holder = None if left else winner or holder
         rows.append(
             KothHistoricalSeries(
                 series_id=ident(row),
@@ -67,8 +68,8 @@ def _history(
                 winner_side=written,
                 inferred_winner_side=read,
                 throne=throne,
-                forfeit=note == FORFEIT,
-                review_note=None if note == FORFEIT else note,
+                winner_left=left,
+                review_note=None if left else note,
             )
         )
     return rows
