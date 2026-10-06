@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T10:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T10:59:26Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -29,7 +29,7 @@ sources:
     title: The one board read
   - id: carry
     resource: ../../../app/services/koth/carry.py
-    title: The king of each bracket of a night
+    title: The king of each bracket of a night, and the winners of every closed night
 ---
 
 # Shape
@@ -95,6 +95,15 @@ The shape it answers, as `app/models/koth_night.py` states it:
 `mmr` null on a race row of a bracket says W3Champions found no rating for that player on that race; no second field carries that. Every row of `unplaced` reads `mmr` null, because a row no bracket holds is not asked for a rating.
 
 The night routes are `POST /koth/nights` (open, with the start time and the three bounds; 409 while another night is open), `POST /koth/nights/{id}/close`, and the event routes for everything else. The close deletes the series on every bracket's table and leaves the crowns readable, so the next night can name each bracket's defender. It then pays each bracket from its table, which the standings read of the stage also answers: place 1, Champion, is the king's alone, even a king crowned by hand who played nothing, and the rows that played a scored series in that bracket follow in points order. A bracket with no king has no place 1, so its first placed row is place 2, and a row that never played takes no place and no award.
+
+# The winners list
+
+`GET /koth/winners` answers every published, closed night, run in the app or archived, with the king each bracket ended with; the list says winner for the king of a closed night. It reads newest start first by the rule of [the list reads](events-module.md#the-list-reads), takes `limit` (1 to 500, 500 by default) and `offset` counted in nights, and answers `X-Total-Count`, the count of every such night. It takes no token and carries the settled [edge-cache class](edge-cache.md).
+
+- `KothNightWinners`: `event_id`, `date` (the UTC day of the start time, else the start date, else null), `date_label` (the label an archived night's source wrote, null on a night run in the app), `winners` (`KothBracketWinner` list, one per bracket in bracket order, empty for a night with no bracket).
+- `KothBracketWinner`: `bracket` (the division name), `lower_bound`, `name`, `user_id`, `race`. `name` is the source spelling on an archived night and the account's name on a night run in the app; all three are null for an empty throne, and `user_id` and `race` are null on an archived night.
+
+The winner is the stored crown, `event_division.king_entrant_id`, while its row stands in that bracket and is not withdrawn, as on the board; a crown that fails either reads as an empty throne. No series is walked. The read is one statement whatever the page holds: the page of nights with their total, joined to their brackets and crowns as columns. A page past the end adds a count. The statement is built once with the page bound as parameters. A night's series stay on its board.
 
 # Historical imports
 

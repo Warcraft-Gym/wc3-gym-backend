@@ -4,6 +4,7 @@ The night itself is an event row; the board is the one read the run page and
 the night page both draw, so nothing here is stored.
 """
 
+import datetime as dt
 from datetime import datetime
 from typing import Annotated, Literal
 
@@ -194,3 +195,26 @@ class KothBoard(SQLModel):
     # Rows no bracket holds yet; the admin places them, so they carry no rating
     unplaced: list[KothPlayer] = []
     brackets: list[KothBracket] = []
+
+
+class KothBracketWinner(SQLModel):
+    """The king one bracket of a closed night ended with; no name for an empty throne."""
+
+    bracket: str | None = None
+    lower_bound: int | None = None
+    # The source spelling on an archived night, else the account's name
+    name: str | None = None
+    # Null on an archived night, whose rows name no account and no race
+    user_id: int | None = None
+    race: str | None = None
+
+
+class KothNightWinners(SQLModel):
+    """One closed night and the winner of each of its brackets, strongest first."""
+
+    event_id: int
+    # The UTC day of the start time, else the start date
+    date: dt.date | None = None
+    # The date as the archive source wrote it; null on a night run in the app
+    date_label: str | None = None
+    winners: list[KothBracketWinner] = []
