@@ -4,7 +4,7 @@ title: Testing
 description: The suite migrates a temporary SQLite file with Alembic, opens no socket, and holds guard tests that pin contracts, statement counts and memory.
 resource: ../../../tests/conftest.py
 tags: [testing]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: conftest
     resource: ../../../tests/conftest.py
@@ -18,7 +18,7 @@ sources:
 
 - `uv run just test` runs pytest the way CI does. Pass pytest arguments through: `uv run just test -k koth`.
 - The suite builds a temporary SQLite file with `alembic upgrade head`, the same command a deployment runs, so every run also checks the migrations. Tests share one database and a fixture empties it between tests.
-- `tests/conftest.py` is the only module that imports the web framework. Every test asserts on status codes and JSON through the `client` fixture, or calls a service directly.
+- Every test asserts on status codes and JSON through the `client` fixture of `tests/conftest.py`, or calls a service directly.
 - The suite opens no socket. A fixture fails any outgoing call a test did not stand in for. An environment key that turns a network call on (`DISCORD_BOT_TOKEN`, `DB_URL`) is removed from the process at import time in `conftest.py`. Never add `load_dotenv` to a module the tests import.
 - To run the same suite on Postgres, set `TEST_DB_URL` to a server whose user may create databases. Postgres-only questions (collation, casting, sequences) are settled there, not on SQLite.
 

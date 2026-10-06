@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T13:05:43Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -35,7 +35,6 @@ The adapter holds no bot token and knows no command. The command list lives here
 |---|---|
 | `/upcoming` | the series scheduled in the next days, claimed first |
 | `/leaderboard` | achievement, ladder or fantasy points this season |
-| `/achievements` | a player's badges |
 | `/stats` | one player's GNL season from the stored ladder and their series |
 | `/announce` | the match card of one series, posted in the channel |
 | `/availability` | a card for one round with one button per answer |
@@ -44,11 +43,11 @@ The adapter holds no bot token and knows no command. The command list lives here
 | `/veto` | point the two players at the veto board and say where it stands |
 | `/postlinks` | the site's links as buttons, posted by an admin |
 
-Each command is one module under `app/services/commands/`. A module imports `base.py`, never `interactions.py`, which imports the modules.
+Six commands have a module under `app/services/commands/`; `/upcoming`, `/leaderboard` and `/schedule` are functions in `app/services/interactions.py`. A module imports `base.py`, never `interactions.py`, which imports the modules.
 
 # Cards and posts
 
-The app posts a result card, a cast claim card and a start reminder, plus one card per event with Sign up and Check in buttons. Each post is a `discord_post` row so the app can edit it later. The channels come from the `settings` rows `results_channel_id` and `content_channel_id`; a missing row means no card. Every series write keeps the cards in step through `discord_posts.follow_series`: a new time edits the series cards, a first score posts the result card, a changed score edits it, and a cleared result deletes it with its row, so the next report posts a fresh one.
+The app posts a result card, a cast claim card and a start reminder, plus one card per event with Sign up and Check in buttons. Each post is a `discord_post` row so the app can edit it later. The result, cast and reminder cards go to the channels the `settings` rows `results_channel_id` and `content_channel_id` name, and a missing row means no card; the event card goes to the channel the admin names in the body of `POST /events/{id}/discord-post`. Every series write keeps the cards in step through `discord_posts.follow_series`: a new time edits the series cards, a first score posts the result card, a changed score edits it, and a cleared result deletes it with its row, so the next report posts a fresh one.
 
 A reported result that a player or a captain changes through the report (`PUT /player-series/{id}` or `/report-result`), or takes back (`DELETE /series/{id}/result`), also gets a note beside the card in the results channel, through `discord_posts.post_result_change`. The note names who made the change, a player of the series or a captain, and shows the score before and after behind spoilers, as the card does. When the score stands, it says the games or the races played changed. A note is a `discord_post` row of kind `result_change`, so the channel's pacing counts it, and it is never edited: it records one change. An admin's write, a captain's edit through `PUT /series/{id}` and a first report post no note.
 

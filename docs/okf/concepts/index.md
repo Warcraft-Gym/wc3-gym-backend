@@ -13,5 +13,5 @@
 * [Series reporting](series-reporting.md) - A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 * [Settings and the current season](settings-and-current-season.md) - A key-value table holds the few runtime values an admin edits, including the two season pointers, and a missing row falls back to the newest season.
 * [Vocabulary](vocabulary.md) - One word per thing, from league down to game, and the words this app keeps for old reasons.
-* [W3C ladder and achievements](ladder-and-achievements.md) - Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and 24 badge rules run as one SQL union.
+* [W3C ladder and achievements](ladder-and-achievements.md) - Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and the badge rules run as one SQL union.
 * [W3Champions](w3champions.md) - The ranked ladder service the app reads MMR, per-race stats and match history from, with a timeout, a throttle answer, and two separate sync pipelines.

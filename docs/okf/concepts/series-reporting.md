@@ -4,7 +4,7 @@ title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 resource: ../../../app/services/series_games.py
 tags: [series, storage]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T13:05:43Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: games
     resource: ../../../app/services/series_games.py
@@ -63,7 +63,7 @@ Replays live in a Cloudflare R2 bucket, one file per game. The browser uploads s
 
 # Casts
 
-Any member claims a series once (`POST /series/{id}/casts`); the owner or an admin changes the channel or removes it, and sets the VOD. A series with a result is over and takes no claim. The claim posts a card in Discord, and a reminder card goes out shortly before the start through `GET /jobs/cast-reminders`. See [Discord integration](discord-integration.md).
+Any member claims a series once (`POST /series/{id}/casts`); the owner or an admin changes the channel or removes it, and sets the VOD. A series with a result is over: it takes a claim only with a VOD link, and that claim posts no card. The claim posts a card in Discord, and a reminder card goes out shortly before the start through `GET /jobs/cast-reminders`. See [Discord integration](discord-integration.md).
 
 # Examples
 

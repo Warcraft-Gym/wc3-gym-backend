@@ -1,10 +1,10 @@
 ---
 type: Domain Concept
 title: W3C ladder and achievements
-description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and 24 badge rules run as one SQL union.
+description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and the badge rules run as one SQL union.
 resource: ../../../app/services/ladder.py
 tags: [w3champions]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:40:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: ladder
     resource: ../../../app/services/ladder.py
@@ -14,7 +14,7 @@ sources:
     title: The ladder scoring rule
   - id: achievements
     resource: ../../../app/core/achievements.py
-    title: The 24 rules
+    title: The rule catalogue
   - id: rules-sql
     resource: ../../../app/core/achievement_rules.py
     title: The rules as SQL
@@ -25,7 +25,7 @@ sources:
 
 # What is stored
 
-`w3c_ladder_matches` holds one row per GNL player per ranked 1v1 match, unique on (match id, user). Both the selected race and the rolled race are stored per side, because W3Champions filters on the selected race and Random counts everything. History starts at W3Champions season 23, where GNL S17 began.
+`w3c_ladder_matches` holds one row per GNL player per ranked 1v1 match, unique on (match id, user). Both the selected race and the rolled race are stored per side, because W3Champions filters on the selected race and Random counts everything. History starts at W3Champions season 11, before GNL S10, so the seasons imported from the old league sheets sit inside it.
 
 The sync reads every [user_battle_tag](../data/tables/user_battle_tag.md) row of a person, active first, and stamps each match with the row in `battle_tag_id`. A person with no tag row has nothing to read, and the stats sync refuses them. The stats sync reads the active tag alone. A person with n tags costs n match reads per W3Champions season where a person with one tag costs one.
 
@@ -47,7 +47,7 @@ Two sync pipelines exist and must not be confused: **matches** (this table, this
 
 # Achievements
 
-The 24 rules follow the community achievement definitions, and `tests/test_achievement_parity.py` pins their totals against a recorded season. A rule is code in `app/core/achievements.py`; its condition runs as one select in `app/core/achievement_rules.py`, and one union answers every player at once. Three rules pay a variable amount. Two bucket by day. The rules are not what their names suggest; do not "fix" them against the name.
+The catalogue holds 91 rules: the 24 that follow the community achievement definitions, the 58 of the S19 player set (nine are in both) and 18 team rules. A season made in the app starts with the S19 player set and the team set, 76 rules. `tests/test_achievement_parity.py` checks the SQL against the same rules in Python over generated matches. A rule is code in `app/core/achievements.py`; its condition runs as one select in `app/core/achievement_rules.py`, and one union answers every player at once. Three rules pay a variable amount. Two bucket by day. The rules are not what their names suggest; do not "fix" them against the name.
 
 An achievement instance is a row of `ladder_achievements(season_id, rule_id, points)`: a price, nothing else. A season drops a rule by having no row. `SeasonService.add` seeds a new season with the default set. `season_id` null means lifetime, counted only from W3Champions season 26 onwards. Team badges are in `app/core/team_achievements.py`.
 

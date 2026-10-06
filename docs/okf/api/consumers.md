@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -49,7 +49,7 @@ A change that fails one of these is a cross-repository change. Ship the consumer
 - The GNL season payloads keep `season_id`, `phase` and `playday` although the table is `event`.
 - A player's ladder rating is the summary `race_mmrs` and `main_race` on every user payload; no payload carries the raw `w3cstats` rows.
 - Consumers use the league routes for team identity and the event routes for GNL data. The one unscoped team route is `GET /teams/{team_id}/image`, deprecated, which the web app's logo fallback reads.
-- List routes page with `limit` and `offset` and answer `X-Total-Count`.
+- List routes page with `limit` and `offset`; ten of them answer `X-Total-Count`, which [the overview](overview.md) counts.
 - Reads are open. Writes need an admin, or the owning member for self-service routes.
 
 # Rules a consumer follows

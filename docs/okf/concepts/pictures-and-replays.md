@@ -4,7 +4,7 @@ title: Pictures and replays
 description: Team logos and map thumbnails live in Vercel Blob as public URLs, replays live in a Cloudflare R2 bucket reached through presigned URLs, and both stores follow the rows.
 resource: ../../PICTURES.md
 tags: [storage]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T00:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: pictures
     resource: ../../PICTURES.md
@@ -25,7 +25,7 @@ A map's `image` may also hold the URL warcraft3.info publishes, written by the l
 
 The store follows the rows: a deleted team or map drops its picture after the commit. The listeners are registered on the session in `app/core/db.py`.
 
-The SDK is imported inside each call, because it carries its own HTTP stack and only the upload path needs it.
+The SDK is imported inside each Blob call, because it carries its own HTTP stack and only the paths that write or delete a picture need it.
 
 # Why not in the database
 
