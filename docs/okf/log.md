@@ -2,6 +2,7 @@
 
 ## 2026-10-06
 
+* **Update**: every `history` row of an archived KOTH bracket carries `throne` (`moved`, `held` or `none`), walked in play order from the written winner, else the inferred one, at no extra statement. [KOTH night](concepts/koth.md#historical-imports) states it.
 * **Update**: the KOTH history import joins written names that fold to the same text in one bracket into one participant, and takes an optional corrections file of reviewed dates for undated nights and kept names for folded spellings; the stored source records stay as written. [KOTH night](concepts/koth.md#historical-imports) and [historical_participant](data/tables/historical_participant.md) state it.
 * **Update**: every event of `GET /events`, `POST /events/search` and `GET /leagues/{league_id}` carries `archived`, true for an archived KOTH night and false for every other event, at no extra statement. [Events module](concepts/events-module.md#the-list-reads) states it.
 * **Add**: `GET /koth/winners` lists every published, closed KOTH night, archived or run in the app, newest start first and paged by night, with the stored king of each bracket, in one statement and on the settled edge timer. [KOTH night](concepts/koth.md#the-winners-list) states it.

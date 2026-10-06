@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T13:49:16Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T14:37:15Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -115,7 +115,7 @@ An optional corrections file outside the capture, passed as `--corrections`, hol
 
 `GET /events/{id}` reads `archived` true for an imported event, and a client reads the board only then. An imported series refuses a score change. On a live night, game 1 follows the series score through the board, the series route and a reopen.
 
-The historical board returns `historical`, `date_label` and event `videos`. Each bracket retains its literal name and explicit numeric bounds, `historical_king`, and ordered `history` rows with two sides, a nullable winner, a nullable `inferred_winner_side`, a `forfeit` flag for a break the organisers read as a forfeit, and a nullable `review_note` for any other doubt. Categorical and approximate labels remain authoritative; neighbouring divisions never define a missing bound. No historical board reads ladder ratings or opens a queue. Live latest-night and defender reads exclude imported history, and so do `GET /me/events` and `GET /koth/events`. `GET /events` and `GET /leagues/{league_id}` keep or drop it by `archived` (see [the list reads](events-module.md#the-list-reads)).
+The historical board returns `historical`, `date_label` and event `videos`. Each bracket retains its literal name and explicit numeric bounds, `historical_king`, and ordered `history` rows with two sides, a nullable winner, a nullable `inferred_winner_side`, a `forfeit` flag for a break the organisers read as a forfeit, a nullable `review_note` for any other doubt, and `throne` (`moved`, `held` or `none`), as on a played row, for what the row's winner did to the crown. The read walks each bracket in play order from an empty throne and takes the written winner, else the inferred one: a winner who is the last holder holds the crown, any other winner takes it, even in a game between two others, and a row with no winner is `none`. The walk reads no extra statement. Categorical and approximate labels remain authoritative; neighbouring divisions never define a missing bound. No historical board reads ladder ratings or opens a queue. Live latest-night and defender reads exclude imported history, and so do `GET /me/events` and `GET /koth/events`. `GET /events` and `GET /leagues/{league_id}` keep or drop it by `archived` (see [the list reads](events-module.md#the-list-reads)).
 
 An archived night is closed, so its board carries the settled edge timer (see [Edge cache](edge-cache.md)). Imported events are limited to five hundred series, twenty divisions and one hundred videos; larger inputs require a paged reader. The board selects source labels and never returns raw source records. Event series reads retain their page limit and include standalone series through rounds.
 

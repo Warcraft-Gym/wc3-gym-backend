@@ -406,6 +406,12 @@ def test_full_offline_capture(client: Client) -> None:
             matches = [
                 row for row in section["matches"] if row["record_type"] == "match"
             ]
+            marks = [
+                (bool(row["winner_side"] or row["inferred_winner_side"]), row["throne"])
+                for row in bracket["history"]
+            ]
+            assert all(won == (throne != "none") for won, throne in marks)
+            assert [throne for won, throne in marks if won][:1] in ([], ["moved"])
             for row, source in zip(bracket["history"], matches, strict=True):
                 assert fold(row["side1"]["name"]) == fold(source["player_1"])
                 assert fold(row["side2"]["name"]) == fold(source["player_2"])
@@ -442,7 +448,7 @@ def test_full_offline_capture(client: Client) -> None:
         assert {row["id"] for row in series.json()} == series_ids
         assert int(response.headers["X-DB-Statements"]) <= 6
         assert int(response.headers["X-DB-Rows"]) <= 98
-        assert len(response.content) < 11000
+        assert len(response.content) < 11500
 
 
 def bo1(
@@ -540,6 +546,8 @@ def test_an_inferred_winner_shows_on_the_board_and_stays_out_of_records(
     assert [r["forfeit"] for r in history] == [False, True, False]
     assert [r["review_note"] for r in history] == [None, None, None]
     assert [r["winner_side"] for r in history] == [None, None, None]
+    # the order restarts after the forfeit, so the next winner takes the crown
+    assert [r["throne"] for r in history] == ["moved", "none", "moved"]
 
 
 def test_admin_delete_removes_an_archived_night(
@@ -890,3 +898,48 @@ def test_a_corrections_file_that_is_not_an_object_fails_before_any_write(
     with pytest.raises(ValueError, match="not a JSON object"):
         import_capture(capture(), apply=True, corrections=json.loads('[{"names": {}}]'))
     assert counts() == (0, 0, 0, 0)
+
+
+def thrones(client: Client, *rows: dict[str, Any], king: str) -> list[str]:
+    """What each row of a one-bracket archived night did to the crown."""
+    record = archived("marks", 1, "2024-11-30", "November 30, 2024")
+    record["sections"] = bracket(*rows, king=king)
+    event_id = import_capture([record], apply=True)["event_ids"]["marks"]
+    response = client.get(f"/koth/nights/{event_id}/board")
+    assert response.status_code == 200, response.text
+    assert int(response.headers["X-DB-Statements"]) == 6
+    return [row["throne"] for row in response.json()["brackets"][0]["history"]]
+
+
+@pytest.mark.parametrize("written", [False, True])
+def test_an_archived_chain_marks_the_crown_as_a_played_row_does(
+    client: Client, written: bool
+) -> None:
+    """A written winner and an inferred one mark the crown alike."""
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Ann", "Di"), bo1("Di", "Ed")]
+    if written:
+        rows[1]["winner"], rows[2]["winner"] = "Ann", "Di"
+    assert thrones(client, *rows, king="Di") == ["moved", "held", "moved", "held"]
+
+
+def test_after_an_unknown_result_only_the_last_holder_holds_the_crown(
+    client: Client,
+) -> None:
+    rows = [
+        bo1("Ann", "Bo", winner="Ann"),
+        bo1("Ann", "Cy", "(Cy had to leave)"),
+        bo1("Ann", "Di", winner="Ann"),
+        bo1("Ann", "Ed"),
+        bo1("Ann", "Ed", winner="Ed"),
+        bo1("Fay", "Gus"),
+        bo1("Fay", "Gus", winner="Gus"),
+    ]
+    assert thrones(client, *rows, king="Gus") == [
+        "moved",
+        "none",
+        "held",  # the last holder wins
+        "none",
+        "moved",  # the last holder plays and loses
+        "none",
+        "moved",  # the last holder does not play
+    ]
