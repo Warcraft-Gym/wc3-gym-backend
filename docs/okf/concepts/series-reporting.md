@@ -63,7 +63,7 @@ Replays live in a Cloudflare R2 bucket, one file per game. The browser uploads s
 
 # Casts
 
-Any member claims a series once (`POST /series/{id}/casts`); the owner or an admin changes the channel or removes it, and sets the VOD. A series with a result is over: it takes a claim only with a VOD link, and that claim posts no card. The claim posts a card in Discord, and a reminder card goes out shortly before the start through `GET /jobs/cast-reminders`. See [Discord integration](discord-integration.md).
+Any member claims a series once (`POST /series/{id}/casts`); the owner or an admin changes the channel or removes it, and sets the VOD. A series with a result is over: it takes a claim only with a VOD link, and that claim posts no card. A claim on a series still to be played posts a card in Discord, and a reminder card goes out shortly before the start through `GET /jobs/cast-reminders`. See [Discord integration](discord-integration.md).
 
 # Examples
 

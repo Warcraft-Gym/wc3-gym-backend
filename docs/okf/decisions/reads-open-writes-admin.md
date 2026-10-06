@@ -22,4 +22,4 @@ The admin gates on reads were leftovers from before Clerk. Hiding the button mat
 
 - A new GET needs no guard unless it answers something personal.
 - A sync or import stays admin-only in the route and in the button.
-- Ownership is a row check, never a role: in the service for a player's own rows, and in the route (`own_match` in `app/api/deps.py`) for a captain's writes on a fixture. See [roles](../concepts/roles-and-permissions.md).
+- Ownership is a row check, never a role. Most checks run in the service; a captain's add, edit and delete of a fixture's series check the seat in the route (`own_match` in `app/api/deps.py`). See [roles](../concepts/roles-and-permissions.md).
