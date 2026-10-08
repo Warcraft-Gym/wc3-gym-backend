@@ -142,6 +142,8 @@ def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> N
         "actual_role": "member",
         "user": None,
         "superadmin": False,
+        "organizer": False,
+        "organizer_request": None,
         "signed_up": False,
         "season_id": None,
         "team": None,

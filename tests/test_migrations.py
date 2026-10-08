@@ -80,6 +80,10 @@ BEFORE_TAG_TABLE = "1e8e59906cec"
 BEFORE_TAG_DROP = "e07324d2b4f9"
 # The revision before every row under an event goes with it
 BEFORE_EVENT_CASCADE = "55ae9f9d1db6"
+# The revision before the event organizers
+BEFORE_ORGANIZERS = "d2a8f5c1e736"
+# The revision before the best-of per bracket part and the veto by best-of
+BEFORE_CUP_BEST_OF = "a8d3e1f6c924"
 
 
 def comparable(
@@ -1563,3 +1567,40 @@ def test_deleting_an_event_deletes_every_row_under_it(tmp_path: Path) -> None:
         for key in inspect(engine).get_foreign_keys("team_season_captain")
         if key["constrained_columns"] == ["season_id"]
     ] == [None]
+
+
+def test_the_organizer_tables_and_event_columns_are_added_and_dropped(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "organizers")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def event_columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("event")}
+
+    tables = {"organizer_grant", "organizer_request", "event_organizer"}
+    assert tables <= set(inspect(engine).get_table_names())
+    assert {"entrant_min", "cancelled_at"} <= event_columns()
+
+    downgrade_to(url, BEFORE_ORGANIZERS)
+    assert not tables & set(inspect(engine).get_table_names())
+    assert not {"entrant_min", "cancelled_at"} & event_columns()
+
+
+def test_the_best_of_plan_and_the_veto_switch_are_added_and_dropped(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "cup_best_of")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns(table: str) -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns(table)}
+
+    assert "best_of_by_round" in columns("event_stage")
+    assert "veto_by_best_of" in columns("event")
+
+    downgrade_to(url, BEFORE_CUP_BEST_OF)
+    assert "best_of_by_round" not in columns("event_stage")
+    assert "veto_by_best_of" not in columns("event")

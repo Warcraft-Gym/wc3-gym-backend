@@ -11,15 +11,17 @@ of that pair hang under, so a team league is read exactly as GNL is read.
 
 from collections.abc import Mapping, Sequence
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core import brackets
+from app.core.best_of import parse_plan
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.scoring import wins_of
 from app.models.base import ident
+from app.models.discord_post import DiscordPost
 from app.models.enums import StageFormat
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
@@ -54,7 +56,12 @@ from app.models.team_summary import TeamSummaryPublic
 from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived, draft_series
-from app.services.series_rules import acts_for_side, series_rules, stands_on_side
+from app.services.series_rules import (
+    acts_for_side,
+    hold_pool,
+    series_rules,
+    stands_on_side,
+)
 
 # The formats whose last round is the final, so every division ends together
 BRACKETS = (StageFormat.single_elimination, StageFormat.double_elimination)
@@ -118,6 +125,10 @@ def generate(
         if division_id is not None and stage.format in BRACKETS:
             raise BadRequestError("A bracket stage draws every division together")
         fields = _fields(_entrants(session, event_id))
+        _hold_minimum(session, stage, fields)
+        event = session.get(Season, event_id)
+        if event is not None:
+            hold_pool(session, event)
         if division_id is not None:
             fields = {division_id: fields.get(division_id, [])}
         for field in fields.values():
@@ -133,6 +144,8 @@ def generate(
             raise BadRequestError("A group needs two entrants; the group size is small")
         plans = [_plan(stage, len(field)) for _, field in draws]
         depth = max(len(plan.rounds) for plan in plans)
+        # A bracket part the stage names plays its own best-of; null follows the stage
+        best_of_by_part = parse_plan(stage.best_of_by_round)
         held = {row.number: row for row in _rounds_of(session, stage_id)}
         first = min(held) if held else _next_number(session, event_id)
         rounds: dict[int, DBEventRound] = {
@@ -153,11 +166,13 @@ def generate(
                 place = planned.round + shift
                 round_row = rounds.get(place)
                 if round_row is None:
+                    role = plan.role(planned.round)
                     round_row = DBEventRound(
                         stage_id=stage_id,
                         season_id=event_id,
                         number=first + place,
                         name=plan.rounds[planned.round],
+                        best_of=best_of_by_part.get(role) if role else None,
                     )
                     session.add(round_row)
                     session.flush()
@@ -205,6 +220,50 @@ def generate(
         return {"series": len(made), "rounds": len(rounds) - len(held)}
 
 
+def undraw(event_id: int, stage_id: int) -> dict[str, int]:
+    """Take a stage's draw back: its rounds go, and every series with them.
+
+    The rounds' keys take the series, and the series' keys take their games,
+    vetoes, sides, replays and casts, so the stage stands as it did before the
+    draw, with its entrants, and its seeds open again. A finished event keeps
+    its draw, and a later stage that is drawn already is taken back first.
+    """
+    with Session.begin() as session:
+        stage = _stage(session, event_id, stage_id)
+        if stage.format in (StageFormat.gnl, StageFormat.koth):
+            raise BadRequestError(
+                "A GNL or KOTH stage is not drawn, so it has no draw to undo"
+            )
+        event = session.get(Season, event_id)
+        if event is not None and event.closed_at is not None:
+            raise BadRequestError(
+                "The event is finished; reopen it before the draw is undone"
+            )
+        rows = list(_series_of(session, stage_id))
+        if not rows:
+            raise BadRequestError("This stage holds no draw to undo")
+        following = _next_stage(session, event_id, stage)
+        if following is not None and _series_of(session, ident(following)):
+            raise BadRequestError("A later stage is drawn; undo its draw first")
+        results = sum(
+            1 for row in rows if scored(row) and row.entrant1_id and row.entrant2_id
+        )
+        # A card about a series that is gone would never find its subject again
+        from app.services.discord_posts import SERIES_KINDS
+
+        session.execute(
+            delete(DiscordPost).where(
+                col(DiscordPost.kind).in_(SERIES_KINDS),
+                col(DiscordPost.subject_id).in_([ident(row) for row in rows]),
+            )
+        )
+        for round_row in _rounds_of(session, stage_id):
+            session.delete(round_row)
+        stage.seeds_locked_at = None
+        session.flush()
+        return {"series": len(rows), "results": results}
+
+
 def generate_next_round(
     event_id: int, stage_id: int, division_id: int | None = None
 ) -> StageSeriesPublic:
@@ -226,6 +285,8 @@ def generate_next_round(
         drawn = _series_of(session, stage_id)
         held = list(_rounds_of(session, stage_id))
         fields = _fields(_entrants(session, event_id))
+        if not drawn:
+            _hold_minimum(session, stage, fields)
         if division_id is not None:
             fields = {division_id: fields.get(division_id, [])}
         sizes = _side_sizes(
@@ -1392,6 +1453,25 @@ def _next_number(session: OrmSession, event_id: int) -> int:
         )
     )
     return (highest or 0) + 1
+
+
+def _hold_minimum(
+    session: OrmSession, stage: EventStage, fields: dict[int | None, list[EventEntrant]]
+) -> None:
+    """Refuse to draw the event's first stage with fewer entrants than its minimum.
+
+    The count is every entrant the draw would seat, across the divisions; a
+    later stage is seeded from the one before and is never held to it.
+    """
+    if stage.position != 1:
+        return
+    event = session.get(Season, stage.event_id)
+    least = event.entrant_min if event is not None else None
+    seated = sum(len(field) for field in fields.values())
+    if least is not None and seated < least:
+        raise BadRequestError(
+            f"This event is played with at least {least} entrants; {seated} would play"
+        )
 
 
 def _entrants(

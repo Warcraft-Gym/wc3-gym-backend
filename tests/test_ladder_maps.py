@@ -331,6 +331,9 @@ def test_the_global_preview_says_which_maps_the_app_knows(
     assert listed["Autumn Leaves v2"]["status"] == "known"
     assert listed["Echo Isles v2"]["status"] == "known"
     assert listed["Turtle Rock v2"]["status"] == "new"
+    # a known map names the map of the app it is, so a cup pool can take it
+    assert listed["Autumn Leaves v2"]["map_id"] == seeded["map_id"]
+    assert listed["Turtle Rock v2"]["map_id"] is None
     assert listed["Nonesuch"]["status"] == "no_match"
     # The season preview still tells its pool apart from the rest the app knows
     season = rows(client, seeded["season_id"], auth_headers)

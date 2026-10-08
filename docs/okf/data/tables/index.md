@@ -1,6 +1,6 @@
 # Tables
 
-The 48 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
+The 56 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
 
 # People and access
 
@@ -9,6 +9,8 @@ The 48 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [link_prompt](link_prompt.md) - A suggestion that an earlier player is a login, answered once by that login, or the notice that another login verified a tag and took it.
 * [clerk_account](clerk_account.md) - The Discord account behind one Clerk user, written on the first guarded request of a login so no later request asks Clerk.
 * [admin_grant](admin_grant.md) - One Discord account that administers the site, granted on the Config page; the bootstrap ids in ADMIN_DISCORD_IDS need no row.
+* [organizer_grant](organizer_grant.md) - One Discord account that may create small events, granted by an admin directly or by approving the account's request.
+* [organizer_request](organizer_request.md) - One member's open request to become an organizer; an admin's approval or decline deletes it.
 * [settings](settings.md) - One key-value row per runtime setting an admin edits, including the two season pointers and the Discord channel ids.
 * [user_block](user_block.md) - One standing weekly block of a player, as local wall-clock times on a set of weekdays; a soft hint that informs scheduling and never constrains it.
 * [user_busy](user_busy.md) - One one-off busy range of a player, as whole local days with both ends included; a soft hint like a weekly block.
@@ -21,6 +23,7 @@ The 48 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [event_round](event_round.md) - One round of a stage: its number, its date window and the fixed map of game 1; a GNL playday is a round.
 * [event_division](event_division.md) - One MMR band of an event that runs the whole stage list on its own and never merges; a KOTH bracket is a division.
 * [event_entrant](event_entrant.md) - One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
+* [event_organizer](event_organizer.md) - One Discord account that runs one event beside the admins, the organizer that created it or a co-organizer it added.
 * [event_award](event_award.md) - One place of a finished event, frozen from the table of its last stage when an admin closes it; a trophy read lists these rows.
 * [koth_crown_event](koth_crown_event.md) - One crown change of a KOTH bracket that no result shows, a hand pass, a step down or a throne a rule emptied, placed after the series it followed in the order of play.
 * [matches](matches.md) - One fixture: two teams meeting in one round of an event, which the series between their players hang under.

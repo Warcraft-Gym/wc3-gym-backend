@@ -18,6 +18,7 @@ from app.api.routes import (
     login,
     maps,
     matches,
+    organizers,
     public,
     seasons,
     series,
@@ -35,6 +36,8 @@ api_router.include_router(teams.router)
 api_router.include_router(matches.router)
 api_router.include_router(seasons.router)
 api_router.include_router(events.router)
+api_router.include_router(organizers.router)
+api_router.include_router(organizers.router)
 api_router.include_router(leagues.router)
 api_router.include_router(import_export.router)
 api_router.include_router(public.router)

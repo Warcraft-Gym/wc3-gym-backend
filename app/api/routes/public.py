@@ -74,6 +74,7 @@ from app.services import (
     discord,
     discord_posts,
     discord_roles,
+    organizers,
     player_history,
     player_series,
     replays,
@@ -548,9 +549,11 @@ async def update_player_series(
     user_service: UserServiceDep,
     series_service: SeriesServiceDep,
     caller: PlayerOrAdmin,
+    claims: RequireMember,
 ) -> dict[str, Any]:
     """Update a series the caller acts for: a player of a side, a captain of
-    the team that fields it, or an admin, who acts for either side."""
+    the team that fields it, or an admin or an organizer of its event, who act
+    for either side."""
     # The dependency names the caller before the body is read, so a torn body
     # is answered as the bad request it is and never as an anonymous traceback
     entry, admin = caller
@@ -584,6 +587,7 @@ async def update_player_series(
         user_service=user_service,
         series_service=series_service,
         admin=admin,
+        runner=lambda: organizers.runs_series(claims, series_id),
     )
 
 

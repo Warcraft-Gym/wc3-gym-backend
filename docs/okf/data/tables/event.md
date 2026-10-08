@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-07T20:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -50,16 +50,22 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `early_checkin` | BOOLEAN | no | Whether a player may answer a round's check-in before its window opens. Not the same switch as `checkin_enabled`, which turns check-in off as a whole. On, the player may answer every round of the event that has not ended. |
 | `round_end_zone` | VARCHAR | yes | An IANA time zone name, the zone a round of this event ends at midnight in. Null names no zone: the check-in refusal and the free-time reads then stand at UTC midnights, and the check-in hint and the out-on-blocked-times flag read the round in the player's own zone. |
 | `multi_entry` | BOOLEAN | no | On, a player may enter once per race and each row seeds on its own race; every KOTH night opens it. |
-| `closed_at` | TIMESTAMP | yes | When an admin closed the event, stamped by `POST /events/{id}/finish` and the KOTH close, cleared by `POST /events/{id}/reopen`. A closed event reads finished, a closed GNL season reads `complete`, and a chain grows no further. Nothing else ends an event whose teams are drafted. |
+| `closed_at` | TIMESTAMP | yes | When a runner closed the event, stamped by `POST /events/{id}/finish`, `POST /events/{id}/cancel` and the KOTH close, cleared by `POST /events/{id}/reopen`. A closed event reads finished, a closed GNL season reads `complete`, and a chain grows no further. Nothing else ends an event whose teams are drafted. |
+| `cancelled_at` | TIMESTAMP | yes | When a runner called the event off with `POST /events/{id}/cancel`, which also stamps `closed_at` and deletes the award rows. A cancelled event reads finished, takes no signup and refuses a finish; `POST /events/{id}/reopen` clears both stamps. |
 | `page_url` | VARCHAR | yes | The event's landing or rules page, shown as one "Page" link. |
 | `stream_url` | VARCHAR | yes | Where the event is streamed. Set by the admin form; answered on the event payload; no service reads it. |
 | `discord_event_id` | VARCHAR | yes | The Discord message id of the event card last posted. A repost edits that message. Written by the card post. |
 | `description` | VARCHAR | yes | Free text shown on the event page. |
 | `starts_at` | TIMESTAMP | yes | When a cup or a KOTH night starts. A GNL season leaves it null and keeps its dates. |
-| `min_games` | INTEGER | yes | The ladder games an entrant should have on its signup race. Warns on the entrant row; never refuses. |
+| `min_games` | INTEGER | yes | The ladder games an entrant should have on its signup race. Warns on the entrant row; refuses only where `eligibility_required` is on. |
 | `min_games_seasons` | INTEGER | yes | Narrows the live W3C window `min_games` counts over (the current season and the one before it), 1 or more: 1 counts the current season alone; null, 2 and more count the window. |
-| `mmr_max` | INTEGER | yes | The MMR an entrant should be under. Warns on the entrant row; never refuses. |
+| `mmr_min` | INTEGER | yes | The MMR an entrant should be at or above on its signup race, no higher than `mmr_max`. Warns on the entrant row (`under_mmr_min`); refuses only where `eligibility_required` is on. |
+| `mmr_max` | INTEGER | yes | The MMR an entrant should be under. Warns on the entrant row; refuses only where `eligibility_required` is on. |
+| `eligibility_required` | BOOLEAN | no | On: a signup, self or by hand, is refused unless W3Champions rates the player's active battle tag on the signup race, the rating sits inside `mmr_min` and `mmr_max` and the games reach `min_games`. The rating is read again from W3Champions first, at most once an hour per player. Off by default. |
+| `veto_by_best_of` | BOOLEAN | no | On: each series derives its veto from its own best-of and the pool, and game 1 plays the map the veto leaves, see [the decision](../../decisions/cup-veto-by-best-of.md). A cup turns it on; off plays `pick_ban` and the round map. Off by default. |
+| `bnet_required` | BOOLEAN | no | On, beside `eligibility_required`, which it needs: the battle tag must also be verified through Battle.net. An event with it on takes members only, because a battle tag alone proves no link. Off by default. |
 | `entrant_cap` | INTEGER | yes | The most live entrants the event takes. A signup past it is refused; no waiting list is kept. Null means no cap. |
+| `entrant_min` | INTEGER | yes | The fewest entrants the event is played with, at least 2. The draw of the first stage refuses while fewer would play: every entrant that has not withdrawn, across the divisions. A later stage is never held to it. Null means no minimum. |
 | `region` | VARCHAR | yes | Where the event is played, as free text. Set by the admin form; answered on the event payload; no service reads it. |
 | `fantasy_tier_cuts` | JSON | yes | The ascending MMRs each fantasy tier opens at, 1 to 5 of them. The tier count is one more. Null until a tier allocation is applied. |
 | `fantasy_tiers_applied_at` | TIMESTAMP | yes | When the tiers were applied. An unpinned tier derives from the MMR on this date. |
@@ -68,7 +74,7 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 
 Primary key `id`. Unique expression index on `lower(trim(name))`. Foreign keys: `league_id` to [league](league.md); `parent_id` to [event](event.md), set null on delete.
 
-Pointed at by [event_stage](event_stage.md), [event_round](event_round.md), [event_division](event_division.md), [event_entrant](event_entrant.md) (`event_id` and `qualified_from_event_id`), [event_award](event_award.md), [matches](matches.md), [team_season](team_season.md), [team_season_captain](team_season_captain.md), [user_team_season](user_team_season.md), [user_season_signup](user_season_signup.md), [map_season](map_season.md), [round_availability](round_availability.md), [fantasy_teams](fantasy_teams.md), [fantasy_bets](fantasy_bets.md), [ladder_achievements](ladder_achievements.md), [discord_role_binding](discord_role_binding.md).
+Pointed at by [event_stage](event_stage.md), [event_round](event_round.md), [event_division](event_division.md), [event_entrant](event_entrant.md) (`event_id` and `qualified_from_event_id`), [event_award](event_award.md), [matches](matches.md), [team_season](team_season.md), [team_season_captain](team_season_captain.md), [user_team_season](user_team_season.md), [user_season_signup](user_season_signup.md), [map_season](map_season.md), [round_availability](round_availability.md), [fantasy_teams](fantasy_teams.md), [fantasy_bets](fantasy_bets.md), [ladder_achievements](ladder_achievements.md), [event_organizer](event_organizer.md), [discord_role_binding](discord_role_binding.md).
 
 Every key that points at an event cascades, except `parent_id` and `event_entrant.qualified_from_event_id`, which set null. The keys that tie a [draft_series](draft_series.md) row to its fixture and a [fantasy_team_player](fantasy_team_player.md) row to its fantasy team cascade too. `DELETE /events/{id}` therefore deletes the event with every row under it: its stages, rounds, fixtures, series, drafts, entrants, signups, captains, availability answers, fantasy teams and their players, bets and achievement prices. The users, teams and maps it named stay.
 

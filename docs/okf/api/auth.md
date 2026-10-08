@@ -4,7 +4,7 @@ title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T18:00:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -64,7 +64,7 @@ A token of type `bnet_state` or `bnet_link` is no bearer: `require_login` admits
 
 # /me
 
-`GET /me` answers the account: `discord_id`, `name`, `avatar`, `role`, `actual_role`, `user` (the linked players row or null), `superadmin`, `signed_up`, `season_id`, `team`, `seats`, and `seasons` (every season that is not complete, newest first, each with its phase, switches, dates, and this account's roster and captain facts). The frontend keeps this answer for the session and reads its role from it. It also refreshes the profile avatar from Discord. A local dev login has no Clerk account, so its `name` is the player's and `superadmin` is false.
+`GET /me` answers the account: `discord_id`, `name`, `avatar`, `role`, `actual_role`, `user` (the linked players row or null), `superadmin`, `organizer` (whether the account may create events, see [organizers](../concepts/roles-and-permissions.md#organizers)), `organizer_request` (`pending` while its request waits, else null), `signed_up`, `season_id`, `team`, `seats`, and `seasons` (every season that is not complete, newest first, each with its phase, switches, dates, and this account's roster and captain facts). The frontend keeps this answer for the session and reads its role from it. It also refreshes the profile avatar from Discord. A local dev login has no Clerk account, so its `name` is the player's and `superadmin` is false.
 
 # View as
 
@@ -87,6 +87,8 @@ Production runs the Clerk production instance in proxy mode: the frontend serves
   "actual_role": "captain",
   "user": { "id": 7, "name": "Player", "race": "HU" },
   "superadmin": false,
+  "organizer": false,
+  "organizer_request": null,
   "signed_up": true,
   "season_id": 18,
   "team": { "id": 3, "name": "Team A" },

@@ -1,4 +1,6 @@
-"""The event routes. Reads are open; every write asks for an admin."""
+"""The event routes. Reads are open; a write asks for a runner of the event:
+an admin, or an organizer the event names. A GNL season and a KOTH night name
+no organizer, so their writes stay the admins'."""
 
 from typing import Annotated
 
@@ -8,12 +10,15 @@ from app.api.deps import (
     EventServiceDep,
     GnlEventServiceDep,
     OptionalLogin,
+    RequireEventRunner,
     RequireLogin,
+    RequireOrganizer,
     UserServiceDep,
     edge_cache,
     event_edge_cache,
     phase_edge_cache,
     require_admin,
+    require_event_runner,
 )
 from app.api.search import SearchQuery
 from app.models.enums import EventKind, Race
@@ -37,6 +42,7 @@ from app.models.season import (
     EventPublic,
     EventUpdate,
     MemberEventRow,
+    SeasonMapIds,
 )
 from app.models.series import (
     ChallengerAdd,
@@ -44,7 +50,7 @@ from app.models.series import (
     StageSeriesRow,
     TemplateSeries,
 )
-from app.services import awards, discord_posts, stage_engine
+from app.services import awards, discord_posts, organizers, stage_engine
 from app.services.koth import night
 
 router = APIRouter(tags=["events"])
@@ -122,44 +128,70 @@ def get_event(
     return answer
 
 
-@router.post("/events", status_code=201, dependencies=[Depends(require_admin)])
+@router.post("/events", status_code=201)
 def add_event(
     data: EventCreate,
     service: EventServiceDep,
     gnl: GnlEventServiceDep,
-    claims: RequireLogin,
+    claims: RequireOrganizer,
 ) -> EventPublic:
-    """Create an event, applying the creation rules of the league it runs in."""
+    """Create an event, applying the creation rules of the league it runs in.
+
+    An organizer creates a small event and runs it from then on; an admin
+    creates any event.
+    """
+    organizers.hold_to_small_events(
+        claims, data.model_dump(), [stage.format for stage in data.stages]
+    )
     if gnl.owns(data.league_id):
         return service.get(gnl.add(data), claims=claims)
-    return service.add(data)
+    event = service.add(data)
+    if claims["sub"] != "admin":
+        organizers.add_to_event(event.id, claims["sub"], claims["sub"])
+    return event
 
 
-@router.put("/events/{event_id}", dependencies=[Depends(require_admin)])
+@router.put("/events/{event_id}")
 def update_event(
-    event_id: int, data: EventUpdate, service: EventServiceDep
+    event_id: int,
+    data: EventUpdate,
+    service: EventServiceDep,
+    claims: RequireEventRunner,
 ) -> EventPublic:
     """Change the event fields the body names."""
+    organizers.hold_to_small_events(claims, data.model_dump(exclude_unset=True))
     return service.update(event_id, data)
 
 
 @router.delete(
-    "/events/{event_id}", status_code=204, dependencies=[Depends(require_admin)]
+    "/events/{event_id}", status_code=204, dependencies=[Depends(require_event_runner)]
 )
 def delete_event(event_id: int, service: EventServiceDep) -> None:
     """Delete an event and the rows owned by it."""
     service.delete(event_id)
 
 
-@router.put("/events/{event_id}/stages", dependencies=[Depends(require_admin)])
+@router.put("/events/{event_id}/stages")
 def set_stages(
-    event_id: int, stages: list[EventStageWrite], service: EventServiceDep
+    event_id: int,
+    stages: list[EventStageWrite],
+    service: EventServiceDep,
+    claims: RequireEventRunner,
 ) -> EventPublic:
     """Replace the stage list; the order of the body is the order they play in."""
+    organizers.hold_to_small_events(claims, {}, [stage.format for stage in stages])
     return service.set_stages(event_id, stages)
 
 
-@router.post("/events/{event_id}/finish", dependencies=[Depends(require_admin)])
+@router.put("/events/{event_id}/maps", dependencies=[Depends(require_event_runner)])
+def set_pool(
+    event_id: int, data: SeasonMapIds, service: EventServiceDep
+) -> EventPublic:
+    """Replace the map pool, in the order given, before any series vetoes from it."""
+    return service.set_pool(event_id, data.map_ids)
+
+
+@router.post("/events/{event_id}/finish", dependencies=[Depends(require_event_runner)])
 def finish_event(event_id: int) -> list[EventAwardPublic]:
     """Close the event: write the places its last stage's table pays.
 
@@ -169,12 +201,24 @@ def finish_event(event_id: int) -> list[EventAwardPublic]:
     return awards.finish(event_id)
 
 
-@router.post("/events/{event_id}/reopen", dependencies=[Depends(require_admin)])
+@router.post("/events/{event_id}/reopen", dependencies=[Depends(require_event_runner)])
 def reopen_event(
     event_id: int, service: EventServiceDep, claims: RequireLogin
 ) -> EventPublic:
     """Take the close back: the event reads by its series again and its places go."""
     awards.reopen(event_id)
+    return service.get(event_id, claims=claims)
+
+
+@router.post("/events/{event_id}/cancel")
+def cancel_event(
+    event_id: int, service: EventServiceDep, claims: RequireEventRunner
+) -> EventPublic:
+    """Call the event off: it reads finished, pays no place and takes no signup.
+
+    A reopen takes the cancel back.
+    """
+    awards.cancel(event_id)
     return service.get(event_id, claims=claims)
 
 
@@ -210,13 +254,25 @@ def add_entrant(
 @router.post(
     "/events/{event_id}/entrants/admin",
     status_code=201,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_event_runner)],
 )
 def add_entrant_as_admin(
     event_id: int, data: EntrantAdd, service: EventServiceDep
 ) -> EventEntrantPublic:
     """Enter any player or team, whether signups stand open or not."""
     return service.add_entrant_as_admin(event_id, data)
+
+
+@router.post(
+    "/events/{event_id}/entrants/{entrant_id}/replace",
+    dependencies=[Depends(require_event_runner)],
+)
+def replace_entrant(
+    event_id: int, entrant_id: int, data: EntrantAdd, service: EventServiceDep
+) -> EventEntrantPublic:
+    """Put another player in the place, the seed and the series of one who has
+    not played yet, so a drawn bracket takes a late change without a redraw."""
+    return service.replace_entrant(event_id, entrant_id, data)
 
 
 @router.delete("/events/{event_id}/entrants/me", status_code=204)
@@ -244,7 +300,10 @@ def check_in(
 @router.delete(
     "/events/{event_id}/entrants/{entrant_id}",
     status_code=204,
-    dependencies=[Depends(require_admin), Depends(night.removes_on_its_run_page)],
+    dependencies=[
+        Depends(require_event_runner),
+        Depends(night.removes_on_its_run_page),
+    ],
 )
 def remove_entrant(event_id: int, entrant_id: int, service: EventServiceDep) -> None:
     """Remove one entrant row; a KOTH night removes its rows on its run page."""
@@ -253,7 +312,7 @@ def remove_entrant(event_id: int, entrant_id: int, service: EventServiceDep) -> 
 
 @router.put(
     "/events/{event_id}/entrants/{entrant_id}",
-    dependencies=[Depends(require_admin), Depends(night.still_open)],
+    dependencies=[Depends(require_event_runner), Depends(night.still_open)],
 )
 def place_entrant(
     event_id: int,
@@ -267,7 +326,7 @@ def place_entrant(
 
 @router.put(
     "/events/{event_id}/divisions",
-    dependencies=[Depends(require_admin), Depends(night.keeps_its_brackets)],
+    dependencies=[Depends(require_event_runner), Depends(night.keeps_its_brackets)],
 )
 def set_divisions(
     event_id: int, divisions: list[EventDivisionWrite], service: EventServiceDep
@@ -278,7 +337,7 @@ def set_divisions(
 
 @router.post(
     "/events/{event_id}/divisions/assign",
-    dependencies=[Depends(require_admin), Depends(night.cuts_itself)],
+    dependencies=[Depends(require_event_runner), Depends(night.cuts_itself)],
 )
 def assign_divisions(event_id: int, service: EventServiceDep) -> EventPublic:
     """Cut the entrants into divisions and answer the count each one holds."""
@@ -287,7 +346,7 @@ def assign_divisions(event_id: int, service: EventServiceDep) -> EventPublic:
 
 @router.put(
     "/events/{event_id}/stages/{stage_id}/seeds",
-    dependencies=[Depends(require_admin), Depends(night.keeps_its_line)],
+    dependencies=[Depends(require_event_runner), Depends(night.keeps_its_line)],
 )
 def set_seeds(
     event_id: int, stage_id: int, data: SeedWrite, service: EventServiceDep
@@ -303,7 +362,7 @@ def set_seeds(
 
 @router.post(
     "/events/{event_id}/stages/{stage_id}/seeds/lock",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_event_runner)],
 )
 def lock_seeds(
     event_id: int, stage_id: int, service: EventServiceDep
@@ -314,7 +373,7 @@ def lock_seeds(
 
 @router.post(
     "/events/{event_id}/stages/{stage_id}/generate",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_event_runner)],
 )
 def generate_stage(event_id: int, stage_id: int) -> dict[str, int]:
     """Create every series of the stage from the seeds, one bracket per division."""
@@ -323,7 +382,7 @@ def generate_stage(event_id: int, stage_id: int) -> dict[str, int]:
 
 @router.post(
     "/events/{event_id}/stages/{stage_id}/rounds",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_event_runner)],
 )
 def draw_next_round(event_id: int, stage_id: int) -> StageSeriesPublic:
     """Draw one more round of a stage that pairs a round at a time.
@@ -333,6 +392,16 @@ def draw_next_round(event_id: int, stage_id: int) -> StageSeriesPublic:
     round it plays.
     """
     return stage_engine.generate_next_round(event_id, stage_id)
+
+
+@router.delete(
+    "/events/{event_id}/stages/{stage_id}/series",
+    dependencies=[Depends(require_event_runner)],
+)
+def undraw_stage(event_id: int, stage_id: int) -> dict[str, int]:
+    """Take the stage's draw back: every round and series of it goes, results
+    included, and the seeds open again, so the field may change and be drawn anew."""
+    return stage_engine.undraw(event_id, stage_id)
 
 
 @router.get("/events/{event_id}/stages/{stage_id}/series")
@@ -346,7 +415,7 @@ def get_stage_series(
 
 @router.post(
     "/events/{event_id}/stages/{stage_id}/series",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_event_runner)],
 )
 def add_stage_series(
     event_id: int, stage_id: int, data: ChallengerAdd
@@ -357,7 +426,7 @@ def add_stage_series(
 
 @router.post(
     "/events/{event_id}/stages/{stage_id}/fixtures/{fixture_id}/template",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_event_runner)],
 )
 def set_fixture_template(
     event_id: int, stage_id: int, fixture_id: int, template: list[TemplateSeries]
@@ -383,7 +452,7 @@ def get_standings(
 
 @router.post(
     "/events/{event_id}/stages/{stage_id}/advance",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_event_runner)],
 )
 def advance_stage(event_id: int, stage_id: int) -> dict[str, int]:
     """Seed the next stage from the top places of every division's table."""

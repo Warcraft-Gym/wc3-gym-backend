@@ -72,6 +72,8 @@ def finish(event_id: int) -> list[EventAwardPublic]:
         event = session.get(Season, event_id)
         if event is None:
             raise NotFoundError(f"Event not found by id: {event_id}")
+        if event.cancelled_at is not None:
+            raise BadRequestError("A cancelled event pays no place; reopen it first")
         if event.closed_at is None:
             event.closed_at = utcnow()
         rows = close_event(session, ident(event))
@@ -93,6 +95,23 @@ def reopen(event_id: int) -> None:
                 "An archived event stays closed; its source results are preserved"
             )
         event.closed_at = None
+        event.cancelled_at = None
+        session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
+
+
+def cancel(event_id: int) -> None:
+    """Call the event off: close it, stamp the cancel and pay no place.
+
+    A cancelled event reads finished, its signups close with it, and a reopen
+    takes the cancel back with the close.
+    """
+    with Session.begin() as session:
+        event = session.get(Season, event_id)
+        if event is None:
+            raise NotFoundError(f"Event not found by id: {event_id}")
+        now = utcnow()
+        event.closed_at = event.closed_at or now
+        event.cancelled_at = event.cancelled_at or now
         session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
 
 

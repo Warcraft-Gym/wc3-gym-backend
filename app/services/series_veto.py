@@ -12,7 +12,7 @@ from sqlmodel import col, select
 
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.core.map_order import DEFAULT_RULES, rules_of
+from app.core.map_order import DEFAULT_RULES, cup_order, rules_of
 from app.models.base import ident
 from app.models.event_entrant import EventEntrant
 from app.models.map import Map
@@ -45,7 +45,7 @@ class SeriesVetoService:
             if not series:
                 raise NotFoundError(f"Series not found by id: {series_id}")
             return len(_steps(session, series_id)) >= len(
-                _order(series_event(session, series))
+                _series_order(session, series)
             )
 
     def board(
@@ -127,6 +127,16 @@ def _order(event: Season | None) -> list[str]:
     ]
 
 
+def _series_order(session: OrmSession, series: Series) -> list[str]:
+    """The steps one series plays: its own by its best-of when the event vetoes
+    that way, else the event's order."""
+    event = series_event(session, series)
+    if event is not None and event.veto_by_best_of:
+        rules = series_rules(session, series)
+        return cup_order(rules.best_of, len(rules.map_pool))
+    return _order(event)
+
+
 def _side(entry: str) -> str:
     return entry.rsplit("_", 1)[-1].upper()
 
@@ -185,7 +195,7 @@ def _take_step(
 ) -> None:
     """A null side records the step for whichever side the order names next."""
     rules = series_rules(session, series)
-    order = _order(series_event(session, series))
+    order = _series_order(session, series)
     if len(steps) >= len(order):
         raise BadRequestError("The veto is complete")
     if side is not None and _side(order[len(steps)]) != side:
@@ -231,7 +241,7 @@ def _forced_last(
     """Whether the last step took itself: the order is complete and it used up
     the whole board, so one map was left for it."""
     rules = series_rules(session, series)
-    order = _order(series_event(session, series))
+    order = _series_order(session, series)
     fixed = _fixed_map_id(session, series, rules)
     return len(order) >= 2 and len(steps) == len(order) == len(rules.map_pool) - (
         fixed is not None
@@ -273,7 +283,7 @@ def _board(
     if stands_on_side(series, 1) is None or stands_on_side(series, 2) is None:
         raise BadRequestError("The series has no sides to veto with yet")
     rules = series_rules(session, series)
-    order = _order(series_event(session, series))
+    order = _series_order(session, series)
     steps = _steps(session, ident(series))
     side = _letter(acts_for_side(session, series, player_id))
     complete = len(steps) >= len(order)

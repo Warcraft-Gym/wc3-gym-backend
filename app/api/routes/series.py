@@ -11,7 +11,7 @@ from app.api.deps import (
     UserServiceDep,
     event_edge_cache,
     own_match,
-    require_admin,
+    require_series_runner,
 )
 from app.core.exceptions import ApiError, NotFoundError
 from app.core.security import is_admin
@@ -80,7 +80,9 @@ def clear_series_result(
     return series_edit.clear_result(series_id, admin=admin, user_id=caller, force=force)
 
 
-@router.put("/series/{series_id}/result-kind", dependencies=[Depends(require_admin)])
+@router.put(
+    "/series/{series_id}/result-kind", dependencies=[Depends(require_series_runner)]
+)
 def set_result_kind(
     series_id: int, data: ResultKindWrite, service: SeriesServiceDep
 ) -> SeriesPublic:
@@ -89,7 +91,7 @@ def set_result_kind(
     return service.get(series_id)
 
 
-@router.put("/series/{series_id}/places", dependencies=[Depends(require_admin)])
+@router.put("/series/{series_id}/places", dependencies=[Depends(require_series_runner)])
 def set_places(series_id: int, data: PlacesWrite) -> StageSeriesRow:
     """Enter where every side of a free for all lobby finished.
 

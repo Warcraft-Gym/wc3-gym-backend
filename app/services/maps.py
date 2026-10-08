@@ -115,6 +115,7 @@ class MapService:
             if map_id is not None:
                 # the short name shown is the one the map will have: a known map keeps its own
                 row.status = "known"
+                row.map_id = map_id
                 row.shortname = shortnames[map_id]
                 on_ladder.add(map_id)
             elif map_id is None:

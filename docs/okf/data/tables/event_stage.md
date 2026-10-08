@@ -4,7 +4,7 @@ title: event_stage
 description: One format played over the entrants of an event, with the points, the tie breaks and the advance rule; standings are computed from it, never stored.
 resource: ../../../../app/models/event_stage.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T22:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-07T20:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -28,6 +28,7 @@ sources:
 | `name` | VARCHAR | yes | A display name. |
 | `format` | VARCHAR | no | `round_robin`, `gnl`, `single_elimination`, `double_elimination`, `swiss`, `koth` or `ffa`. A `gnl` stage refuses generate. |
 | `best_of` | INTEGER | no | Games a series holds. A round may override it. |
+| `best_of_by_round` | VARCHAR | yes | The best-of of a bracket part, counted back from the end, as `semifinal:3,final:5`. The parts are `quarterfinal`, `semifinal`, `final`, `upper_semifinal`, `upper_final`, `lower_semifinal`, `lower_final` and `grand_final`, whose reset plays like it. The draw writes it onto `event_round.best_of`; a part it leaves out plays `best_of`. |
 | `series_per_entrant_per_round` | INTEGER | no | How many series each entrant plays per round of a round robin. At least 1. |
 | `swiss_rounds` | INTEGER | yes | How many rounds a Swiss stage draws. Null means it draws on without end. |
 | `points_by_place` | VARCHAR | yes | What each place of an FFA lobby pays, best first, as `4,3,2,1`. |

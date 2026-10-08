@@ -63,6 +63,8 @@ class LadderMapRow(SQLModel):
     shortname: str | None = None
     image_url: str | None = None
     status: str = "new"
+    # The map of the app a known ladder map is, so a cup's pool can take it as it stands
+    map_id: int | None = None
 
 
 class LadderMapNames(SQLModel):

@@ -14,7 +14,14 @@ from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import SchedulingMode, StageFormat
-from app.models.types import AwareUTC, MapRules, NumToStr, PlacePoints, UTCDateTime
+from app.models.types import (
+    AwareUTC,
+    BestOfPlan,
+    MapRules,
+    NumToStr,
+    PlacePoints,
+    UTCDateTime,
+)
 
 # The tie breaks a table reads by default, in order. The words a rule takes are
 # points, buchholz (the sum of the opponents' points), game_diff and
@@ -40,6 +47,10 @@ class EventStage(DBModel, table=True):
         sa_column_kwargs={"server_default": "round_robin"},
     )
     best_of: int = Field(default=3, sa_column_kwargs={"server_default": "3"})
+    # The best-of of a bracket part, counted back from the end, as
+    # "semifinal:3,final:5"; a part it leaves out plays best_of. The draw
+    # writes it onto each round, since the field size is unknown before
+    best_of_by_round: str | None = Field(default=None, max_length=200)
     # How many series each entrant plays per round of a round robin stage
     series_per_entrant_per_round: int = Field(
         default=1, ge=1, sa_column_kwargs={"server_default": "1"}
@@ -100,6 +111,7 @@ class EventStagePublic(SQLModel):
     name: str | None = None
     format: StageFormat
     best_of: int
+    best_of_by_round: str | None = None
     series_per_entrant_per_round: int = 1
     swiss_rounds: int | None = None
     points_by_place: str | None = None
@@ -133,6 +145,9 @@ class EventStageWrite(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     format: StageFormat = StageFormat.round_robin
     best_of: int = 3
+    best_of_by_round: Annotated[str | None, BestOfPlan] = Field(
+        default=None, max_length=200
+    )
     series_per_entrant_per_round: int = Field(default=1, ge=1)
     swiss_rounds: int | None = Field(default=None, ge=1)
     points_by_place: Annotated[str | None, PlacePoints] = Field(

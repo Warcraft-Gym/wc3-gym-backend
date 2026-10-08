@@ -1224,9 +1224,10 @@ MEMBER_READS = {
     ("/me/events", False): (11, 5),
     # The seat's event costs its rounds, its fixtures, their teams, two counts
     ("/me/events", True): (18, 17),
-    ("/me", False): (14, 10),
+    # The organizer grant and request answer in one statement of one row
+    ("/me", False): (15, 11),
     # The seat's season, and the team's name
-    ("/me", True): (17, 13),
+    ("/me", True): (18, 14),
 }
 
 

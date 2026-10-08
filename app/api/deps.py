@@ -22,7 +22,7 @@ from app.core.exceptions import ApiError
 from app.core.security import decode_token, dev_login_enabled, is_admin
 from app.models.clerk_account import ClerkAccount
 from app.models.season import EventPhase, Season
-from app.services import admins, discord, discord_roles
+from app.services import admins, discord, discord_roles, organizers
 from app.services.availability import AvailabilityService
 from app.services.draft_series import DraftSeriesService
 from app.services.events import EventService, phase_of
@@ -362,7 +362,37 @@ def require_captain(request: Request, credentials: Credentials) -> dict[str, Any
     return claims
 
 
+def require_organizer(request: Request, credentials: Credentials) -> dict[str, Any]:
+    """Admit an account that may create events: an admin, or a member with a grant."""
+    claims = require_login(request, credentials)
+    if not organizers.is_organizer(claims):
+        raise ApiError(403, {"error": "Organizers only"})
+    return claims
+
+
+def require_event_runner(
+    event_id: int, request: Request, credentials: Credentials
+) -> dict[str, Any]:
+    """Admit an admin, or a member who organizes the event the path names."""
+    claims = require_login(request, credentials)
+    if not organizers.runs(claims, event_id):
+        raise ApiError(403, {"error": "Only the event's organizers"})
+    return claims
+
+
+def require_series_runner(
+    series_id: int, request: Request, credentials: Credentials
+) -> dict[str, Any]:
+    """Admit an admin, or a member who organizes the event the series plays in."""
+    claims = require_login(request, credentials)
+    if not organizers.runs_series(claims, series_id):
+        raise ApiError(403, {"error": "Only the event's organizers"})
+    return claims
+
+
 RequireAdmin = Annotated[str, Depends(require_admin)]
+RequireOrganizer = Annotated[dict[str, Any], Depends(require_organizer)]
+RequireEventRunner = Annotated[dict[str, Any], Depends(require_event_runner)]
 OptionalLogin = Annotated[dict[str, Any] | None, Depends(optional_login)]
 RequireLogin = Annotated[dict[str, Any], Depends(require_login)]
 RequireMember = Annotated[dict[str, Any], Depends(require_member)]

@@ -60,7 +60,7 @@ from app.models.event_entrant import (
 from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
-from app.models.map import MapPublic
+from app.models.map import Map, MapPublic
 from app.models.match import Match
 from app.models.relationships import (
     DBEventRound,
@@ -89,6 +89,7 @@ from app.models.season import (
     tier_count,
 )
 from app.models.series import Series
+from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.team_summary import TeamSummaryPublic
@@ -96,9 +97,11 @@ from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
-from app.services import stage_engine
-from app.services.battle_tags import attach_tag, person_by_tag
+from app.services import organizers, stage_engine
+from app.services.battle_tags import active_row, attach_tag, person_by_tag
+from app.services.series_rules import hold_pool
 from app.services.users import summary_loads
+from app.services.w3c_refresh import refresh_rating
 from app.services.w3c_stats import (
     in_window,
     summarize,
@@ -369,6 +372,19 @@ class EventService:
             events = session.scalars(statement.offset(offset).limit(limit)).all()
             return _publics(session, events), total
 
+    def by_ids(self, event_ids: Sequence[int]) -> list[EventPublic]:
+        """Those events, newest first, drafts included: the caller runs them."""
+        if not event_ids:
+            return []
+        with Session.begin() as session:
+            events = session.scalars(
+                select(Season)
+                .options(*_EVENT_OPTIONS)
+                .where(col(Season.id).in_(event_ids))
+                .order_by(col(Season.id).desc())
+            ).all()
+            return _publics(session, events)
+
     def search(
         self,
         query: QueryElement | None,
@@ -395,13 +411,18 @@ class EventService:
     def get(self, event_id: int, claims: dict[str, Any] | None = None) -> EventPublic:
         """One event with its stages, its divisions and how many entrants it holds.
 
-        A draft is an admin's own, so every other caller is answered not found,
-        and the qualifiers under a published event follow the same rule.
+        A draft is its runners' own, an admin's or an organizer's of the event,
+        so every other caller is answered not found, and the qualifiers under a
+        published event follow the same rule.
         """
         with Session.begin() as session:
             event = _event(session, event_id, full=True)
             admin = is_admin(claims)
-            if not event.published and not admin:
+            if (
+                not event.published
+                and not admin
+                and not organizers.runs(claims, event_id)
+            ):
                 raise NotFoundError(f"Event not found by id: {event_id}")
             public = _public(session, event, full=True, drafts=admin)
             public.archived = (
@@ -419,6 +440,7 @@ class EventService:
         """
         with Session.begin() as session:
             fields = data.model_dump(exclude={"stages", "round_count", "map_ids"})
+            _hold_bounds(fields)
             if fields.get("entrant_kind") is None:
                 fields["entrant_kind"] = _league_entrant_kind(
                     session, fields.get("league_id")
@@ -432,6 +454,8 @@ class EventService:
                 else [_default_stage(event)]
             )
             _write_stages(session, event, stages)
+            _write_pool(session, ident(event), data.map_ids)
+            hold_pool(session, event)
             return _answer(session, ident(event))
 
     def update(self, event_id: int, data: EventUpdate) -> EventPublic:
@@ -458,6 +482,7 @@ class EventService:
                         "Remove the event's teams before changing its league"
                     )
             event.sqlmodel_update(fields)
+            _hold_bounds(event.model_dump())
             if data.model_fields_set & {"pick_ban", "map_rules"}:
                 from app.services.series_veto import check_order
 
@@ -467,6 +492,7 @@ class EventService:
 
                 fill_rounds(session, event, data.round_count or 0)
             session.flush()
+            hold_pool(session, event)
             return _answer(session, ident(event))
 
     def delete(self, event_id: int) -> None:
@@ -508,7 +534,35 @@ class EventService:
                     session, event, rows[len(current) :], start=len(current) + 1
                 )
             session.flush()
+            hold_pool(session, event)
             return _answer(session, ident(event))
+
+    def set_pool(self, event_id: int, map_ids: list[int]) -> EventPublic:
+        """Replace the map pool with these maps, in this order.
+
+        A pool that a veto already reads would change under it, so the pool is
+        set before any series of the event holds a veto step.
+        """
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            vetoed = session.scalar(
+                select(col(DBSeriesVetoStep.series_id))
+                .join(Series, col(Series.id) == col(DBSeriesVetoStep.series_id))
+                .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+                .where(col(DBEventRound.season_id) == event_id)
+                .limit(1)
+            )
+            if vetoed is not None:
+                raise BadRequestError(
+                    "A series of this event has started its veto; the pool stays"
+                )
+            session.execute(
+                delete(DBMapSeason).where(col(DBMapSeason.season_id) == event_id)
+            )
+            _write_pool(session, event_id, map_ids)
+            session.flush()
+            hold_pool(session, event)
+            return _answer(session, event_id)
 
     def get_leagues(self) -> list[LeaguePublic]:
         """Every league, without its events."""
@@ -640,6 +694,7 @@ class EventService:
         self, event_id: int, data: EntrantSignup, claims: dict[str, Any] | None
     ) -> EventEntrantPublic:
         """Sign the caller up, or the team the caller captains."""
+        _refresh_for(event_id, data, claims)
         with Session.begin() as session:
             event = _event(session, event_id)
             if not _signups_open(event, phase_of(session, event)):
@@ -668,7 +723,9 @@ class EventService:
 
         A caller that has just read this player from w3champions says so, and
         the follow-up the event's kind runs asks w3champions no second time.
+        An event that checks eligibility holds a hand-added player to it too.
         """
+        _refresh_for(event_id, data, None)
         with Session.begin() as session:
             event = _event(session, event_id)
             if data.team_id is not None:
@@ -729,13 +786,73 @@ class EventService:
                     "This event checks in per round. Answer the round instead."
                 )
             row = _entrant(session, event_id, entrant_id)
-            if not is_admin(claims):
+            if not organizers.runs(claims, event_id):
                 user = _caller(session, claims)
                 if user is None or row.user_id != user.id:
                     raise ApiError(403, {"error": "Check in your own signup"})
             row.checked_in_at = utcnow()
             session.flush()
             return _entrant_publics(session, event, [row])[0]
+
+    def replace_entrant(
+        self, event_id: int, entrant_id: int, data: EntrantAdd
+    ) -> EventEntrantPublic:
+        """Put another player in the place of one who has not played yet.
+
+        The new player takes the seed, the division and every series of the old
+        one, so a drawn bracket keeps its shape; a veto the old player began in
+        a series still open starts over. The new player is held to the event's
+        rules as a hand-added player is, and the old row leaves.
+        """
+        _refresh_for(event_id, data, None)
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            old = _entrant(session, event_id, entrant_id)
+            series = list(
+                session.scalars(
+                    select(Series).where(
+                        or_(
+                            col(Series.entrant1_id) == entrant_id,
+                            col(Series.entrant2_id) == entrant_id,
+                        )
+                    )
+                )
+            )
+            played = [
+                row
+                for row in series
+                if stage_engine.scored(row) and row.entrant1_id and row.entrant2_id
+            ]
+            if played:
+                raise BadRequestError(
+                    "This player has played a match already, so the place stays theirs"
+                )
+            sides = {
+                ident(row): 1 if row.entrant1_id == entrant_id else 2 for row in series
+            }
+            seed, division_id = old.seed, old.division_id
+            checked_in = old.checked_in_at
+            session.delete(old)
+            session.flush()
+            new = _enter(
+                session, event, data, user_id=ident(_named_user(session, data))
+            )
+            new.seed = seed
+            new.division_id = division_id
+            new.checked_in_at = utcnow() if event.checkin_enabled else checked_in
+            session.flush()
+            for row in series:
+                side = sides[ident(row)]
+                setattr(row, f"entrant{side}_id", ident(new))
+                setattr(row, f"player{side}_id", new.user_id)
+                if not stage_engine.scored(row):
+                    session.execute(
+                        delete(DBSeriesVetoStep).where(
+                            col(DBSeriesVetoStep.series_id) == ident(row)
+                        )
+                    )
+            session.flush()
+            return _entrant_publics(session, event, [new])[0]
 
     def remove_entrant(self, event_id: int, entrant_id: int) -> None:
         """Delete one entrant row; an admin removes what a withdrawal would keep."""
@@ -981,6 +1098,17 @@ def _write_stages(
         EventStage(event_id=ident(event), position=position, **stage.model_dump())
         for position, stage in enumerate(rows, start=start)
     )
+    session.flush()
+
+
+def _write_pool(session: OrmSession, event_id: int, map_ids: list[int]) -> None:
+    """Link the maps to the event as its pool, in the order given."""
+    if len(map_ids) != len(set(map_ids)):
+        raise BadRequestError("The map pool names each map once")
+    for position, map_id in enumerate(map_ids):
+        if session.get(Map, map_id) is None:
+            raise NotFoundError(f"Map not found by id: {map_id}")
+        session.add(DBMapSeason(season_id=event_id, map_id=map_id, position=position))
     session.flush()
 
 
@@ -1567,6 +1695,8 @@ def _warnings(
         warnings.append("under_min_games")
     if event.mmr_max is not None and mmr is not None and mmr > event.mmr_max:
         warnings.append("over_mmr_max")
+    if event.mmr_min is not None and mmr is not None and mmr < event.mmr_min:
+        warnings.append("under_mmr_min")
     if user is not None and user.banned_at is not None:
         warnings.append("banned")
     return warnings
@@ -1960,6 +2090,112 @@ def _named_user(session: OrmSession, data: EntrantAdd) -> User:
     raise BadRequestError("Name a user_id, a battle_tag or a team_id")
 
 
+RACE_NAMES = {
+    "HU": "Human",
+    "OC": "Orc",
+    "NE": "Night Elf",
+    "UD": "Undead",
+    "RANDOM": "Random",
+}
+
+
+def _hold_bounds(fields: dict[str, Any]) -> None:
+    """Refuse bounds that cannot hold together.
+
+    The Battle.net link is a part of the eligibility check, so it needs the
+    check on. A battle tag alone proves no Battle.net link, so an event that
+    asks for one takes members only. The lowest MMR is no higher than the
+    highest.
+    """
+    if fields.get("bnet_required") and not fields.get("eligibility_required"):
+        raise BadRequestError(
+            "The Battle.net link is part of the eligibility check; turn that on first"
+        )
+    if fields.get("bnet_required") and fields.get("signup_policy") in (
+        SignupPolicy.anyone,
+        SignupPolicy.anyone.value,
+    ):
+        raise BadRequestError(
+            "An event that asks for a Battle.net link takes members only: a battle tag alone proves none"
+        )
+    low, high = fields.get("mmr_min"), fields.get("mmr_max")
+    if low is not None and high is not None and low > high:
+        raise BadRequestError("The lowest MMR cannot be above the highest")
+
+
+def _refresh_for(
+    event_id: int, data: EntrantSignup, claims: dict[str, Any] | None
+) -> None:
+    """Ask W3Champions for the player's rating of the day before an event that
+    checks eligibility decides on it. Any other event reads nothing here."""
+    with Session.begin() as session:
+        event = _event(session, event_id)
+        if not event.eligibility_required or data.team_id is not None:
+            return
+        named = getattr(data, "user_id", None)
+        user = (
+            session.get(User, named) if named is not None else _caller(session, claims)
+        )
+        tag = active_row(session, ident(user)) if user is not None else None
+        target = (
+            (ident(user), tag.tag) if user is not None and tag is not None else None
+        )
+    if target is not None:
+        refresh_rating(*target)
+
+
+def _hold_eligible(
+    session: OrmSession, event: Season, user_id: int, race: Race
+) -> None:
+    """Refuse a player an event that checks eligibility does not take.
+
+    W3Champions rates the player's active battle tag on the race of the signup,
+    the rating sits inside the event's bounds, and the games on that race reach
+    the event's minimum; an event that asks for it also wants the tag verified
+    through Battle.net. The rule holds for a hand-added player as for a self
+    signup.
+    """
+    season = w3c_season(session)
+    user = session.scalars(
+        select(User)
+        .options(window_rows(season))
+        .where(col(User.id) == user_id)
+        .execution_options(populate_existing=True)
+    ).one()
+    tag = active_row(session, user_id)
+    if tag is None:
+        raise BadRequestError(
+            f"{user.name} has no battle tag, so this event cannot check the rating."
+        )
+    if event.bnet_required and tag.bnet_account_id is None:
+        raise BadRequestError(
+            f"{user.name} has no battle tag linked to Battle.net. Link it on the profile page first; this event takes linked players only."
+        )
+    name = RACE_NAMES.get(race.value, race.value)
+    mmr, games = _stats_for(user, race, season, event.min_games_seasons)
+    if mmr is None:
+        raise BadRequestError(
+            f"W3Champions has no rating for {tag.tag} on {name}, so this event cannot take the signup."
+        )
+    bounds = (
+        f"from {event.mmr_min} to {event.mmr_max}"
+        if event.mmr_min is not None and event.mmr_max is not None
+        else f"from {event.mmr_min}"
+        if event.mmr_min is not None
+        else f"up to {event.mmr_max}"
+    )
+    if (event.mmr_min is not None and mmr < event.mmr_min) or (
+        event.mmr_max is not None and mmr > event.mmr_max
+    ):
+        raise BadRequestError(
+            f"{user.name} is rated {mmr} on {name}; this event takes players rated {bounds}."
+        )
+    if event.min_games is not None and games < event.min_games:
+        raise BadRequestError(
+            f"{user.name} played {games} games on {name} recently; this event needs at least {event.min_games}."
+        )
+
+
 def _enter(
     session: OrmSession,
     event: Season,
@@ -1992,6 +2228,8 @@ def _enter(
         if user_id is not None
         else col(EventEntrant.team_id) == team_id
     )
+    if event.eligibility_required and user_id is not None and race is not None:
+        _hold_eligible(session, event, user_id, race)
     statement = select(EventEntrant).where(col(EventEntrant.event_id) == event.id, side)
     if event.multi_entry and user_id is not None:
         # One row per race, so the second race of a player is a row of its own

@@ -45,6 +45,7 @@ from app.models import (
     match,
     match_draft,
     monitor_state,
+    organizer,
     player_career_stats,
     relationships,
     round_availability,

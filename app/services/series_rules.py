@@ -24,7 +24,9 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm.attributes import instance_state, set_committed_value
 from sqlmodel import col
 
-from app.core.map_order import DEFAULT_RULES, default_rules, rules_of
+from app.core.best_of import largest_best_of
+from app.core.exceptions import BadRequestError
+from app.core.map_order import DEFAULT_RULES, cup_rules, default_rules, rules_of
 from app.core.scoring import DEFAULT_SYSTEM, wins_of
 from app.models.base import ident
 from app.models.event_entrant import EventEntrant
@@ -192,7 +194,33 @@ def series_rules(session: OrmSession, series: Series) -> SeriesRules:
         rules = event.map_rules if event else None
         return SeriesRules(rules or DEFAULT_RULES, len(rules_of(rules)), pool)
     best_of = (round_.best_of if round_ else None) or stage.best_of or DEFAULT_BEST_OF
+    if event is not None and event.veto_by_best_of:
+        return SeriesRules(cup_rules(best_of), best_of, pool)
     return SeriesRules(stage.map_rules or default_rules(best_of), best_of, pool)
+
+
+def hold_pool(session: OrmSession, event: Season) -> None:
+    """Refuse an event that vetoes by best-of while its pool is smaller than
+    its longest series: every game needs a map of its own."""
+    if not event.veto_by_best_of:
+        return
+    stages = session.scalars(
+        select(EventStage).where(col(EventStage.event_id) == ident(event))
+    ).all()
+    need = max(
+        (largest_best_of(stage.best_of, stage.best_of_by_round) for stage in stages),
+        default=0,
+    )
+    have = session.scalar(
+        select(func.count())
+        .select_from(DBMapSeason)
+        .where(col(DBMapSeason.season_id) == ident(event))
+    )
+    if need > (have or 0):
+        raise BadRequestError(
+            f"A Bo{need} needs {need} {'map' if need == 1 else 'maps'} in the pool; "
+            f"the pool holds {have or 0}"
+        )
 
 
 class Resolved(NamedTuple):
@@ -274,6 +302,7 @@ def _resolve(session: OrmSession, series_ids: set[int]) -> dict[int, Rules]:
             event_id,
             col(Season.map_rules),
             col(Season.score_system),
+            col(Season.veto_by_best_of),
             col(DBEventRound.best_of),
             col(EventStage.map_rules),
             col(EventStage.best_of),
@@ -295,6 +324,7 @@ def _resolve(session: OrmSession, series_ids: set[int]) -> dict[int, Rules]:
         event,
         season_rules,
         system,
+        by_best_of,
         round_best,
         stage_rules,
         stage_best,
@@ -310,7 +340,9 @@ def _resolve(session: OrmSession, series_ids: set[int]) -> dict[int, Rules]:
             best_of = round_best or stage_best or DEFAULT_BEST_OF
             found[row_id] = (
                 event,
-                stage_rules or default_rules(best_of),
+                cup_rules(best_of)
+                if by_best_of
+                else stage_rules or default_rules(best_of),
                 best_of,
                 system,
             )

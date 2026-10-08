@@ -173,6 +173,10 @@ class Season(SeasonBase, DBModel, table=True):
     closed_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
+    # When a runner called the event off; a cancelled event is closed and pays no place
+    cancelled_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
     # The rules or landing page of the event, shown as one "Page" link
     page_url: str | None = Field(default=None, max_length=500)
     stream_url: str | None = Field(default=None, max_length=500)
@@ -193,8 +197,26 @@ class Season(SeasonBase, DBModel, table=True):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = None
+    mmr_min: int | None = None
     mmr_max: int | None = None
+    # On: a signup outside the bounds is refused, not only warned, and the player
+    # needs a battle tag W3Champions rates on the race
+    eligibility_required: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # On, beside eligibility_required: that battle tag is verified through Battle.net too
+    bnet_required: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # On: each series vetoes its maps by its own best-of, and game 1 plays the
+    # map the veto leaves; off: the event's pick_ban and the round's map, as a
+    # GNL season plays them
+    veto_by_best_of: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
     entrant_cap: int | None = None
+    # The fewest entrants the event is played with; the draw refuses below it
+    entrant_min: int | None = None
     # Where the event is played, as the entrants read it
     region: str | None = Field(default=None, max_length=20)
     # The ascending MMR each fantasy tier opens at; the tier count is one more
@@ -602,6 +624,7 @@ class EventPublic(SQLModel):
     checkin_enabled: bool = True
     multi_entry: bool = False
     closed_at: Annotated[datetime | None, AwareUTC] = None
+    cancelled_at: Annotated[datetime | None, AwareUTC] = None
     region: str | None = None
     page_url: str | None = None
     stream_url: str | None = None
@@ -609,8 +632,13 @@ class EventPublic(SQLModel):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = None
+    mmr_min: int | None = None
     mmr_max: int | None = None
+    eligibility_required: bool = False
+    bnet_required: bool = False
+    veto_by_best_of: bool = False
     entrant_cap: int | None = None
+    entrant_min: int | None = None
     checkin_days: int | None = None
     # On: a player may answer a round's check-in before its window opens
     early_checkin: bool = False
@@ -684,8 +712,13 @@ class EventCreate(SQLModel):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = Field(default=None, ge=1)
+    mmr_min: int | None = None
     mmr_max: int | None = None
+    eligibility_required: bool = False
+    bnet_required: bool = False
+    veto_by_best_of: bool = False
     entrant_cap: int | None = None
+    entrant_min: int | None = Field(default=None, ge=2)
     # How many series one fixture holds, and a fixture pairs two team
     # entrants, so it reads only on a team event.
     series_per_round: int = 1
@@ -729,8 +762,13 @@ class EventUpdate(SQLModel):
     map_rules: Annotated[str | None, MapRules] = None
     min_games: int | None = None
     min_games_seasons: int | None = Field(default=None, ge=1)
+    mmr_min: int | None = None
     mmr_max: int | None = None
+    eligibility_required: bool | None = None
+    bnet_required: bool | None = None
+    veto_by_best_of: bool | None = None
     entrant_cap: int | None = None
+    entrant_min: int | None = Field(default=None, ge=2)
     series_per_round: int | None = None
     round_count: int | None = Field(default=None, ge=0)
     pick_ban: Annotated[str | None, NumToStr] = None

@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import MapServiceDep, edge_cache, require_admin
+from app.api.deps import MapServiceDep, edge_cache, require_admin, require_organizer
 from app.api.search import SearchQuery
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.map import LadderMapNames, LadderMapRow, MapCreate, MapPublic, MapUpdate
@@ -39,7 +39,7 @@ def delete_map(map_id: int, service: MapServiceDep) -> None:
     service.delete(map_id)
 
 
-@router.get("/maps/ladder-import", dependencies=[Depends(require_admin)])
+@router.get("/maps/ladder-import", dependencies=[Depends(require_organizer)])
 def preview_ladder_import(service: MapServiceDep) -> list[LadderMapRow]:
     """List every 1v1 ladder map, matched against the maps the app holds."""
     return service.ladder_import_preview()

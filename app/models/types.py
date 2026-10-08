@@ -21,6 +21,7 @@ from pydantic import BeforeValidator
 from sqlalchemy import DateTime, Dialect
 from sqlalchemy.types import TypeDecorator
 
+from app.core.best_of import ROLES as BEST_OF_ROLES
 from app.core.fantasy import race_value
 from app.core.scoring import SYSTEMS
 from app.models.enums import Race
@@ -133,6 +134,26 @@ def _map_rules[T](value: T) -> T | None:
     return value
 
 
+def _best_of_plan[T](value: T) -> T | str | None:
+    """The best-of of each bracket part, as "semifinal:3,final:5". A mapping
+    from part to best-of reads the same, so a client may send either."""
+    if value == "" or value is None:
+        return None
+    if isinstance(value, dict):
+        value = ",".join(f"{role}:{games}" for role, games in value.items())
+    if isinstance(value, str):
+        for token in value.split(","):
+            role, _, games = token.strip().partition(":")
+            if role not in BEST_OF_ROLES:
+                known = ", ".join(BEST_OF_ROLES)
+                raise ValueError(
+                    f"'{role}' is not a part of a bracket. Valid parts are {known}."
+                )
+            if not games.isdigit() or int(games) % 2 == 0 or not 1 <= int(games) <= 9:
+                raise ValueError(f"'{games}' is not a best-of: write 1, 3, 5, 7 or 9")
+    return value
+
+
 def _place_points[T](value: T) -> T | None:
     """What each place of a free for all lobby pays, best place first."""
     if value == "" or value is None:
@@ -218,6 +239,8 @@ TwitchChannel = BeforeValidator(_twitch_channel)
 YouTubeChannel = BeforeValidator(_youtube_channel)
 # Input. The map rules of a season, which take the four rule names and nothing else.
 MapRules = BeforeValidator(_map_rules)
+# Input. The best-of of each bracket part, as "semifinal:3,final:5".
+BestOfPlan = BeforeValidator(_best_of_plan)
 # Input. What each place of an FFA lobby pays, best place first, as "4,3,2,1".
 PlacePoints = BeforeValidator(_place_points)
 # Input. The score system of a season, which takes the systems the scoring rule knows.

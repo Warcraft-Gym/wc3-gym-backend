@@ -4,7 +4,7 @@ Entrants are passed in seed order, best seed first. None marks a bye.
 """
 
 from collections.abc import Hashable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import groupby
 from typing import NamedTuple
 
@@ -231,6 +231,20 @@ class Plan:
 
     rounds: list[str]
     series: list[PlannedSeries]
+    # The part of the bracket each round is, counted back from the end, which
+    # app.core.best_of names; a plan that has no parts leaves it empty
+    roles: list[str | None] = field(default_factory=list)
+
+    def role(self, index: int) -> str | None:
+        return self.roles[index] if index < len(self.roles) else None
+
+
+# The part a single elimination column plays, by the name it carries
+_SINGLE_ROLES = {
+    "Final": "final",
+    "Semifinals": "semifinal",
+    "Quarterfinals": "quarterfinal",
+}
 
 
 def _column_name(width: int) -> str:
@@ -290,7 +304,8 @@ def elimination_plan(field: int, *, third_place: bool = False) -> Plan:
                     Slot(feeder=semis[1].index, takes_loser=True),
                 )
             )
-    return Plan(rounds, series)
+    # The third-place series sits in the final's column, so it plays like the final
+    return Plan(rounds, series, [_SINGLE_ROLES.get(name) for name in rounds])
 
 
 def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
@@ -357,7 +372,24 @@ def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
                 "Grand final reset",
                 [(final[0], Slot(feeder=final[0].feeder, takes_loser=True))],
             )
-    return Plan(rounds, series)
+    return Plan(rounds, series, _double_roles(rounds))
+
+
+def _double_roles(rounds: list[str]) -> list[str | None]:
+    """The part each double elimination round plays: the final of each ladder,
+    the round before it, and the grand final, whose reset plays like it."""
+    roles: list[str | None] = [None] * len(rounds)
+    for ladder in ("upper", "lower"):
+        prefix = f"{ladder.capitalize()} bracket "
+        own = [index for index, name in enumerate(rounds) if name.startswith(prefix)]
+        if own and rounds[own[-1]] == f"{prefix}final":
+            roles[own[-1]] = f"{ladder}_final"
+            if len(own) > 1:
+                roles[own[-2]] = f"{ladder}_semifinal"
+    for index, name in enumerate(rounds):
+        if name.startswith("Grand final"):
+            roles[index] = "grand_final"
+    return roles
 
 
 def _pairs(column: list[Slot]) -> list[tuple[Slot, Slot]]:

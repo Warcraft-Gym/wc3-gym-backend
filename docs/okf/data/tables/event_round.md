@@ -4,7 +4,7 @@ title: event_round
 description: "One round of a stage: its number, its date window and the fixed map of game 1; a GNL playday is a round."
 resource: ../../../../app/models/relationships.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-07T20:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -30,7 +30,7 @@ sources:
 | `start_date` | DATE | yes | First day of the window. A round with no start date cannot be checked into. |
 | `end_date` | DATE | yes | Last day of the window. Null means a one-day round. |
 | `map_id` | INTEGER | yes | The map a `fixed` rule offers for game 1. |
-| `best_of` | INTEGER | yes | Overrides the stage's `best_of` for this round. Null follows the stage. |
+| `best_of` | INTEGER | yes | Overrides the stage's `best_of` for this round. Null follows the stage. The draw writes it from the stage's `best_of_by_round`, by the part of the bracket the round plays. |
 
 # Keys and joins
 
