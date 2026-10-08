@@ -10,6 +10,7 @@ or spelling of the same lineage is renamed in place, keeping its id and
 short name; a missing picture is filled.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -339,6 +340,42 @@ def test_the_global_preview_says_which_maps_the_app_knows(
     season = rows(client, seeded["season_id"], auth_headers)
     assert season["Autumn Leaves v2"]["status"] == "in_pool"
     assert season["Echo Isles v2"]["status"] == "known"
+
+
+def test_an_organizer_imports_the_ladder_maps_and_nothing_else(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    sources: list[str],
+) -> None:
+    """A cup's organizer brings in the ladder maps the app lacks, and a name off
+    the ladder is left alone."""
+    from tests.test_event_organizers import grant
+
+    grant(client, auth_headers, "77")
+    headers = member("77")
+
+    resp = client.post(
+        "/maps/ladder-import",
+        json={"names": ["Turtle Rock v2", "Concealed Hill"]},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [row["name"] for row in resp.json()] == ["Turtle Rock v2"]
+    listed = {
+        row["w3c_name"]: row
+        for row in client.get("/maps/ladder-import", headers=headers).json()
+    }
+    assert listed["Turtle Rock v2"]["map_id"] is not None
+    # a member who organizes nothing imports nothing
+    assert (
+        client.post(
+            "/maps/ladder-import", json={"names": []}, headers=member("78")
+        ).status_code
+        == 403
+    )
 
 
 def test_the_global_import_renames_and_pictures_without_touching_a_pool(

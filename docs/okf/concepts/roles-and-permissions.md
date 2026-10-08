@@ -4,7 +4,7 @@ title: Roles and permissions
 description: Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-07T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-08T20:00:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -42,7 +42,7 @@ An organizer is not a fifth role. It is a capability a guild member holds beside
 
 - **Who.** A Discord account with an [organizer_grant](../data/tables/organizer_grant.md). It needs no player row, only a Discord login. The grant counts while the account is a guild member acting as itself: a guest, the admin token and an admin viewing as a lower role hold none. `/me` answers `organizer` and `organizer_request`. The check runs on the routes that need it, never on every request.
 - **A drawn cup.** The event's runners take a draw back (`DELETE /events/{id}/stages/{stage_id}/series`) and swap a player who has not played (`POST /events/{id}/entrants/{entrant_id}/replace`); both are event writes `require_event_runner` guards.
-- **Maps.** An organizer reads `GET /maps/ladder-import` to fill a cup's pool from the 1v1 ladder, and writes the pool of an event it runs with `PUT /events/{id}/maps`. Creating or changing a map stays the admins'.
+- **Maps.** An organizer reads `GET /maps/ladder-import` to fill a cup's pool from the 1v1, 2v2 or 4v4 ladder, and imports the ladder maps the app lacks with `POST /maps/ladder-import`, which for an organizer creates or renames the maps of that ladder alone and leaves every other map as it is, and writes the pool of an event it runs with `PUT /events/{id}/maps`. Creating or changing any other map stays the admins'.
 - **Becoming one.** A member sends `POST /organizers/requests` with an optional note. An admin approves or declines it under Admin › Access, or grants an account directly by Discord id. See [organizer_request](../data/tables/organizer_request.md).
 - **What a grant allows.** `POST /events` for a small event: a `cup` or `signup` kind, of no league or a `custom` league, with no event Discord role, no `gnl` or `koth` stage, and a parent only among the events it runs. An admin writes any event.
 - **Running an event.** An [event_organizer](../data/tables/event_organizer.md) row lets its account run that one event: every event write `require_event_runner` guards, the event's series results (`PUT /player-series/{id}`, where it acts for either side as an admin does; `PUT /series/{id}/result-kind`; `PUT /series/{id}/places`), its co-organizers, and its draft, which it reads as an admin does. The row outlives a revoked grant. A GNL season and a KOTH night never hold a row, so their writes stay the admins'. Posting the event card in a Discord channel stays an admin's.

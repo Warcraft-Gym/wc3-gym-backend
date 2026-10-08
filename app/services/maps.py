@@ -141,7 +141,12 @@ class MapService:
                 )
         return rows
 
-    def import_ladder_maps(self, names: list[str]) -> list[int]:
+    def import_ladder_maps(
+        self,
+        names: list[str],
+        mode: int = ladder_maps.SOLO_MODE,
+        ladder_only: bool = False,
+    ) -> list[int]:
         """The ids of these ladder maps, in the order named; the w3champions name is the truth.
 
         A map the app knows under an older name or spelling of the same lineage
@@ -152,11 +157,15 @@ class MapService:
 
         The picture is kept as the url warcraft3.info publishes it at, never copied into our own
         store: those bytes are already served from a CDN and cost us nothing where they are.
+
+        `mode` names the ladder the names are read against, 1v1 unless named;
+        `ladder_only` leaves every name off that ladder alone, as an organizer's
+        import does: it brings a cup the ladder maps and touches no other map.
         """
         by_base = ladder_maps.map_index()
         wanted = {
             row.w3c_name: row
-            for row in ladder_maps.ladder_rows(by_base)
+            for row in ladder_maps.ladder_rows(by_base, mode)
             if row.w3c_name in set(names)
         }
         with Session.begin() as session:
@@ -174,7 +183,7 @@ class MapService:
                 row = wanted.get(name)
                 map_id = known(name)
                 if not row:
-                    if map_id is None or map_id in pictured:
+                    if ladder_only or map_id is None or map_id in pictured:
                         continue
                     found = ladder_maps.lookup(name, by_base)
                     if found.image_url:

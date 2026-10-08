@@ -4,9 +4,16 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import MapServiceDep, edge_cache, require_admin, require_organizer
+from app.api.deps import (
+    MapServiceDep,
+    RequireOrganizer,
+    edge_cache,
+    require_admin,
+    require_organizer,
+)
 from app.api.search import SearchQuery
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.security import is_admin
 from app.models.map import LadderMapNames, LadderMapRow, MapCreate, MapPublic, MapUpdate
 
 logger = logging.getLogger(__name__)
@@ -52,12 +59,20 @@ def preview_ladder_import(
     return service.ladder_import_preview(LADDER_MODES[mode])
 
 
-@router.post("/maps/ladder-import", dependencies=[Depends(require_admin)])
+@router.post("/maps/ladder-import")
 def apply_ladder_import(
-    data: LadderMapNames, service: MapServiceDep
+    data: LadderMapNames,
+    service: MapServiceDep,
+    claims: RequireOrganizer,
+    mode: Literal["1v1", "2v2", "4v4"] = "1v1",
 ) -> list[MapPublic]:
-    """Create, rename and picture the named ladder maps. No season pool changes."""
-    return [service.get(map_id) for map_id in service.import_ladder_maps(data.names)]
+    """Create, rename and picture the named maps of one ladder. No season pool
+    changes. An organizer brings a cup the ladder's maps and nothing else; an
+    admin also fills the picture of a map off the ladder."""
+    ids = service.import_ladder_maps(
+        data.names, LADDER_MODES[mode], ladder_only=not is_admin(claims)
+    )
+    return [service.get(map_id) for map_id in ids]
 
 
 @router.get("/maps/{map_id}", response_model=MapPublic)
