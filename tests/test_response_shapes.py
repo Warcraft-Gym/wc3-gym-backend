@@ -175,6 +175,7 @@ DETAILS = {
 # List routes that still answer a detail as their row, each with its reason
 LIST_ROWS_ALLOWED: dict[str, str] = {
     "GET /events": "the list row is SeasonPublic in the table; the route answers the detail",
+    "GET /me/organized-events": "the organizer's slice of GET /events, read by the same list read",
     "GET /events/{event_id}/fantasy/teams": "a fantasy team has one class for row and detail",
     "GET /fantasy/teams": "a fantasy team has one class for row and detail",
     "GET /fantasy/bets": "a fantasy bet has one class for row and detail",
