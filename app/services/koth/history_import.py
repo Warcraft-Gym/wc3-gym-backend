@@ -12,7 +12,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import make_url, select
+from sqlalchemy import func, make_url, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -34,6 +34,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame
 from app.models.types import utcnow
+from app.models.user_battle_tag import UserBattleTag
 from app.services.koth.night import _league
 
 # The archive board is bounded by these import limits, independent of source size.
@@ -600,6 +601,65 @@ def _insert_event(
     return event_id
 
 
+def link_players(links: object, *, apply: bool = False) -> dict[str, Any]:
+    """Point every archived name at the player its reviewed battle tag names.
+
+    links maps a kept name to a battle tag. A name the links leave out is
+    unlinked, so a rerun with the same links changes nothing; a tag no
+    player holds links nothing and is reported.
+    """
+    if not isinstance(links, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in links.items()
+    ):
+        raise ValueError("Links must map each name to a battle tag")
+    tags = {fold(name): tag.strip().lower() for name, tag in links.items()}
+    with Session.begin() as session:
+        holders = {
+            tag: user_id
+            for tag, user_id in session.execute(
+                select(
+                    func.lower(func.trim(col(UserBattleTag.tag))),
+                    col(UserBattleTag.user_id),
+                ).where(
+                    func.lower(func.trim(col(UserBattleTag.tag))).in_(
+                        set(tags.values())
+                    )
+                )
+            )
+        }
+        wanted = {name: holders.get(tag) for name, tag in tags.items()}
+        changed: dict[int | None, list[int]] = defaultdict(list)
+        linked = 0
+        for row_id, name, user_id in session.execute(
+            select(
+                col(HistoricalParticipant.id),
+                col(HistoricalParticipant.source_name),
+                col(HistoricalParticipant.user_id),
+            ).where(
+                col(HistoricalParticipant.event_id).in_(
+                    select(col(KothHistoryEvent.event_id))
+                )
+            )
+        ):
+            target = wanted.get(fold(name))
+            linked += target is not None
+            if target != user_id:
+                changed[target].append(row_id)
+        if apply:
+            for target, ids in changed.items():
+                session.execute(
+                    update(HistoricalParticipant)
+                    .where(col(HistoricalParticipant.id).in_(ids))
+                    .values(user_id=target)
+                )
+    return {
+        "mode": "apply" if apply else "dry_run",
+        "linked_rows": linked,
+        "changed_rows": sum(len(ids) for ids in changed.values()),
+        "unknown_tags": sorted({links[n] for n in links if wanted[fold(n)] is None}),
+    }
+
+
 def local_url(value: str) -> str:
     """The import command accepts only an explicit loopback Postgres URL, without overrides.
 
@@ -625,11 +685,15 @@ def main() -> None:
     parser.add_argument("--database-url", required=True, type=local_url)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--corrections", type=Path, help="reviewed dates and names")
+    parser.add_argument("--links", type=Path, help="reviewed name to battle tag links")
     args = parser.parse_args()
     records = load_capture(args.capture)
     corrections = json.loads(args.corrections.read_text()) if args.corrections else None
     init_engine(args.database_url)
     report = import_capture(records, apply=args.apply, corrections=corrections)
+    if args.links:
+        links = json.loads(args.links.read_text())
+        report["links"] = link_players(links, apply=args.apply)
     print(json.dumps(report, indent=2))
 
 

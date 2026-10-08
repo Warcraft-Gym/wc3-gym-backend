@@ -1539,7 +1539,7 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"accept": True},
             w.member(),
         ),
-        112,
+        115,
     ),
     "PUT /users/me/tags/{tag_id}/active": (
         lambda w: ("PUT", f"/users/me/tags/{w.tag()}/active", None, w.member()),
@@ -1565,7 +1565,7 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"into_user_id": w.p3},
             w.admin,
         ),
-        78,
+        80,
     ),
     "PUT /users/{user_id}": (
         lambda w: ("PUT", f"/users/{w.p1}", {"country": "NL"}, w.admin),

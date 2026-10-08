@@ -75,8 +75,10 @@ def _winners_statements() -> tuple[Select[Any], Select[Any]]:
             col(EventDivision.id),
             col(EventDivision.name),
             col(EventDivision.lower_bound),
-            func.coalesce(col(HistoricalParticipant.source_name), col(User.name)),
-            col(EventEntrant.user_id),
+            # A linked archived name shows the player's own name, else the source's
+            func.coalesce(col(User.name), col(HistoricalParticipant.source_name)),
+            col(User.id),
+            col(User.country),
             col(EventEntrant.race),
         )
         .join(page, page.c.id == Season.id)
@@ -95,7 +97,13 @@ def _winners_statements() -> tuple[Select[Any], Select[Any]]:
             HistoricalParticipant,
             col(HistoricalParticipant.id) == EventEntrant.historical_participant_id,
         )
-        .outerjoin(User, col(User.id) == EventEntrant.user_id)
+        .outerjoin(
+            User,
+            col(User.id)
+            == func.coalesce(
+                col(EventEntrant.user_id), col(HistoricalParticipant.user_id)
+            ),
+        )
         .order_by(*NEWEST_FIRST, col(EventDivision.position))
     )
     return statement, select(func.count()).select_from(Season).where(*closed)
@@ -123,6 +131,7 @@ def winners(limit: int = 500, offset: int = 0) -> tuple[list[KothNightWinners], 
             lower_bound,
             king,
             user_id,
+            country,
             race,
         ) in session.execute(statement, {"limit": limit, "offset": offset}):
             night = nights.get(event_id)
@@ -140,6 +149,7 @@ def winners(limit: int = 500, offset: int = 0) -> tuple[list[KothNightWinners], 
                     lower_bound=lower_bound,
                     name=king,
                     user_id=user_id,
+                    country=country,
                     race=race.value if race is not None else None,
                 )
             )
