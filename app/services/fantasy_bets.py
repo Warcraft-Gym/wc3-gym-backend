@@ -108,6 +108,11 @@ class FantasyBetService:
         with Session.begin() as session:
             FantasyBet.delete(session, fantasy_bet_id)
 
+    def row(self, fantasy_bet_id: int) -> FantasyBet | None:
+        """The bare row, read in a session that writes nothing, so it stays readable once closed."""
+        with Session() as session:
+            return session.get(FantasyBet, fantasy_bet_id)
+
     def get(self, fantasy_bet_id: int) -> FantasyBetPublic:
         """One bet; its four players carry their record in the bet's season.
         Every bet write answers through this read."""

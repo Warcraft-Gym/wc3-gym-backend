@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Iterable
-from datetime import timedelta
+from datetime import datetime, timedelta
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
@@ -63,6 +63,27 @@ W3C_SYNC_WORKERS = 4
 # A button absorbs a double click and a second admin, and still refreshes
 # a roster before its match.
 SYNC_MAX_AGE = timedelta(minutes=10)
+
+
+def stalest_members(started: datetime) -> list[UserReduced]:
+    """The next sync wave: the signed-up members synced longest ago, none synced since `started`."""
+    with Session() as session:
+        rows = session.execute(
+            select(
+                col(User.id),
+                col(User.name),
+                col(User.battleTag),
+                col(User.ladder_synced_at),
+            )
+            .where(col(User.id).in_(select(col(DBUserSeasonSignup.user_id)).distinct()))
+            .order_by(col(User.ladder_synced_at).asc().nulls_first(), col(User.id))
+            .limit(W3C_SYNC_WORKERS)
+        ).all()
+    return [
+        UserReduced(id=r.id, name=r.name, battleTag=r.battleTag)
+        for r in rows
+        if r.ladder_synced_at is None or r.ladder_synced_at < started
+    ]
 
 
 # The season columns SeasonSummaryPublic reads; a read of any other raises

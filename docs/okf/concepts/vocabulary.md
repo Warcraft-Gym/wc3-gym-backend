@@ -4,7 +4,7 @@ title: Vocabulary
 description: One word per thing, from league down to game, and the words this app keeps for old reasons.
 resource: ../../../app/models/enums.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:11Z }
 sources:
   - id: enums
     resource: ../../../app/models/enums.py
@@ -35,7 +35,7 @@ League > event > stage > round > fixture > series > game.
 
 # Words with history
 
-- **Season** is the GNL word for a GNL event. The payloads keep `season_id`, `seasons`, `playday` and `phase`, and the class is `Season`, because the frontend, the WordPress shortcodes and the Discord cards read those names. The table underneath is `event`.
+- **Season** is the GNL word for a GNL event. The payloads keep `season_id`, `seasons`, `playday` and `phase`, and the class is `Season`, because the frontend, the GNL website and the Discord cards read those names. The table underneath is `event`.
 - **Match** is the GNL admin word for a fixture. The table is `matches`. Never use "match" for a series in new text.
 - **Week** is deprecated in favour of round. A round has a number and a date window; "week" survives only in a few old field names.
 - **Team series** is never used. A fixture holds series.

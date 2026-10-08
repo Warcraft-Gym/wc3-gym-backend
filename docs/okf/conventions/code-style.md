@@ -4,7 +4,7 @@ title: Code style
 description: Python 3.13, uv, ruff with annotations, ty as a ratchet, one-line comments in the present tense, and no scripts folder.
 resource: ../../../pyproject.toml
 tags: [tooling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: pyproject
     resource: ../../../pyproject.toml
@@ -32,7 +32,7 @@ sources:
 - `X | None`, never `Optional`. `list[X]` and `dict[K, V]`, never `List` and `Dict`. `collections.abc` for `Sequence`, `Iterable` and `Iterator`.
 - One exception: a SQLModel `Relationship` whose target class is importable only under `TYPE_CHECKING` keeps `Optional["X"]`. Quoting the whole union (`"X | None"`) breaks every mapper. See [the pitfall](../pitfalls/sqlmodel-relationship-quoting.md).
 - A function that hands an arbitrary value through is a PEP 695 generic, `def f[T](value: T) -> str | T`, not `Any`. `Any` is fine inside a container type such as `dict[str, Any]`.
-- The only `typing` imports in the app are `Any`, `TYPE_CHECKING`, `Annotated`, `Self` and `cast`.
+- The `typing` imports in the app are `Any`, `Annotated`, `TYPE_CHECKING`, `Self`, `Literal`, `NamedTuple`, `Protocol`, `ClassVar`, `overload` and `cast`, and `Optional` on the two relationships that need it.
 
 # Comments and prose
 

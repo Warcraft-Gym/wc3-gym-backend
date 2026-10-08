@@ -185,16 +185,18 @@ def _refuse_started(series_id: int | None) -> int | None:
 
 
 def _owned_bet(
-    entry: dict[str, Any], user_service: UserServiceDep, bet_id: int, verb: str
+    entry: dict[str, Any],
+    user_service: UserServiceDep,
+    fantasy_bet_service: FantasyBetServiceDep,
+    bet_id: int,
+    verb: str,
 ) -> FantasyBet:
     """The row of the bet the identified player placed. Someone else's bet
     answers 403."""
     user_id = user_service.id_by_discord_id(str(entry.get("discord_id")))
     if user_id is None:
         raise NotFoundError("user_not_found")
-    # A read that writes nothing, so the row stays readable once it closes
-    with Session() as session:
-        bet = session.get(FantasyBet, bet_id)
+    bet = fantasy_bet_service.row(bet_id)
     if bet is None:
         raise NotFoundError("Fantasy Bet not found")
     if bet.user_id != user_id:
@@ -900,7 +902,9 @@ def update_fantasy_bet(
     """Update a fantasy bet of the identified player."""
     data = data or PublicFantasyBetWrite()
     patch = data.model_dump(exclude_unset=True)
-    existing_bet = _owned_bet(entry, user_service, bet_id, "update")
+    existing_bet = _owned_bet(
+        entry, user_service, fantasy_bet_service, bet_id, "update"
+    )
     _refuse_started(existing_bet.series_id)
 
     # Update the bet
@@ -931,6 +935,6 @@ def delete_fantasy_bet(
     entry: Identity,
 ) -> None:
     """Delete a fantasy bet of the identified player."""
-    bet = _owned_bet(entry, user_service, bet_id, "delete")
+    bet = _owned_bet(entry, user_service, fantasy_bet_service, bet_id, "delete")
     _refuse_started(bet.series_id)
     fantasy_bet_service.delete(bet_id)

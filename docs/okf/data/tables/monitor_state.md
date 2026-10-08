@@ -4,7 +4,7 @@ title: monitor_state
 description: "The last level of each monitor check, one row per check: the level, when the check reached it and when a run last wrote the row."
 resource: ../../../../app/models/monitor_state.py
 tags: [deploy, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T22:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: model
     resource: ../../../../app/models/monitor_state.py
@@ -18,8 +18,8 @@ sources:
 
 | Column | Type | Null | Meaning |
 |---|---|---|---|
-| `key` | TEXT | no | The check: `egress` for the egress snapshot, `db_size` for the database size, `vercel` for the Vercel usage. |
-| `level` | TEXT | no | `normal`, `amber`, `red` or `unavailable`; `db_size` is `normal` or `red`; `vercel` is `normal`, `red` or `unavailable`. |
+| `key` | TEXT | no | The check: `egress` for the cycle's projected database egress, measured in [egress_ledger](egress_ledger.md), `db_size` for the database size, `vercel` for the Vercel usage. |
+| `level` | TEXT | no | `normal`, `amber`, `red` or `unavailable`; `db_size` is `normal` or `red`; `vercel` is `normal`, `amber` or `unavailable`. |
 | `since` | TIMESTAMPTZ | no | When the level began, in UTC: the start of the window that set it, or the run time for `unavailable`. |
 | `updated_at` | TIMESTAMPTZ | no | When a run last wrote the row, in UTC. |
 

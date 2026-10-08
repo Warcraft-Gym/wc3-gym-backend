@@ -4,7 +4,7 @@ title: ladder_sync
 description: "The ledger of the match sync: one row per player per W3Champions season saying when it was read, from when, and whether the read reached the end."
 resource: ../../../../app/models/ladder_sync.py
 tags: [w3champions, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -23,7 +23,7 @@ sources:
 | `user_id` | INTEGER | no | The player. |
 | `wc3_season` | INTEGER | no | The W3Champions season number. |
 | `synced_at` | TIMESTAMP | no | When the pair was last read. |
-| `complete` | BOOLEAN | no | On: the season was paged to its end, or past the window it was read for. A closed season marked complete is never asked for again. |
+| `complete` | BOOLEAN | no | On: the season was paged to its end, or past the window it was read for. A closed season marked complete is not read again for a window that starts at or after its `read_from`; an earlier window, or a row with no `read_from`, reads it again. |
 | `read_from` | TIMESTAMP | yes | The earliest instant any run read the season from. Only moved earlier. Null on a row older than the column. |
 
 # Keys and joins

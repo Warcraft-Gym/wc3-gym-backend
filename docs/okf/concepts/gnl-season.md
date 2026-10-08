@@ -4,7 +4,7 @@ title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived on every read and ends on the admin's close.
 resource: ../../../app/models/season.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T07:18:37Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -68,7 +68,7 @@ Every GNL series is a Bo3. The backend supports any best-of through `map_rules` 
 
 # The current season
 
-The `settings` row `current_gnl_season` names the season the captain check, the role sync, the public signup form and the Discord bot read. When the row is missing, the newest season wins. See [settings](settings-and-current-season.md).
+The `settings` row `current_gnl_season` names the season the captain check, the role sync, the public signup form and the Discord bot read. When the row is missing, the newest GNL season wins. See [settings](settings-and-current-season.md).
 
 # Signups and the draft
 

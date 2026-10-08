@@ -8,7 +8,7 @@ This directory is an [Open Knowledge Format](https://github.com/GoogleCloudPlatf
 
 # Sections
 
-* [Overview](overview.md) - The FastAPI backend of the Warcraft Gym league app, on Vercel with a Supabase Postgres, serving the web app, the WordPress site, the Discord adapter and Nightbot.
+* [Overview](overview.md) - The FastAPI backend of the Warcraft Gym league app, on Vercel with a Supabase Postgres, serving the web app, the GNL website, the Discord adapter and Nightbot.
 * [Start here by question](questions.md) - The questions a new contributor or an agent asks first, each with the concept that answers it; the list is also the benchmark the bundle is read against.
 * [conventions](conventions/index.md) - The rules the code and the pull requests follow: style, layering, git, testing, and this bundle.
 * [concepts](concepts/index.md) - The domain and the integrations: vocabulary, the GNL season, the events module, KOTH, roles, fantasy, scores, the ladder, scheduling, reporting, Discord, W3Champions, storage, settings.
@@ -29,4 +29,4 @@ The app is three repositories. Each carries its own bundle at `docs/okf/`. This 
 
 * [README](../../README.md) - Setup, the environment variable table, running, migrations, paging.
 * [Pictures](../PICTURES.md) - Where pictures live and why.
-* [Preview databases](../PREVIEW-DATABASES.md) - How every pull request gets a database.
+* [Preview databases](../PREVIEW-DATABASES.md) - How a preview build gets its database.

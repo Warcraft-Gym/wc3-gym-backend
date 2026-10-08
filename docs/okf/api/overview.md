@@ -1,10 +1,10 @@
 ---
 type: API Area
 title: API overview
-description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
+description: Twenty-three route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -25,6 +25,8 @@ sources:
 | Module | Prefix | Area |
 |---|---|---|
 | `login.py` | `/login`, `/me` | the admin token login and the session answer |
+| `battlenet.py` | `/users/me/bnet`, `/auth/battlenet/callback` | linking a Battle.net account, which proves a battle tag |
+| `dev_login.py` | `/dev` | a login for local development; every route answers 404 unless `DEV_LOGIN=1` is set on a local machine, and the schema leaves them out |
 | `users.py` | `/users` | players, a member's own battle tags, the admin tag move and merge, bans, blocks, W3Champions sync, history, a player's seasons and series, the meetings of two players |
 | `teams.py` | `/leagues/{league_id}/teams`, `/events/{event_id}/teams`, `/teams/{team_id}/image` | league-owned teams, event rosters, captains, availability grid, logos; the unscoped logo read is deprecated |
 | `seasons.py` | `/events/{event_id}`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges |
@@ -39,7 +41,7 @@ sources:
 | `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |
 | `koth.py`, `koth_nights.py` | `/koth` | nights, the live night an admin runs, the board, and the old KOTH payloads |
 | `config.py` | `/config` | settings, admins, role bindings, role sync |
-| `stats.py` | `/stats/career` | career stats; `/stats/career/{user_id}` is the list's row for that user id |
+| `stats.py` | `/stats/career` | career stats; `/stats/career/{stat_id}` reads its value as a user id and is the list's row for that user |
 | `import_export.py` | `/import`, `/export`, `/fantasy/import` | workbooks |
 | `jobs.py` | `/jobs` | the scheduled jobs |
 | `discord.py` | `/discord/interactions` | the forwarded Discord interactions |
@@ -51,11 +53,11 @@ The OpenAPI version is `1.1.0`. GNL creation and management live on the event ro
 
 # The error envelope
 
-Every error answers `{"error": "<text>"}` with the status: 404 `NotFoundError`, 400 `BadRequestError`, 502 `ExternalServiceError`, 409 integrity conflicts ("Row already exists" or "Row is still referenced") and the one rule conflict a route states in a sentence, 422 validation with the field names in the text, 500 with the fixed text "Internal Server Error" and the detail in the log. The router's own 404 and 405 carry the envelope too. A few public routes add a second key, `message`, with human text beside an `error` code. `tests/test_error_envelope.py` locks it. FastAPI's stock `{"detail": ...}` never reaches a client.
+Every error answers `{"error": "<text>"}` with the status: 404 `NotFoundError`, 400 `BadRequestError`, 502 `ExternalServiceError`, 409 integrity conflicts ("Row already exists" or "Row is still referenced") and the one rule conflict a route states in a sentence, 422 validation with the field names in the text, 500 with a fixed text, "Database error" for a database failure and "Internal Server Error" for any other bug, and the detail in the log. The router's own 404 and 405 carry the envelope too. A few public routes add a second key, `message`, with human text beside an `error` code. `tests/test_error_envelope.py` locks it. FastAPI's stock `{"detail": ...}` never reaches a client.
 
 # Paging and sorting
 
-List routes take `limit` (1 to 500) and `offset`. The default page is 500, except on the routes whose set a season's structure bounds, which page smaller (`GET /events/{event_id}/teams`, its `basic` and `summary` twins and `GET /fantasy/bets` at 50; `GET /events/{event_id}/fantasy/teams`, `POST /users/search`, `POST /matches/search`, `GET /maps`, `GET /draft-series/match/{match_id}` and `GET /player-series` at 100). Eight routes carry the total row count in `X-Total-Count`, `GET /events` among them, which CORS exposes. Three routes take `sort` and `order`; a name outside their table answers 422. Without `sort` a route keeps its default order, pinned per route by `tests/test_paging.py`. The career list derives its rating, filters, sorts and pages in SQL, then sends only the selected page. List answers are reduced: every key stays and nested collections answer `[]`. A player inside a series, draft series, series side, entrant or bet is the player summary, whose record is the one of the read's event; so is a player of an event team's roster or captains, under that event alone; so are a fantasy team's captain and drafted players, under the team's season (see [Response shapes](response-shapes.md)). A row of a series list (the season, round, global and player series reads, and the stage series read) carries no W3Champions stats, so it names the rating of each side on the race it plays in `player1_mmr` and `player2_mmr`. On a running event that is the `w3cstats` rating: the newest row of the live window (the current W3Champions season and the one before it) that carries a rating above 0 on that race, null otherwise. On a finished event it is the MMR of the time, `mmr_at` at the series time (see [Ladder and achievements](../concepts/ladder-and-achievements.md)). On every other series payload the two keys read null. Three reads tell finished events from running ones; the running rows are rated in two statements, three while the W3Champions season setting is unset, and each finished event in the list costs one statement; none is spent per row. The reads that carry players (the user list and search, the signups, the team rosters and captains, the fantasy team reads, `GET /users/{key}` and `GET /series/{series_id}`) carry the ladder summary, `race_mmrs` and `main_race` (see [w3cstats](../data/tables/w3cstats.md)). One statement reads it for every player of the answer, one row per player and race of the live window, and never loads the raw `w3cstats` rows; `GET /users/{key}` reads its stale races in one more, and `GET /users/{user_id}/summary` reads the summary and the stale races in its one statement. A roster of an event that is over also carries `mmr_entered`. The single team read, `GET /leagues/{league_id}/teams/{team_id}`, carries the team and its `seasons_info` alone, no roster and no captains; the per-event team read carries both, for that event, with their `race_mmrs` and `main_race`.
+List routes take `limit` (1 to 500) and `offset`. The default page is 500, except on the routes whose set a season's structure bounds, which page smaller (`GET /events/{event_id}/teams`, its `basic` and `summary` twins and `GET /fantasy/bets` at 50; `GET /events/{event_id}/fantasy/teams`, `POST /users/search`, `POST /matches/search`, `GET /maps`, `GET /draft-series/match/{match_id}` and `GET /player-series` at 100). Ten routes carry the total row count in `X-Total-Count`, `GET /events` among them, which CORS exposes. Three routes take `sort` and `order`; a name outside their table answers 422. Without `sort` a route keeps its default order, pinned per route by `tests/test_paging.py`. The career list derives its rating, filters, sorts and pages in SQL, then sends only the selected page. List answers are reduced: every key stays and nested collections answer `[]`. A player inside a series, draft series, series side, entrant or bet is the player summary, whose record is the one of the read's event; so is a player of an event team's roster or captains, under that event alone; so are a fantasy team's captain and drafted players, under the team's season (see [Response shapes](response-shapes.md)). A row of a series list (the season, round, global and player series reads, and the stage series read) carries no W3Champions stats, so it names the rating of each side on the race it plays in `player1_mmr` and `player2_mmr`. On a running event that is the `w3cstats` rating: the newest row of the live window (the current W3Champions season and the one before it) that carries a rating above 0 on that race, null otherwise. On a finished event it is the MMR of the time, `mmr_at` at the series time (see [Ladder and achievements](../concepts/ladder-and-achievements.md)). On every other series payload the two keys read null. One read tells finished events from running ones; the running rows are rated in two statements, three while the W3Champions season setting is unset, and each finished event in the list costs one statement; none is spent per row. The reads that carry players (the user list and search, the signups, the team rosters and captains, the fantasy team reads, `GET /users/{key}` and `GET /series/{series_id}`) carry the ladder summary, `race_mmrs` and `main_race` (see [w3cstats](../data/tables/w3cstats.md)). One statement reads it for every player of the answer, one row per player and race of the live window, and never loads the raw `w3cstats` rows; `GET /users/{key}` reads its stale races in one more, and `GET /users/{user_id}/summary` reads the summary and the stale races in its one statement. A roster of an event that is over also carries `mmr_entered`. The single team read, `GET /leagues/{league_id}/teams/{team_id}`, carries the team and its `seasons_info` alone, no roster and no captains; the per-event team read carries both, for that event, with their `race_mmrs` and `main_race`.
 
 # The search language
 
@@ -95,12 +97,12 @@ A write does not clear the edge. A reader sees a change up to `s-maxage` plus `s
 A paged list, with the total in the header:
 
 ```http
-GET /teams?limit=2&offset=0
+GET /users?limit=2&offset=0
 
 200 OK
 X-Total-Count: 6
 
-[ { "id": 1, "name": "Team A", ... }, { "id": 2, "name": "Team B", ... } ]
+[ { "id": 1, "name": "Player A", ... }, { "id": 2, "name": "Player B", ... } ]
 ```
 
 An offset past the end answers `200 []`. Every error carries the envelope and nothing else:

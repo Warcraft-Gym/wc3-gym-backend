@@ -21,9 +21,9 @@ sources:
 
 | Role | Who | How it is decided |
 |---|---|---|
-| guest | a Discord account that is not in the WC3 Gym guild | the bot reads the guild; no `DISCORD_BOT_TOKEN` means everyone is a guest |
+| guest | a Discord account that is not in the WC3 Gym guild | the bot reads the guild; with no `DISCORD_BOT_TOKEN` the check cannot run, and a login that is not an admin is refused with 502 |
 | member | an account in the guild | the guild read |
-| captain | a member with a seat in `team_season_captain` for a running season | the database, live on every request |
+| captain | a member with a seat in `team_season_captain` for a season that is not closed | the database, live on every request |
 | admin | a row of `admin_grant`, or an id in `ADMIN_DISCORD_IDS` | the database; the environment ids are the bootstrap and cannot be revoked |
 
 An admin who also holds a captain seat keeps the role `admin` and carries the `seats` list as well, so `/me` names the teams that admin captains. Every guard already admits an admin, so the seats change one answer: the draft `seen` stamp and the seen-at of the draft state read the caller's seat, so an admin who captains writes and reads them for the team held.
@@ -49,7 +49,7 @@ An organizer is not a fifth role. It is a capability a guild member holds beside
 
 # Reads open, writes admin
 
-Every GET serves any session, including a guest, unless it answers something personal. POST, PUT and DELETE keep `require_admin`, except the writes on one event, which its organizers make as well (see [organizers](#organizers)), a player's own self-service flows (signup, their own battle tags, scheduling, reporting, veto, availability, fantasy), which are member-accessible and ownership-checked in the service, and a captain's team flows, checked against the seat: the round answers of their own roster, the draft of a fixture their team plays, which either captain of that fixture writes and publishes, and the published series of that fixture: adding one up to the round's series, editing its time, result, races played, host and fantasy mark, and deleting one. These routes check the seats the session carries, as the draft routes do (`own_match` in `app/api/deps.py`). The frontend hides the buttons of admin writes rather than letting them fail: its fetch wrapper logs the session out on a 401. See [the decision](../decisions/reads-open-writes-admin.md).
+Every GET serves any session, including a guest, unless it answers something personal. POST, PUT and DELETE keep `require_admin`, except the writes on one event, which its organizers make as well (see [organizers](#organizers)), a player's own self-service flows (signup, their own battle tags, scheduling, reporting, veto, availability, fantasy), which are member-accessible and ownership-checked in the service, and a captain's team flows, checked against the seat: the round answers of their own roster, the draft of a fixture their team plays, which either captain of that fixture writes and publishes, and the published series of that fixture: adding one up to the round's series, editing its time, result, races played, host and fantasy mark, and deleting one. These routes check the seats the session carries, as the draft routes do (`own_match` in `app/api/deps.py`). Two more writes are open: a member claims a series to cast (`POST /series/{id}/casts`), and the claim's owner or an admin changes or removes it; a captain names the roster of their own side of a fixture series (`PUT /series/{id}/sides` with `sides`), where the service checks the seat. The frontend hides the buttons of admin writes rather than letting them fail: its fetch wrapper logs the session out on a 401. See [the decision](../decisions/reads-open-writes-admin.md).
 
 # View as
 

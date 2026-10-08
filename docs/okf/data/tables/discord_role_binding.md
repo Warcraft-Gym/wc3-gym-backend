@@ -4,7 +4,7 @@ title: discord_role_binding
 description: One binding of a role kind and scope to a guild role, so the sync can grant and take back that role from what the database says.
 resource: ../../../../app/models/discord_role_binding.py
 tags: [discord, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -23,7 +23,7 @@ sources:
 | Column | Type | Null | Meaning |
 |---|---|---|---|
 | `id` | INTEGER | no | Primary key. |
-| `kind` | VARCHAR | no | What earns the role: `admin`, `captain`, `team`, `fantasy`, `gnl_participant` or `champion`. An `admin` binding is never synced. |
+| `kind` | VARCHAR | no | What earns the role: `admin`, `captain`, `team`, `fantasy`, `gnl_participant` or `champion`. A binding of kind `admin` is refused on create and update, and the sync skips any such row. |
 | `scope` | VARCHAR | no | Which seasons the binding reads: `current`, `season` or `all`. |
 | `season_id` | INTEGER | yes | The season a `season`-scoped binding reads. A `champion` binding always names one. |
 | `team_id` | INTEGER | yes | The team a `team` binding is for. Null on the other kinds. |
