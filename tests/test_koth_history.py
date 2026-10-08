@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlmodel import col
 
 from app.core.db import Session
+from app.models.enums import Race
 from app.models.event_award import EventAward
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
@@ -33,9 +34,11 @@ from app.services.koth.history_import import (
     fold,
     import_capture,
     infer_winners,
+    link_players,
     local_url,
     record_days,
 )
+from tests.seed import active
 from tests.test_koth_live import bracket_ids, place, play
 from tests.test_koth_night import NIGHT, open_night
 
@@ -634,6 +637,7 @@ def test_winners_list_the_king_of_every_bracket_of_a_closed_night(
             "lower_bound": bracket["lower_bound"],
             "name": "One" if index == 0 else None,
             "user_id": user_id if index == 0 else None,
+            "country": None,
             "race": "HU" if index == 0 else None,
         }
         for index, bracket in enumerate(brackets)
@@ -648,6 +652,7 @@ def test_winners_list_the_king_of_every_bracket_of_a_closed_night(
                 "lower_bound": 1500,
                 "name": "OTHER",
                 "user_id": None,
+                "country": None,
                 "race": None,
             },
             {
@@ -655,10 +660,114 @@ def test_winners_list_the_king_of_every_bracket_of_a_closed_night(
                 "lower_bound": None,
                 "name": None,
                 "user_id": None,
+                "country": None,
                 "race": None,
             },
         ],
     }
+
+
+def test_a_linked_archived_name_shows_the_player(client: Client) -> None:
+    """A reviewed link names the player; a rerun changes nothing, an unknown
+    tag links nothing, and a name the links leave out is unlinked."""
+    import_capture(
+        [archived("dated", 1, "2024-11-30", "November 30, 2024")], apply=True
+    )
+    with Session.begin() as session:
+        player = User(
+            name="Other",
+            discordTag=None,
+            discordId=None,
+            country="DE",
+            race=Race.HU,
+            battle_tags=active("Other#1234"),
+        )
+        session.add(player)
+        session.flush()
+        player_id = player.id
+
+    def king() -> dict[str, Any]:
+        return winners(client)[0][0]["winners"][0]
+
+    dry = link_players({"links": {"other": "other#1234 "}})
+    assert dry["changed_rows"] > 0 and king()["user_id"] is None
+    report = link_players(
+        {"links": {"other": "other#1234 ", "Nobody": "Nobody#1"}}, apply=True
+    )
+    assert report["linked_rows"] == dry["linked_rows"]
+    assert report["unknown_tags"] == ["Nobody#1"]
+    assert (king()["name"], king()["user_id"], king()["country"]) == (
+        "Other",
+        player_id,
+        "DE",
+    )
+    assert (
+        link_players({"links": {"OTHER": "Other#1234"}}, apply=True)["changed_rows"]
+        == 0
+    )
+    link_players({"links": {}}, apply=True)
+    assert king()["user_id"] is None and king()["name"] == "OTHER"
+    with pytest.raises(ValueError, match="battle tag"):
+        link_players({"links": {"OTHER": 1234}})
+    with pytest.raises(ValueError, match="race"):
+        link_players({"links": {}, "players": {"A#1": {"race": "ELF"}}})
+
+
+def test_a_reviewed_tag_with_no_player_creates_one_and_fills_a_blank_country(
+    client: Client,
+) -> None:
+    """A tag no player holds becomes a player as a signup makes one; a player
+    with no country takes the given one, one with a country keeps it; dry-run
+    writes nothing."""
+    import_capture(
+        [archived("dated", 1, "2024-11-30", "November 30, 2024")], apply=True
+    )
+    with Session.begin() as session:
+        session.add(
+            User(
+                name="Kept",
+                discordTag=None,
+                discordId=None,
+                country="FR",
+                race=Race.HU,
+                battle_tags=active("Kept#1"),
+            )
+        )
+        session.add(
+            User(
+                name="Blank",
+                discordTag=None,
+                discordId=None,
+                race=Race.HU,
+                battle_tags=active("Blank#2"),
+            )
+        )
+    data = {
+        "links": {"OTHER": "Newcomer#77"},
+        "players": {
+            "Newcomer#77": {"country": "US", "race": "OC"},
+            "Kept#1": {"country": "GB"},
+            "Blank#2": {"country": "CA"},
+        },
+    }
+    dry = link_players(data)
+    assert dry["created_players"] == ["Newcomer#77"] and dry["countries_filled"] == 0
+    assert winners(client)[0][0]["winners"][0]["user_id"] is None
+    data["links"] |= {"x": "Kept#1", "y": "Blank#2"}
+    report = link_players(data, apply=True)
+    assert report["created_players"] == ["Newcomer#77"] and report["unknown_tags"] == []
+    assert report["countries_filled"] == 1
+    king = winners(client)[0][0]["winners"][0]
+    assert (king["name"], king["country"]) == ("Newcomer", "US")
+    with Session() as session:
+        countries = {
+            n: c for n, c in session.execute(select(col(User.name), col(User.country)))
+        }
+        race = session.scalar(
+            select(col(User.race)).where(col(User.name) == "Newcomer")
+        )
+    assert (countries["Kept"], countries["Blank"], race) == ("FR", "CA", Race.OC)
+    assert link_players(data, apply=True)["created_players"] == []
 
 
 @pytest.mark.usefixtures("quiet_w3c")

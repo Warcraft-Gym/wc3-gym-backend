@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-08
+
+* **Update**: an archived KOTH participant links to a player through a reviewed name to battle tag list, applied by the importer's `--links`, which also creates a reviewed player no account holds and fills a blank country from the file; `GET /koth/winners` reads a linked archived crown with the player's name, `user_id` and `country`, and every crown carries `country`. [KOTH night](concepts/koth.md#historical-imports) and [historical_participant](data/tables/historical_participant.md) state it.
+
 ## 2026-10-06
 
 * **Update**: the KOTH history import reads each archived series on its own: a doubt leaves only that series without an inferred winner, a break has no winner and reads as `winner_left`, as does a written winner who does not play the next series, and a source note is shown in the page's words; a corrections key may keep its own spelling. [KOTH night](concepts/koth.md#historical-imports) and [koth_history_series](data/tables/koth_history_series.md) state it.

@@ -204,10 +204,12 @@ class KothBracketWinner(SQLModel):
 
     bracket: str | None = None
     lower_bound: int | None = None
-    # The source spelling on an archived night, else the account's name
+    # The player's name, else the source spelling of an archived name no link names
     name: str | None = None
-    # Null on an archived night, whose rows name no account and no race
+    # The player, also on an archived night once a reviewed link names one
     user_id: int | None = None
+    country: str | None = None
+    # Null on an archived night, whose rows name no race
     race: str | None = None
 
 
