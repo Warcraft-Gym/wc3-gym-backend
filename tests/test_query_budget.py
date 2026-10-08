@@ -136,6 +136,7 @@ from app.services import derived, player_reads
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
+from app.services.koth import carry
 from app.services.link_prompts import suggest
 from app.services.maps import MapService
 from app.services.matches import MatchService
@@ -848,6 +849,17 @@ def test_a_players_series_cost_two_statements(league: dict[str, Any]) -> None:
     assert tally[0] <= 2
 
 
+def test_the_koth_winners_cost_one_statement(league: dict[str, Any]) -> None:
+    """The page of nights with its total, its brackets and their crowns; a page
+    past the end adds the count."""
+    with count_statements() as tally:
+        assert carry.winners() == ([], 0)
+    assert tally[0] <= 1
+    with count_statements() as tally:
+        assert carry.winners(offset=10) == ([], 0)
+    assert tally[0] <= 2
+
+
 def test_the_series_summary_costs_six_statements(
     client: Client, league: dict[str, Any]
 ) -> None:
@@ -1215,6 +1227,8 @@ ROWS_PER_CALL = {
     # One summary row per race, and one row naming the current W3C season
     "/users/{player_id}": 10,
     "/events": 8,
+    # The league holds no KOTH night
+    "/koth/winners": 0,
 }
 # Room for a row or two of drift before the ceiling fails
 ROWS_MARGIN = 2
@@ -1525,7 +1539,7 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"accept": True},
             w.member(),
         ),
-        112,
+        115,
     ),
     "PUT /users/me/tags/{tag_id}/active": (
         lambda w: ("PUT", f"/users/me/tags/{w.tag()}/active", None, w.member()),
@@ -1551,7 +1565,7 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"into_user_id": w.p3},
             w.admin,
         ),
-        78,
+        80,
     ),
     "PUT /users/{user_id}": (
         lambda w: ("PUT", f"/users/{w.p1}", {"country": "NL"}, w.admin),

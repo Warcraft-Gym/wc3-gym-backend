@@ -1,6 +1,8 @@
 """Archive conservation, ambiguity and lifecycle checks on both supported databases."""
 
+import json
 from copy import deepcopy
+from datetime import date
 from typing import Any
 
 import pytest
@@ -9,19 +11,36 @@ from sqlalchemy import func, select
 from sqlmodel import col
 
 from app.core.db import Session
+from app.models.enums import Race
 from app.models.event_award import EventAward
+from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
-from app.models.event_history import EventVideo, HistoricalParticipant, KothHistoryEvent
+from app.models.event_history import (
+    EventVideo,
+    HistoricalParticipant,
+    KothHistoryEvent,
+    KothHistorySeries,
+)
+from app.models.relationships import DBEventRound
+from app.models.season import Season
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame
+from app.models.types import utcnow
 from app.models.user import User
 from app.services.koth.history_import import (
+    LEFT,
     bounds,
+    digest,
+    fold,
     import_capture,
     infer_winners,
+    link_players,
     local_url,
+    record_days,
 )
-from tests.test_koth_night import open_night
+from tests.seed import active
+from tests.test_koth_live import bracket_ids, place, play
+from tests.test_koth_night import NIGHT, open_night
 
 
 def capture() -> list[dict[str, Any]]:
@@ -41,6 +60,7 @@ def capture() -> list[dict[str, Any]]:
             "date": None,
             "date_text": "November 31, 2024",
             "source_url": "https://example.com/history/",
+            "source_order": 1,
             "sections": [
                 {
                     "kind": "bracket",
@@ -87,9 +107,7 @@ def test_import_keeps_unknowns_and_every_competitive_bo1(client: Client) -> None
         assert session.scalar(select(func.count()).select_from(User)) == 0
         people = list(session.scalars(select(HistoricalParticipant)))
         assert [p.source_name for p in people].count("short") == 2
-        assert (
-            len(people) == 5
-        )  # the crown's spelling is a separate unresolved identity
+        assert len(people) == 4  # the crown's spelling folds into its player
         assert all(
             row.race is None and row.user_id is None
             for row in session.scalars(select(EventEntrant))
@@ -117,8 +135,12 @@ def test_import_keeps_unknowns_and_every_competitive_bo1(client: Client) -> None
     assert first["historical_king"]["name"] == "OTHER"
     assert [r["winner_side"] for r in first["history"]] == [None, 2]
     assert [r["inferred_winner_side"] for r in first["history"]] == [None, None]
-    assert first["history"][0]["review_note"] == "Both sides play the next series"
-    assert second["history"][0]["review_note"] == "No king is recorded"
+    assert first["history"][0]["review_note"] == (
+        "These two played again next, so the order does not show who won"
+    )
+    assert second["history"][0]["review_note"] == (
+        "The old page names no king for this bracket"
+    )
     for bracket in board["brackets"]:
         assert not bracket["queue"] and bracket["open_series"] is None
         for row in bracket["history"]:
@@ -209,6 +231,96 @@ def test_import_does_not_treat_unmapped_existing_events_as_duplicates(
     assert counts() == (0, 0, 0, 0)
 
 
+def test_archived_nights_filter_the_lists_and_stay_off_the_live_reads(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The archive filter keeps or drops the imported night; live reads drop it."""
+    archived = import_capture(capture(), apply=True)["event_ids"]["capture-first"]
+    native = open_night(client, auth_headers)["id"]
+    league = client.get(f"/events/{native}").json()["league_id"]
+
+    def listed(path: str) -> tuple[set[int], str | None]:
+        resp = client.get(path, headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        return {row["id"] for row in resp.json()}, resp.headers.get("X-Total-Count")
+
+    assert listed("/events") == ({archived, native}, "2")
+    assert listed("/events?archived=false") == ({native}, "1")
+    assert listed("/events?archived=true") == ({archived}, "1")
+
+    def runs(query: str = "") -> set[int]:
+        body = client.get(f"/leagues/{league}{query}", headers=auth_headers).json()
+        return {event["id"] for event in body["events"]}
+
+    assert runs() == {archived, native}
+    assert runs("?archived=false") == {native}
+    assert runs("?archived=true") == {archived}
+
+    mine = client.get("/me/events", headers=auth_headers)
+    assert mine.status_code == 200, mine.text
+    assert native in {row["id"] for row in mine.json()}
+    assert archived not in {row["id"] for row in mine.json()}
+    assert [row["id"] for row in client.get("/koth/events").json()] == [native]
+
+
+def test_a_yearless_night_takes_its_year_from_the_page_order(client: Client) -> None:
+    """Only a month and a day between two dated nights of one page get a date."""
+
+    def night(key: str, order: int, day: str | None, label: str) -> dict[str, Any]:
+        record = deepcopy(capture()[0])
+        record.update(event_id=key, source_order=order, date=day, date_text=label)
+        return record
+
+    records = [
+        night("newer", 1, "2022-03-06", "March 6, 2022"),
+        night("between", 2, None, "February 26"),
+        night("unparsed", 3, None, "November 31, 2024"),
+        night("older", 4, "2021-10-23", "October 23, 2021"),
+        night("last", 5, None, "October 16"),
+    ]
+    wide = [
+        night("wide-newer", 1, "2022-12-31", "December 31, 2022"),
+        night("wide-between", 2, None, "June 1"),
+        night("wide-older", 3, "2020-01-01", "January 1, 2020"),
+    ]
+    for record in wide:
+        record["source_url"] = "https://example.com/other/"
+    records += wide
+    untouched = deepcopy(records)
+    days = record_days(records)
+    assert days["between"] == date(2022, 2, 26)
+    assert days["unparsed"] is None and days["last"] is None
+    assert days["wide-between"] is None  # two years fit
+    assert days["newer"] == date(2022, 3, 6)
+
+    result = import_capture(records, apply=True)
+    assert records == untouched
+    ids = result["event_ids"]
+    with Session() as session:
+        event = session.get(Season, ids["between"])
+        assert event is not None
+        assert event.name == "KOTH February 26, 2022"
+        assert event.start_date == event.end_date == date(2022, 2, 26)
+        round_ = session.scalars(
+            select(DBEventRound).where(col(DBEventRound.season_id) == ids["between"])
+        ).one()
+        assert round_.start_date == round_.end_date == date(2022, 2, 26)
+        for key, name in (
+            ("unparsed", "KOTH November 31, 2024"),
+            ("last", "KOTH October 16"),
+            ("newer", "KOTH March 6, 2022"),
+        ):
+            other = session.get(Season, ids[key])
+            assert other is not None and other.name == name
+            assert (other.start_date is None) == (key != "newer")
+        archive = session.get(KothHistoryEvent, ids["between"])
+        assert archive is not None
+        assert archive.date_label == "February 26"
+        assert archive.source_digest == digest(untouched[1])
+        assert archive.source_record == untouched[1]
+    assert import_capture(records, apply=True)["inserted_events"] == 0
+
+
 @pytest.mark.parametrize(
     ("label", "expected"),
     [
@@ -265,6 +377,28 @@ def test_full_offline_capture(client: Client) -> None:
     assert report["counts"]["excluded_rows"] == 136
     assert counts() == (168, 1937, 1937, 33)
     assert import_capture(records, apply=True)["inserted_events"] == 0
+    with Session() as session:
+        starts = {
+            event.id: event.start_date for event in session.scalars(select(Season))
+        }
+    read = sorted(
+        str(starts[report["event_ids"][record["event_id"]]])
+        for record in records
+        if record["date"] is None
+    )
+    assert read == [
+        "2021-11-06",
+        "2021-11-13",
+        "2021-11-20",
+        "2021-11-27",
+        "2021-12-18",
+        "2022-01-08",
+        "2022-01-15",
+        "2022-02-05",
+        "2022-02-12",
+        "2022-02-26",
+        "None",
+    ]
     for event in records:
         event_id = report["event_ids"][event["event_id"]]
         response = client.get(f"/koth/nights/{event_id}/board")
@@ -280,9 +414,21 @@ def test_full_offline_capture(client: Client) -> None:
             matches = [
                 row for row in section["matches"] if row["record_type"] == "match"
             ]
+            marks = [
+                (bool(row["winner_side"] or row["inferred_winner_side"]), row["throne"])
+                for row in bracket["history"]
+            ]
+            assert all(won == (throne != "none") for won, throne in marks)
+            assert [throne for won, throne in marks if won][:1] in ([], ["moved"])
+            # a winner who left is the source's, never read from the order
+            assert all(
+                row["inferred_winner_side"] is None and row["review_note"] is None
+                for row in bracket["history"]
+                if row["winner_left"]
+            )
             for row, source in zip(bracket["history"], matches, strict=True):
-                assert row["side1"]["name"] == source["player_1"]
-                assert row["side2"]["name"] == source["player_2"]
+                assert fold(row["side1"]["name"]) == fold(source["player_1"])
+                assert fold(row["side2"]["name"]) == fold(source["player_2"])
                 assert row["side1"]["race"] is None and row["side2"]["race"] is None
                 assert (
                     row["side1"]["user_id"] is None and row["side2"]["user_id"] is None
@@ -316,7 +462,7 @@ def test_full_offline_capture(client: Client) -> None:
         assert {row["id"] for row in series.json()} == series_ids
         assert int(response.headers["X-DB-Statements"]) <= 6
         assert int(response.headers["X-DB-Rows"]) <= 98
-        assert len(response.content) < 11000
+        assert len(response.content) < 12000
 
 
 def bo1(
@@ -331,16 +477,6 @@ def bo1(
     }
 
 
-def test_a_break_reads_as_a_forfeit_and_the_order_restarts() -> None:
-    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Di", "Ed"), bo1("Di", "Fay")]
-    assert infer_winners(rows, "Fay") == [
-        (1, None),
-        (None, "Neither side plays on; read as a forfeit"),
-        (1, None),
-        (2, None),
-    ]
-
-
 def test_winner_stays_on_infers_a_whole_bracket() -> None:
     rows = [bo1("Ann", "Bo"), bo1("ann", "Cy", "(HU)"), bo1("Cy", "Di")]
     assert infer_winners(rows, "Di") == [(1, None), (2, None), (2, None)]
@@ -350,43 +486,59 @@ def test_winner_stays_on_infers_a_whole_bracket() -> None:
     assert infer_winners(rows, "Di") == [(1, None), (None, None), (2, None)]
 
 
-@pytest.mark.parametrize(
-    ("rows", "king", "note"),
-    [
-        (
-            [bo1("Ann", "Bo"), bo1("Bo", "Ann")],
-            "Ann",
-            "Both sides play the next series",
-        ),
-        (
-            [bo1("Ann", "Bo"), bo1("Ann", "Cy")],
-            "Bo",
-            "The reported king is not in the last series",
-        ),
-        ([bo1("Ann", "Bo"), bo1("Ann", "Cy")], None, "No king is recorded"),
-        (
-            [bo1("Ann", "Bo", "(Ann had to leave)"), bo1("Bo", "Cy")],
-            "Cy",
-            "The source adds a note to this series",
-        ),
-        (
-            [bo1("Ann", "Bo", winner="Bo"), bo1("Ann", "Cy")],
-            "Cy",
-            "The source result differs from the order",
-        ),
-        (
-            [bo1("Regitheth", "Bo"), bo1("Regitheht", "Cy")],
-            "Cy",
-            "A name only nearly matches the next series",
-        ),
-    ],
-)
-def test_any_doubt_leaves_the_whole_bracket_to_review(
-    rows: list[dict[str, Any]], king: str | None, note: str
-) -> None:
-    inferred = infer_winners(rows, king)
-    assert all(winner is None for winner, _ in inferred)
-    assert note in [n for _, n in inferred]
+def test_a_rematch_leaves_only_its_own_row_unknown() -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Cy", "Ann"), bo1("Cy", "Di")]
+    assert infer_winners(rows, "Di") == [
+        (1, None),
+        (None, "These two played again next, so the order does not show who won"),
+        (1, None),
+        (2, None),
+    ]
+
+
+def test_a_break_has_no_winner_and_the_order_restarts() -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Di", "Ed"), bo1("Di", "Fay")]
+    assert infer_winners(rows, "Fay") == [
+        (1, None),
+        (None, LEFT),
+        (1, None),
+        (2, None),
+    ]
+
+
+def test_a_written_winner_who_does_not_play_on_left() -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy", winner="Cy"), bo1("Ann", "Di")]
+    assert infer_winners(rows, "Di") == [(1, None), (None, LEFT), (2, None)]
+
+
+def test_a_hand_note_shows_the_source_words() -> None:
+    rows = [bo1("Ann", "Bo", "(HU) (Ann had to leave) (afk)"), bo1("Bo", "Cy")]
+    assert infer_winners(rows, "Cy") == [
+        (None, "The old page notes: Ann had to leave; afk"),
+        (2, None),
+    ]
+
+
+def test_a_bracket_without_a_king_leaves_the_last_row_unknown() -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy")]
+    assert infer_winners(rows, None) == [
+        (1, None),
+        (None, "The old page names no king for this bracket"),
+    ]
+
+
+def test_a_king_outside_the_last_row_leaves_it_unknown() -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy")]
+    assert infer_winners(rows, "Bo") == [
+        (1, None),
+        (None, "The crowned player is not in the last series"),
+    ]
+
+
+def test_a_name_close_to_one_in_the_next_row_is_no_break() -> None:
+    rows = [bo1("Regitheth", "Bo"), bo1("Regitheht", "Cy")]
+    near = "A name here is close to one in the next series; it may be the same player"
+    assert infer_winners(rows, "Cy") == [(None, near), (2, None)]
 
 
 def test_an_inferred_winner_shows_on_the_board_and_stays_out_of_records(
@@ -410,10 +562,12 @@ def test_an_inferred_winner_shows_on_the_board_and_stays_out_of_records(
     history = client.get(f"/koth/nights/{event_id}/board").json()["brackets"][0][
         "history"
     ]
+    # neither side of the break plays on, so its winner is unknown and left
     assert [r["inferred_winner_side"] for r in history] == [1, None, 2]
-    assert [r["forfeit"] for r in history] == [False, True, False]
+    assert [r["winner_left"] for r in history] == [False, True, False]
     assert [r["review_note"] for r in history] == [None, None, None]
     assert [r["winner_side"] for r in history] == [None, None, None]
+    assert [r["throne"] for r in history] == ["moved", "none", "moved"]
 
 
 def test_admin_delete_removes_an_archived_night(
@@ -426,3 +580,547 @@ def test_admin_delete_removes_an_archived_night(
     with Session() as session:
         for model in (EventAward, EventEntrant, HistoricalParticipant):
             assert session.scalar(select(func.count()).select_from(model)) == 0
+
+
+def archived(key: str, order: int, day: str | None, label: str) -> dict[str, Any]:
+    """The capture's night under its own key, label and day."""
+    record = deepcopy(capture()[0])
+    record.update(event_id=key, source_order=order, date=day, date_text=label)
+    return record
+
+
+def crowned_night(client: Client, headers: dict[str, str]) -> tuple[int, int]:
+    """A night run in the app whose strongest bracket crowned one player, closed."""
+    night = open_night(client, headers)
+    top = bracket_ids(night)[0]
+    first = place(client, headers, night, "One#1", 1700, top)
+    second = place(client, headers, night, "Two#2", 1700, top, race="OC")
+    play(client, headers, night["id"], first, second)
+    closed = client.post(f"/koth/nights/{night['id']}/close", headers=headers)
+    assert closed.status_code == 200, closed.text
+    return night["id"], first
+
+
+def winners(client: Client, query: str = "") -> tuple[list[dict[str, Any]], Any]:
+    response = client.get(f"/koth/winners{query}")
+    assert response.status_code == 200, response.text
+    return response.json(), response.headers
+
+
+@pytest.mark.usefixtures("quiet_w3c")
+def test_winners_list_the_king_of_every_bracket_of_a_closed_night(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """An archived night names the source spelling, a native night the account."""
+    record = archived("dated", 1, "2024-11-30", "November 30, 2024")
+    old = import_capture([record], apply=True)["event_ids"]["dated"]
+    native, first = crowned_night(client, auth_headers)
+    with Session() as session:
+        king = session.get(EventEntrant, first)
+        assert king is not None and king.user_id is not None
+        user_id = king.user_id
+    brackets = client.get(f"/koth/nights/{native}/board").json()["brackets"]
+
+    rows, headers = winners(client)
+
+    assert headers["X-Total-Count"] == "2"
+    assert headers["cache-control"] == (
+        "public, s-maxage=3600, stale-while-revalidate=86400"
+    )
+    assert headers["access-control-allow-origin"] == "*"
+    assert [row["event_id"] for row in rows] == [native, old]
+    assert rows[0]["date"] == NIGHT[:10]
+    assert rows[0]["date_label"] is None
+    assert rows[0]["winners"] == [
+        {
+            "bracket": bracket["name"],
+            "lower_bound": bracket["lower_bound"],
+            "name": "One" if index == 0 else None,
+            "user_id": user_id if index == 0 else None,
+            "country": None,
+            "race": "HU" if index == 0 else None,
+        }
+        for index, bracket in enumerate(brackets)
+    ]
+    assert rows[1] == {
+        "event_id": old,
+        "date": "2024-11-30",
+        "date_label": "November 30, 2024",
+        "winners": [
+            {
+                "bracket": "1500 to ~1700 MMR",
+                "lower_bound": 1500,
+                "name": "OTHER",
+                "user_id": None,
+                "country": None,
+                "race": None,
+            },
+            {
+                "bracket": "Gold and below",
+                "lower_bound": None,
+                "name": None,
+                "user_id": None,
+                "country": None,
+                "race": None,
+            },
+        ],
+    }
+
+
+def test_a_linked_archived_name_shows_the_player(client: Client) -> None:
+    """A reviewed link names the player; a rerun changes nothing, an unknown
+    tag links nothing, and a name the links leave out is unlinked."""
+    import_capture(
+        [archived("dated", 1, "2024-11-30", "November 30, 2024")], apply=True
+    )
+    with Session.begin() as session:
+        player = User(
+            name="Other",
+            discordTag=None,
+            discordId=None,
+            country="DE",
+            race=Race.HU,
+            battle_tags=active("Other#1234"),
+        )
+        session.add(player)
+        session.flush()
+        player_id = player.id
+
+    def king() -> dict[str, Any]:
+        return winners(client)[0][0]["winners"][0]
+
+    dry = link_players({"links": {"other": "other#1234 "}})
+    assert dry["changed_rows"] > 0 and king()["user_id"] is None
+    report = link_players(
+        {"links": {"other": "other#1234 ", "Nobody": "Nobody#1"}}, apply=True
+    )
+    assert report["linked_rows"] == dry["linked_rows"]
+    assert report["unknown_tags"] == ["Nobody#1"]
+    assert (king()["name"], king()["user_id"], king()["country"]) == (
+        "Other",
+        player_id,
+        "DE",
+    )
+    assert (
+        link_players({"links": {"OTHER": "Other#1234"}}, apply=True)["changed_rows"]
+        == 0
+    )
+    link_players({"links": {}}, apply=True)
+    assert king()["user_id"] is None and king()["name"] == "OTHER"
+    with pytest.raises(ValueError, match="battle tag"):
+        link_players({"links": {"OTHER": 1234}})
+    with pytest.raises(ValueError, match="race"):
+        link_players({"links": {}, "players": {"A#1": {"race": "ELF"}}})
+
+
+def test_a_reviewed_tag_with_no_player_creates_one_and_fills_a_blank_country(
+    client: Client,
+) -> None:
+    """A tag no player holds becomes a player as a signup makes one; a player
+    with no country takes the given one, one with a country keeps it; dry-run
+    writes nothing."""
+    import_capture(
+        [archived("dated", 1, "2024-11-30", "November 30, 2024")], apply=True
+    )
+    with Session.begin() as session:
+        session.add(
+            User(
+                name="Kept",
+                discordTag=None,
+                discordId=None,
+                country="FR",
+                race=Race.HU,
+                battle_tags=active("Kept#1"),
+            )
+        )
+        session.add(
+            User(
+                name="Blank",
+                discordTag=None,
+                discordId=None,
+                race=Race.HU,
+                battle_tags=active("Blank#2"),
+            )
+        )
+    data = {
+        "links": {"OTHER": "Newcomer#77"},
+        "players": {
+            "Newcomer#77": {"country": "US", "race": "OC"},
+            "Kept#1": {"country": "GB"},
+            "Blank#2": {"country": "CA"},
+        },
+    }
+    dry = link_players(data)
+    assert dry["created_players"] == ["Newcomer#77"] and dry["countries_filled"] == 0
+    assert winners(client)[0][0]["winners"][0]["user_id"] is None
+    data["links"] |= {"x": "Kept#1", "y": "Blank#2"}
+    report = link_players(data, apply=True)
+    assert report["created_players"] == ["Newcomer#77"] and report["unknown_tags"] == []
+    assert report["countries_filled"] == 1
+    king = winners(client)[0][0]["winners"][0]
+    assert (king["name"], king["country"]) == ("Newcomer", "US")
+    with Session() as session:
+        countries = {
+            n: c for n, c in session.execute(select(col(User.name), col(User.country)))
+        }
+        race = session.scalar(
+            select(col(User.race)).where(col(User.name) == "Newcomer")
+        )
+    assert (countries["Kept"], countries["Blank"], race) == ("FR", "CA", Race.OC)
+    assert link_players(data, apply=True)["created_players"] == []
+
+
+@pytest.mark.usefixtures("quiet_w3c")
+def test_a_withdrawn_or_moved_crown_is_no_winner_as_on_the_board(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A crowned row that withdrew or stands in another bracket names no king."""
+    native, first = crowned_night(client, auth_headers)
+    with Session.begin() as session:
+        king = session.get(EventEntrant, first)
+        assert king is not None
+        top, lower = session.scalars(
+            select(EventDivision)
+            .where(col(EventDivision.event_id) == native)
+            .order_by(col(EventDivision.position))
+            .limit(2)
+        ).all()
+        assert top.king_entrant_id == first
+        king.withdrawn_at = utcnow()
+        lower.king_entrant_id = first
+    brackets = client.get(f"/koth/nights/{native}/board").json()["brackets"]
+
+    rows, _ = winners(client)
+
+    assert [bracket["king"] for bracket in brackets[:2]] == [None, None]
+    assert [winner["name"] for winner in rows[0]["winners"][:2]] == [None, None]
+    assert {winner["user_id"] for winner in rows[0]["winners"]} == {None}
+
+
+@pytest.mark.usefixtures("quiet_w3c")
+def test_an_open_or_unpublished_night_has_no_winners(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    hidden = import_capture(capture(), apply=True)["event_ids"]["capture-first"]
+    with Session.begin() as session:
+        event = session.get(Season, hidden)
+        assert event is not None
+        event.published = False
+    open_night(client, auth_headers)
+
+    rows, headers = winners(client)
+    assert rows == []
+    assert headers["X-Total-Count"] == "0"
+
+
+@pytest.mark.usefixtures("quiet_w3c")
+def test_winners_page_by_night_newest_start_first(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A native night dates by its start time, an archived one by its start date;
+    an undated night stands last and a night with no bracket lists empty."""
+    undated = archived("undated", 1, None, "Some night")
+    ids = import_capture([undated], apply=True)["event_ids"]
+    _, alone = winners(client)
+    empty = archived("empty", 2, "2025-01-04", "January 4, 2025")
+    empty["sections"] = [s for s in empty["sections"] if s["kind"] != "bracket"]
+    older = archived("older", 3, "2023-05-06", "May 6, 2023")
+    ids |= import_capture([empty, older], apply=True)["event_ids"]
+    native, _ = crowned_night(client, auth_headers)
+    order = [native, ids["empty"], ids["older"], ids["undated"]]
+
+    rows, headers = winners(client)
+    assert [row["event_id"] for row in rows] == order
+    assert [row["date"] for row in rows] == [
+        NIGHT[:10],
+        "2025-01-04",
+        "2023-05-06",
+        None,
+    ]
+    assert rows[1]["winners"] == []
+    assert [len(row["winners"]) for row in rows] == [3, 0, 2, 2]
+    assert headers["X-Total-Count"] == "4"
+    assert int(headers["X-DB-Statements"]) == int(alone["X-DB-Statements"]) <= 1
+
+    page, headers = winners(client, "?limit=2&offset=1")
+    assert [row["event_id"] for row in page] == order[1:3]
+    assert headers["X-Total-Count"] == "4"
+    last, _ = winners(client, "?limit=2&offset=3")
+    assert [row["event_id"] for row in last] == order[3:]
+    past, headers = winners(client, "?offset=4")
+    assert past == []
+    assert headers["X-Total-Count"] == "4"
+
+
+def bracket(*rows: dict[str, Any], king: str) -> list[dict[str, Any]]:
+    crown = {"player": king, "raw_text": f"{king} is crowned King"}
+    return [
+        {"kind": "bracket", "title": "Gold", "matches": list(rows), "crowns": [crown]}
+    ]
+
+
+def people(event_id: int) -> list[str]:
+    with Session() as session:
+        return list(
+            session.scalars(
+                select(col(HistoricalParticipant.source_name))
+                .where(col(HistoricalParticipant.event_id) == event_id)
+                .order_by(col(HistoricalParticipant.source_key))
+            )
+        )
+
+
+def test_a_corrected_typo_is_one_participant_and_frees_the_order_of_play(
+    client: Client,
+) -> None:
+    """The kept name joins a typo pair; the stored source stays as written."""
+    plain = archived("plain", 1, "2024-11-30", "November 30, 2024")
+    plain["sections"] = bracket(
+        bo1("Regitheth", "Bo"), bo1("Regitheht", "Cy"), king="Cy"
+    )
+    joined = deepcopy(plain)
+    joined["event_id"] = "joined"
+    untouched = deepcopy([plain, joined])
+    fixes = {"names": {"regitheth": "Regitheht"}}
+
+    dry = import_capture([joined], corrections=fixes)
+    assert (dry["corrected_names"], dry["corrected_dates"]) == (1, 0)
+    import_capture([plain], apply=True)
+    result = import_capture([plain, joined], apply=True, corrections=fixes)
+    ids = result["event_ids"]
+    assert result["inserted_events"] == 1 and result["corrected_names"] == 2
+
+    assert people(ids["plain"]) == ["Regitheth", "Bo", "Regitheht", "Cy"]
+    assert people(ids["joined"]) == ["Regitheht", "Bo", "Cy"]  # Bo, Cy as written
+
+    def inferred(key: str) -> list[int | None]:
+        board = client.get(f"/koth/nights/{ids[key]}/board").json()
+        return [row["inferred_winner_side"] for row in board["brackets"][0]["history"]]
+
+    assert inferred("plain") == [None, 2]
+    assert inferred("joined") == [1, 2]
+    with Session() as session:
+        archive = session.get(KothHistoryEvent, ids["joined"])
+        assert archive is not None
+        assert archive.source_record == untouched[1]
+        assert archive.source_digest == digest(untouched[1])
+        stored = session.scalars(
+            select(col(KothHistorySeries.source_record))
+            .where(col(KothHistorySeries.event_id) == ids["joined"])
+            .order_by(col(KothHistorySeries.series_id))
+        ).all()
+        assert stored == untouched[1]["sections"][0]["matches"]
+    assert [plain, joined] == untouched
+    again = import_capture([plain, joined], apply=True, corrections=fixes)
+    assert again["inserted_events"] == 0 and again["event_ids"] == ids
+
+
+def test_two_casings_of_one_name_are_one_participant(client: Client) -> None:
+    record = archived("cased", 1, "2024-11-30", "November 30, 2024")
+    record["sections"] = bracket(bo1("Elu", "Bo"), bo1("elu ", "Cy"), king="CY")
+    event_id = import_capture([record], apply=True)["event_ids"]["cased"]
+    assert people(event_id) == ["Elu", "Bo", "CY"]
+
+
+def test_a_name_kept_as_itself_stores_one_casing_in_every_bracket(
+    client: Client,
+) -> None:
+    fixes = {"names": {"elu": "Elu", "eluu": "Elu"}}
+    first = archived("first", 1, "2024-11-30", "November 30, 2024")
+    first["sections"] = bracket(bo1("ELU", "Bo"), bo1("eluu", "Cy"), king="Cy")
+    second = archived("second", 2, "2024-11-23", "November 23, 2024")
+    second["sections"] = bracket(bo1("Bo", "elu"), king="elu")
+    ids = import_capture([first, second], apply=True, corrections=fixes)["event_ids"]
+    assert people(ids["first"]) == ["Elu", "Bo", "Cy"]
+    assert people(ids["second"]) == ["Bo", "Elu"]
+
+
+def test_a_king_keeps_the_spelling_of_the_crown_line(client: Client) -> None:
+    """A kept name first, then the crown line, then the first spelling in the series."""
+    crowned = archived("crowned", 1, "2024-11-30", "November 30, 2024")
+    crowned["sections"] = bracket(
+        bo1("glaive", "bo"), bo1("BO", "glaive"), king="Glaive"
+    )
+    corrected = archived("corrected", 2, "2024-11-23", "November 23, 2024")
+    corrected["sections"] = bracket(
+        bo1("glaiev", "bo"), bo1("BO", "glaive"), king="Glaive"
+    )
+    fixes = {"names": {"glaiev": "glaive"}}
+    ids = import_capture([crowned, corrected], apply=True, corrections=fixes)[
+        "event_ids"
+    ]
+
+    assert people(ids["crowned"]) == ["Glaive", "bo"]
+    assert people(ids["corrected"]) == ["glaive", "bo"]
+    for key, king in (("crowned", "Glaive"), ("corrected", "glaive")):
+        board = client.get(f"/koth/nights/{ids[key]}/board").json()
+        assert board["brackets"][0]["historical_king"]["name"] == king
+        assert {row["side2"]["name"] for row in board["brackets"][0]["history"]} == {
+            "bo",
+            king,
+        }
+    rows, _ = winners(client)
+    assert [row["event_id"] for row in rows] == [ids["crowned"], ids["corrected"]]
+    assert [row["winners"][0]["name"] for row in rows] == ["Glaive", "glaive"]
+
+
+def test_a_reviewed_date_dates_an_undated_night_before_page_order(
+    client: Client,
+) -> None:
+    records = [
+        archived("newer", 1, "2022-03-06", "March 6, 2022"),
+        archived("between", 2, None, "February 26"),
+        archived("impossible", 3, None, "November 31, 2021"),
+        archived("older", 4, "2021-10-23", "October 23, 2021"),
+    ]
+    with pytest.raises(ValueError, match="has its own date"):
+        import_capture(
+            records, apply=True, corrections={"dates": {"newer": "2022-03-06"}}
+        )
+    assert counts() == (0, 0, 0, 0)
+    fixes = {
+        "dates": {
+            "between": "2022-02-25",
+            "impossible": "2021-11-30",
+            "elsewhere": "2020-01-01",
+        }
+    }
+    days = record_days(
+        records, {key: date.fromisoformat(day) for key, day in fixes["dates"].items()}
+    )
+    assert days["between"] == date(2022, 2, 25)
+    assert days["impossible"] == date(2021, 11, 30)
+    assert record_days(records)["between"] == date(2022, 2, 26)
+
+    result = import_capture(records, apply=True, corrections=fixes)
+    assert result["corrected_dates"] == 2
+    with Session() as session:
+        for key, name, day in (
+            ("between", "KOTH February 25, 2022", date(2022, 2, 25)),
+            ("impossible", "KOTH November 30, 2021", date(2021, 11, 30)),
+        ):
+            event = session.get(Season, result["event_ids"][key])
+            assert event is not None and event.name == name
+            assert event.start_date == event.end_date == day
+            round_ = session.scalars(
+                select(DBEventRound).where(
+                    col(DBEventRound.season_id) == result["event_ids"][key]
+                )
+            ).one()
+            assert round_.start_date == round_.end_date == day
+            archive = session.get(KothHistoryEvent, result["event_ids"][key])
+            assert archive is not None
+            assert archive.date_label == {"between": "February 26"}.get(
+                key, "November 31, 2021"
+            )
+
+
+@pytest.mark.parametrize(
+    ("names", "error"),
+    [
+        ({"elusieri": "elusirei", "elusirei": "Elusirel"}, "itself corrected"),
+        ({"a": "B", "b": "C"}, "itself corrected"),
+        ({"elu": " "}, "empty name"),
+        ({"Elu": "Elusirel"}, "folded spelling"),
+    ],
+)
+def test_a_bad_corrections_file_fails_before_any_write(
+    client: Client, names: dict[str, str], error: str
+) -> None:
+    with pytest.raises(ValueError, match=error):
+        import_capture(capture(), apply=True, corrections={"names": names})
+    assert counts() == (0, 0, 0, 0)
+
+
+def test_a_corrections_file_that_is_not_an_object_fails_before_any_write(
+    client: Client,
+) -> None:
+    with pytest.raises(ValueError, match="not a JSON object"):
+        import_capture(capture(), apply=True, corrections=json.loads('[{"names": {}}]'))
+    assert counts() == (0, 0, 0, 0)
+
+
+def history(client: Client, *rows: dict[str, Any], king: str) -> list[dict[str, Any]]:
+    """The board rows of a one-bracket archived night."""
+    record = archived("marks", 1, "2024-11-30", "November 30, 2024")
+    record["sections"] = bracket(*rows, king=king)
+    event_id = import_capture([record], apply=True)["event_ids"]["marks"]
+    response = client.get(f"/koth/nights/{event_id}/board")
+    assert response.status_code == 200, response.text
+    assert int(response.headers["X-DB-Statements"]) == 6
+    return response.json()["brackets"][0]["history"]
+
+
+def thrones(client: Client, *rows: dict[str, Any], king: str) -> list[str]:
+    """What each row of a one-bracket archived night did to the crown."""
+    return [row["throne"] for row in history(client, *rows, king=king)]
+
+
+def test_a_winner_who_left_empties_the_throne(client: Client) -> None:
+    rows = [
+        bo1("Ann", "Bo"),
+        bo1("Ann", "Cy", winner="Cy"),
+        bo1("Ann", "Di"),
+        bo1("Ed", "Fay"),
+        bo1("Ed", "Gus"),
+    ]
+    marks = [
+        (
+            row["winner_side"],
+            row["inferred_winner_side"],
+            row["winner_left"],
+            row["throne"],
+            row["review_note"],
+        )
+        for row in history(client, *rows, king="Gus")
+    ]
+    assert marks == [
+        (None, 1, False, "moved", None),
+        (2, None, True, "moved", None),  # the written winner stands, Ann plays on
+        (None, None, True, "none", None),  # a break: nobody holds the crown going in
+        (None, 1, False, "moved", None),
+        (None, 2, False, "moved", None),
+    ]
+
+
+def test_a_break_on_the_first_pairing_has_no_winner(client: Client) -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Cy", "Di"), bo1("Cy", "Ed")]
+    marks = [
+        (row["inferred_winner_side"], row["winner_left"], row["throne"])
+        for row in history(client, *rows, king="Ed")
+    ]
+    assert marks == [(None, True, "none"), (1, False, "moved"), (2, False, "moved")]
+
+
+@pytest.mark.parametrize("written", [False, True])
+def test_an_archived_chain_marks_the_crown_as_a_played_row_does(
+    client: Client, written: bool
+) -> None:
+    """A written winner and an inferred one mark the crown alike."""
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Ann", "Di"), bo1("Di", "Ed")]
+    if written:
+        rows[1]["winner"], rows[2]["winner"] = "Ann", "Di"
+    assert thrones(client, *rows, king="Di") == ["moved", "held", "moved", "held"]
+
+
+def test_after_an_unknown_result_only_the_last_holder_holds_the_crown(
+    client: Client,
+) -> None:
+    rows = [
+        bo1("Ann", "Bo", winner="Ann"),
+        bo1("Ann", "Cy", "(Cy had to leave)"),
+        bo1("Ann", "Di", winner="Ann"),
+        bo1("Ann", "Ed"),
+        bo1("Ann", "Ed", winner="Ed"),
+        bo1("Fay", "Gus"),
+        bo1("Fay", "Gus", winner="Gus"),
+    ]
+    assert thrones(client, *rows, king="Gus") == [
+        "moved",
+        "none",
+        "held",  # the last holder wins
+        "none",
+        "moved",  # the last holder plays and loses
+        "none",
+        "moved",  # the last holder does not play
+    ]

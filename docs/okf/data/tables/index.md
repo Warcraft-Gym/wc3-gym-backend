@@ -77,7 +77,7 @@ The 48 tables, one concept each. A concept's `# Schema` lists every column; `tes
 
 # Historical evidence and videos
 
-* [historical_participant](historical_participant.md) - One unresolved identity scoped to an event and a source section.
+* [historical_participant](historical_participant.md) - One archived name scoped to an event and a source section, linked to a player once a review names one.
 * [koth_history_event](koth_history_event.md) - The immutable source capture and import provenance for one historical KOTH event.
 * [koth_history_series](koth_history_series.md) - The source row behind one imported competitive BO1 series.
 * [event_video](event_video.md) - One video link associated with an event, with its provider, title and display order.

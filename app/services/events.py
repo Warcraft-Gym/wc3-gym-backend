@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import (
     ColumnElement,
+    Row,
     case,
     delete,
     distinct,
@@ -140,6 +141,22 @@ _MEMBER_COLUMNS = load_only(
     rel(Season.round_end_zone),
     raiseload=True,
 )
+
+# Newest first by when the event starts; an event with neither date sorts last
+NEWEST_FIRST = (
+    func.coalesce(col(Season.starts_at), col(Season.start_date)).desc().nulls_last(),
+    col(Season.id).desc(),
+)
+
+
+def archived_filter(archived: bool) -> ColumnElement[bool]:
+    """Keep only the events the KOTH archive maps, or only the others."""
+    mapped = col(Season.id).in_(select(col(KothHistoryEvent.event_id)))
+    return mapped if archived else ~mapped
+
+
+# The archived flag of each listed event, read as a column of the list statement
+ARCHIVED = archived_filter(True).label("archived")
 
 
 def phase_of(
@@ -336,12 +353,13 @@ class EventService:
         kind: EventKind | None = None,
         league_id: int | None = None,
         published: bool | None = None,
+        archived: bool | None = None,
         limit: int | None = None,
         offset: int = 0,
         claims: dict[str, Any] | None = None,
     ) -> tuple[list[EventPublic], int]:
-        """One page of events, newest first, each with its computed phase, and
-        the count of every event the filter keeps.
+        """One page of events, newest start first, each with its computed phase,
+        and the count of every event the filter keeps.
 
         An unpublished event is a draft only an admin reads, so a caller who
         is not one sees the published rows whatever the filter asks for.
@@ -353,21 +371,25 @@ class EventService:
             filters.append(col(Season.league_id) == league_id)
         if published is not None:
             filters.append(col(Season.published).is_(published))
+        if archived is not None:
+            filters.append(archived_filter(archived))
         if not is_admin(claims):
             filters.append(col(Season.published).is_(True))
         statement = (
             select(Season)
             .options(*_EVENT_OPTIONS)
             .where(*filters)
-            .order_by(col(Season.id).desc())
+            .order_by(*NEWEST_FIRST)
         )
         with Session.begin() as session:
             total = (
                 session.scalar(select(func.count()).select_from(Season).where(*filters))
                 or 0
             )
-            events = session.scalars(statement.offset(offset).limit(limit)).all()
-            return _publics(session, events), total
+            rows = session.execute(
+                statement.add_columns(ARCHIVED).offset(offset).limit(limit)
+            ).all()
+            return _publics(session, rows), total
 
     def search(
         self,
@@ -389,8 +411,10 @@ class EventService:
         if not is_admin(claims):
             statement = statement.where(col(Season.published).is_(True))
         with Session.begin() as session:
-            events = session.scalars(statement.offset(offset).limit(limit)).all()
-            return _publics(session, events)
+            rows = session.execute(
+                statement.add_columns(ARCHIVED).offset(offset).limit(limit)
+            ).all()
+            return _publics(session, rows)
 
     def get(self, event_id: int, claims: dict[str, Any] | None = None) -> EventPublic:
         """One event with its stages, its divisions and how many entrants it holds.
@@ -517,9 +541,12 @@ class EventService:
             return [LeaguePublic.model_validate(league) for league in leagues]
 
     def get_league(
-        self, league_id: int, claims: dict[str, Any] | None = None
+        self,
+        league_id: int,
+        archived: bool | None = None,
+        claims: dict[str, Any] | None = None,
     ) -> LeaguePublic:
-        """One league and the events that are its runs, newest first.
+        """One league and the events that are its runs, newest start first.
 
         A draft run reads for an admin only, as the event list does.
         """
@@ -531,13 +558,15 @@ class EventService:
                 select(Season)
                 .options(*_EVENT_OPTIONS)
                 .where(col(Season.league_id) == league_id)
-                .order_by(col(Season.id).desc())
+                .order_by(*NEWEST_FIRST)
             )
+            if archived is not None:
+                statement = statement.where(archived_filter(archived))
             if not is_admin(claims):
                 statement = statement.where(col(Season.published).is_(True))
-            events = session.scalars(statement).all()
+            rows = session.execute(statement.add_columns(ARCHIVED)).all()
             public = LeaguePublic.model_validate(league)
-            public.events = _nested(_publics(session, events))
+            public.events = _nested(_publics(session, rows))
             return public
 
     def add_league(self, data: LeagueCreate) -> LeaguePublic:
@@ -560,6 +589,7 @@ class EventService:
         """The member home's published events, newest first, every kind in one list.
 
         One function over the event rows replaces the season and KOTH split.
+        An archived KOTH night has no account behind its entrants, so it is left out.
         The caller's own state rides on each row: the entrant, the check-in
         shape and window, the next round and the one action the page offers.
         A caller with no id has joined nothing and reads a signup or a view.
@@ -569,7 +599,7 @@ class EventService:
         with Session.begin() as session:
             events = session.scalars(
                 select(Season)
-                .where(col(Season.published).is_(True))
+                .where(col(Season.published).is_(True), archived_filter(False))
                 .options(
                     _MEMBER_COLUMNS,
                     selectinload(
@@ -1379,20 +1409,25 @@ def _member_action(
     return "sign_up" if event.signups_open else "closed"
 
 
-def _publics(session: OrmSession, events: Sequence[Season]) -> list[EventPublic]:
-    """A page of event payloads, with one grouped series count behind their phases."""
-    ids = [event.id for event in events]
+def _publics(
+    session: OrmSession, rows: Sequence[Row[tuple[Season, bool]]]
+) -> list[EventPublic]:
+    """A page of event payloads, each with the archived flag read beside it,
+    and one grouped series count behind their phases."""
+    ids = [event.id for event, _ in rows]
     counts = series_counts_by_event(session, ids)
     drawn = last_stage_drawn(session, ids)
-    return [
-        _public(
+    publics: list[EventPublic] = []
+    for event, archived in rows:
+        public = _public(
             session,
             event,
             counts=counts.get(event.id, NO_SERIES),
             last_stage=drawn.get(event.id, True),
         )
-        for event in events
-    ]
+        public.archived = archived
+        publics.append(public)
+    return publics
 
 
 def _public(
