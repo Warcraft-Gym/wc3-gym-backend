@@ -2,6 +2,7 @@
 
 ## 2026-10-06
 
+* **Update**: the KOTH history import reads each archived series on its own: a doubt leaves only that series without an inferred winner, a break has no winner and reads as `winner_left`, as does a written winner who does not play the next series, and a source note is shown in the page's words; a corrections key may keep its own spelling. [KOTH night](concepts/koth.md#historical-imports) and [koth_history_series](data/tables/koth_history_series.md) state it.
 * **Update**: at a break in an archived KOTH bracket, where neither side plays on, the winner withdrew: the winner of the series before wins it when he plays in it, else it has no winner; the board row carries `winner_left`, and the throne is empty after it. [KOTH night](concepts/koth.md#historical-imports) and [koth_history_series](data/tables/koth_history_series.md) state it.
 * **Update**: every `history` row of an archived KOTH bracket carries `throne` (`moved`, `held` or `none`), walked in play order from the written winner, else the inferred one, at no extra statement. [KOTH night](concepts/koth.md#historical-imports) states it.
 * **Update**: the KOTH history import joins written names that fold to the same text in one bracket into one participant, and takes an optional corrections file of reviewed dates for undated nights and kept names for folded spellings; the stored source records stay as written. [KOTH night](concepts/koth.md#historical-imports) and [historical_participant](data/tables/historical_participant.md) state it.
