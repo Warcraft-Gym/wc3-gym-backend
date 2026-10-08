@@ -4,7 +4,7 @@ title: teams
 description: "One league-owned team: its league, short name, long name and the public URL of its logo."
 resource: ../../../../app/models/team.py
 tags: [teams, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-08T18:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -23,17 +23,18 @@ sources:
 | Column | Type | Null | Meaning |
 |---|---|---|---|
 | `id` | INTEGER | no | Primary key. |
-| `league_id` | INTEGER | no | The league that owns the team. |
+| `league_id` | INTEGER | yes | The league that owns the team. Null only on a cup team made for a cup with no league. |
+| `event_id` | INTEGER | yes | The one cup a cup team was made for. Null on every team of a league. |
 | `name` | VARCHAR | no | The short name. The workbook import matches a team on it. |
 | `long_name` | VARCHAR | yes | The full name. |
 | `icon_url` | VARCHAR | yes | The public URL of the logo in the blob store. Null means the default logo. Written by `POST /leagues/{league_id}/teams/{team_id}/image`. |
 
 # Keys and joins
 
-Primary key `id`. Foreign key: `league_id` to [league](league.md). Pointed at by [team_season](team_season.md), [team_season_captain](team_season_captain.md), [user_team_season](user_team_season.md), [event_entrant](event_entrant.md), [event_award](event_award.md), [matches](matches.md) (`team1_id`, `team2_id`), [fantasy_teams](fantasy_teams.md) (`drafted_team_id`, `grind_team_id`), [discord_role_binding](discord_role_binding.md), [match_draft_mark](match_draft_mark.md).
+Primary key `id`. Foreign keys: `league_id` to [league](league.md), `event_id` to [event](event.md) `ON DELETE CASCADE`. Pointed at by [team_season](team_season.md), [team_season_captain](team_season_captain.md), [user_team_season](user_team_season.md), [event_entrant](event_entrant.md), [event_award](event_award.md), [matches](matches.md) (`team1_id`, `team2_id`), [fantasy_teams](fantasy_teams.md) (`drafted_team_id`, `grind_team_id`), [discord_role_binding](discord_role_binding.md), [match_draft_mark](match_draft_mark.md).
 
 # Rules
 
-A team belongs to exactly one league. Its roster and captains belong to an event of that league through the link tables. The API manages the team identity under `/leagues/{league_id}/teams` and its event data under `/events/{event_id}/teams`. A team inside another answer is `TeamSummaryPublic`; the league reads answer `TeamPublic`, and the event reads answer `TeamRosterPublic`, whose roster and captains hold that event alone; the GNL website reads the flat `TeamRosterSummaryPublic` row from `GET /events/{event_id}/teams/summary` (see [Response shapes](../../api/response-shapes.md)).
+A team belongs to exactly one league, except a cup team, which belongs to the one cup it was made for, see [the decision](../../decisions/cup-teams-live-for-one-cup.md); the league team lists leave a cup team out. Its roster and captains belong to an event of that league through the link tables. The API manages the team identity under `/leagues/{league_id}/teams` and its event data under `/events/{event_id}/teams`. A team inside another answer is `TeamSummaryPublic`; the league reads answer `TeamPublic`, and the event reads answer `TeamRosterPublic`, whose roster and captains hold that event alone; the GNL website reads the flat `TeamRosterSummaryPublic` row from `GET /events/{event_id}/teams/summary` (see [Response shapes](../../api/response-shapes.md)).
 
 No bytes column; the store follows the row and a deleted team drops its picture after the commit. Standings derive from the fixtures on every read. See [pictures and replays](../../concepts/pictures-and-replays.md) and [the decision](../../decisions/pictures-as-urls.md).

@@ -130,12 +130,18 @@ def map_index() -> MapIndex:
     return by_base
 
 
-def ladder_rows(by_base: MapIndex) -> list[LadderMapRow]:
-    """Every 1v1 ladder map, with the short name and picture matched to it."""
+def ladder_rows(by_base: MapIndex, mode: int = SOLO_MODE) -> list[LadderMapRow]:
+    """Every ladder map of one W3Champions game mode, the 1v1 one unless named,
+    with the short name and picture matched to it."""
     w3c = W3CService()
     modes = w3c.send_request(url=f"{w3c.base_url()}/ladder/active-modes") or []
     maps = next(
-        (mode.get("maps") or [] for mode in modes if mode.get("id") == SOLO_MODE), []
+        (
+            mode_row.get("maps") or []
+            for mode_row in modes
+            if mode_row.get("id") == mode
+        ),
+        [],
     )
     return [_row(ladder_map, by_base) for ladder_map in maps]
 

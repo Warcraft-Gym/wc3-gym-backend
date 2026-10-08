@@ -129,6 +129,15 @@ def generate(
         event = session.get(Season, event_id)
         if event is not None:
             hold_pool(session, event)
+            # a team cup draws complete teams only
+            from app.services.cup_teams import incomplete
+
+            short = incomplete(session, event)
+            if short:
+                raise BadRequestError(
+                    "Every team needs all its players before the draw: "
+                    + ", ".join(short)
+                )
         if division_id is not None:
             fields = {division_id: fields.get(division_id, [])}
         for field in fields.values():

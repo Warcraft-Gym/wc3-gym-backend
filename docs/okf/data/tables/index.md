@@ -1,6 +1,6 @@
 # Tables
 
-The 56 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
+The 57 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
 
 # People and access
 
@@ -41,6 +41,7 @@ The 56 tables, one concept each. A concept's `# Schema` lists every column; `tes
 # Teams and rosters
 
 * [teams](teams.md) - One league-owned team: its league, short name, long name and the public URL of its logo.
+* [team_invite](team_invite.md) - One player invited into a cup team who has not answered yet; accepting moves them into the roster, declining deletes the row.
 * [team_season](team_season.md) - One team fielded in one GNL season; the row exists before the team has a captain or a roster.
 * [team_season_captain](team_season_captain.md) - One captain seat: a player who captains one team in one season; the seat is what makes an account a captain.
 * [user_team_season](user_team_season.md) - One roster row: a player on one team in one season, written by the draft.

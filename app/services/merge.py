@@ -57,6 +57,7 @@ NOUNS = {
     "team_season_captain": ("captain seat", "captain seats"),
     "user_season_signup": ("signup", "signups"),
     "user_team_season": ("team season seat", "team season seats"),
+    "team_invite": ("team invite", "team invites"),
     "w3c_ladder_matches": ("ladder match", "ladder matches"),
     "event_entrant": ("event entry", "event entries"),
     "fantasy_team_player": ("fantasy team pick", "fantasy team picks"),

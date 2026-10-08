@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi.responses import RedirectResponse
@@ -39,10 +39,17 @@ def delete_map(map_id: int, service: MapServiceDep) -> None:
     service.delete(map_id)
 
 
+# The W3Champions game modes a cup's pool can start from
+LADDER_MODES = {"1v1": 1, "2v2": 2, "4v4": 4}
+
+
 @router.get("/maps/ladder-import", dependencies=[Depends(require_organizer)])
-def preview_ladder_import(service: MapServiceDep) -> list[LadderMapRow]:
-    """List every 1v1 ladder map, matched against the maps the app holds."""
-    return service.ladder_import_preview()
+def preview_ladder_import(
+    service: MapServiceDep, mode: Literal["1v1", "2v2", "4v4"] = "1v1"
+) -> list[LadderMapRow]:
+    """List every ladder map of one game mode, the 1v1 one unless named,
+    matched against the maps the app holds."""
+    return service.ladder_import_preview(LADDER_MODES[mode])
 
 
 @router.post("/maps/ladder-import", dependencies=[Depends(require_admin)])

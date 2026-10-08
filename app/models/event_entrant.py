@@ -136,6 +136,14 @@ class SeedWrite(SQLModel):
     order: list[int] | None = None
 
 
+class TeamMemberPublic(SQLModel):
+    """One player of a cup team, with the rating the cup checks them on."""
+
+    user: UserSummaryPublic
+    captain: bool = False
+    mmr: int | None = None
+
+
 class EventEntrantPublic(SQLModel):
     """One entrant as the entrants page reads it.
 
@@ -163,3 +171,6 @@ class EventEntrantPublic(SQLModel):
     checked_in_at: Annotated[datetime | None, AwareUTC] = None
     withdrawn_at: Annotated[datetime | None, AwareUTC] = None
     qualified_from_event_id: int | None = None
+    # A cup team: the confirmed players, and the players invited who have not answered
+    roster: list[TeamMemberPublic] = []
+    invited: list[UserSummaryPublic] = []

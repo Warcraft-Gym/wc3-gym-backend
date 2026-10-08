@@ -94,7 +94,9 @@ class MapService:
             maps = Map.get_all(session, limit=limit, offset=offset)
             return [MapPublic.model_validate(map) for map in maps]
 
-    def ladder_import_preview(self) -> list[LadderMapRow]:
+    def ladder_import_preview(
+        self, mode: int = ladder_maps.SOLO_MODE
+    ) -> list[LadderMapRow]:
         """Every 1v1 ladder map, and whether the app already holds it, then
         every map the app holds off the ladder whose picture warcraft3.info has."""
         with Session.begin() as session:
@@ -108,7 +110,7 @@ class MapService:
                 if map.name and not map.image
             ]
         by_base = ladder_maps.map_index()
-        rows = ladder_maps.ladder_rows(by_base)
+        rows = ladder_maps.ladder_rows(by_base, mode)
         on_ladder = set()
         for row in rows:
             map_id = known(row.w3c_name)

@@ -56,6 +56,7 @@ from app.models.event_entrant import (
     EventEntrant,
     EventEntrantPublic,
     SeedWrite,
+    TeamMemberPublic,
 )
 from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
@@ -91,6 +92,7 @@ from app.models.season import (
 from app.models.series import Series
 from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.team import Team
+from app.models.team_invite import TeamInvite
 from app.models.team_season import DBTeamSeason
 from app.models.team_summary import TeamSummaryPublic
 from app.models.types import utcnow
@@ -788,7 +790,15 @@ class EventService:
             row = _entrant(session, event_id, entrant_id)
             if not organizers.runs(claims, event_id):
                 user = _caller(session, claims)
-                if user is None or row.user_id != user.id:
+                member = (
+                    user is not None
+                    and row.team_id is not None
+                    and session.get(
+                        DBUserTeamSeason, (ident(user), row.team_id, event_id)
+                    )
+                    is not None
+                )
+                if user is None or (row.user_id != user.id and not member):
                     raise ApiError(403, {"error": "Check in your own signup"})
             row.checked_in_at = utcnow()
             session.flush()
@@ -1772,16 +1782,94 @@ def _entrant_publics(
         team.id: team
         for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
     }
-    means = _team_mmrs(session, rows, season)
+    means = _team_mmrs(session, rows, season, event.race_games_min)
     lifetime = (
         _lifetime_games(session, [row.user_id for row in rows if row.user_id])
         if event.race_games_min is not None
         else None
     )
-    return [
+    publics = [
         _entrant_public(event, row, users, teams, means, season, lifetime)
         for row in rows
     ]
+    rosters = _cup_rosters(session, event, rows, season)
+    for public, row in zip(publics, rows, strict=True):
+        if row.team_id in rosters:
+            public.roster, public.invited = rosters[row.team_id]
+    return publics
+
+
+def _cup_rosters(
+    session: OrmSession, event: Season, rows: Sequence[EventEntrant], season: int
+) -> dict[int, tuple[list[TeamMemberPublic], list[UserSummaryPublic]]]:
+    """The roster and the open invites of every team of a team cup, in four reads.
+
+    Each player carries the rating the cup checks them on: the best race with
+    enough lifetime games where the cup counts races, else their main race.
+    """
+    teams = {row.team_id for row in rows if row.team_id is not None}
+    if not teams or not event.team_size:
+        return {}
+    roster = session.execute(
+        select(col(DBUserTeamSeason.team_id), col(DBUserTeamSeason.user_id))
+        .where(
+            col(DBUserTeamSeason.team_id).in_(teams),
+            col(DBUserTeamSeason.season_id) == ident(event),
+        )
+        .order_by(col(DBUserTeamSeason.user_id))
+    ).all()
+    captains = set(
+        session.execute(
+            select(
+                col(DBTeamSeasonCaptain.team_id), col(DBTeamSeasonCaptain.user_id)
+            ).where(
+                col(DBTeamSeasonCaptain.team_id).in_(teams),
+                col(DBTeamSeasonCaptain.season_id) == ident(event),
+            )
+        ).all()
+    )
+    invites = session.execute(
+        select(col(TeamInvite.team_id), col(TeamInvite.user_id))
+        .where(col(TeamInvite.team_id).in_(teams))
+        .order_by(col(TeamInvite.invited_at))
+    ).all()
+    ids = {user_id for _, user_id in roster} | {user_id for _, user_id in invites}
+    users = {
+        ident(user): user
+        for user in session.scalars(
+            select(User)
+            .options(*summary_loads(ident(event), window=season))
+            .where(col(User.id).in_(ids))
+        )
+    }
+    lifetime = _lifetime_games(session, ids) if event.race_games_min else {}
+
+    def rating(user: User) -> int | None:
+        if event.race_games_min:
+            return _rated(
+                user, lifetime.get(ident(user), {}), event.race_games_min, season
+            ).mmr
+        return _stats_for(user, user.race, season)[0]
+
+    found: dict[int, tuple[list[TeamMemberPublic], list[UserSummaryPublic]]] = {
+        team_id: ([], []) for team_id in teams
+    }
+    for team_id, user_id in roster:
+        user = users.get(user_id)
+        summary = _summarized(user, season, ident(event))
+        if user is None or summary is None:
+            continue
+        # the captain leads the roster
+        members = found[team_id][0]
+        member = TeamMemberPublic(
+            user=summary, captain=(team_id, user_id) in captains, mmr=rating(user)
+        )
+        members.insert(0, member) if member.captain else members.append(member)
+    for team_id, user_id in invites:
+        summary = _summarized(users.get(user_id), season, ident(event))
+        if summary is not None:
+            found[team_id][1].append(summary)
+    return found
 
 
 def _users_for(
@@ -1900,7 +1988,10 @@ def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | 
     """
     season = w3c_season(session)
     users = _users_for(session, rows, season)
-    teams = _team_mmrs(session, rows, season)
+    event = session.get(Season, rows[0].event_id) if rows else None
+    teams = _team_mmrs(
+        session, rows, season, event.race_games_min if event is not None else None
+    )
     return {ident(row): _entrant_mmr(row, users, teams, season) for row in rows}
 
 
@@ -1919,7 +2010,10 @@ def _entrant_mmr(
 
 
 def _team_mmrs(
-    session: OrmSession, rows: Sequence[EventEntrant], season: int
+    session: OrmSession,
+    rows: Sequence[EventEntrant],
+    season: int,
+    race_games_min: int | None = None,
 ) -> dict[int, int | None]:
     """Every team entrant against the mean rating of its live roster.
 
@@ -1957,9 +2051,21 @@ def _team_mmrs(
         ).all()
     }
     rated: dict[int, list[int]] = {team_id: [] for team_id in teams}
+    # a cup that counts races by their games rates each member on the best of them
+    lifetime = (
+        _lifetime_games(session, {member.user_id for member in members})
+        if race_games_min
+        else {}
+    )
     for member in members:
         race = races.get(member.user_id) or member.user.race
-        mmr = _stats_for(member.user, race, season)[0]
+        mmr = (
+            _rated(
+                member.user, lifetime.get(member.user_id, {}), race_games_min, season
+            ).mmr
+            if race_games_min
+            else _stats_for(member.user, race, season)[0]
+        )
         if mmr is not None:
             rated[member.team_id].append(mmr)
     return {

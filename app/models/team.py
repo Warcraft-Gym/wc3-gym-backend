@@ -25,8 +25,13 @@ class Team(TeamBase, DBModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     # A team is a named entrant of one league. Its roster may change between
-    # that league's events, but the team never exists outside the league.
-    league_id: int = Field(index=True, foreign_key="league.id")
+    # that league's events, but the team never exists outside the league. A
+    # cup team is made for one cup instead and may name no league.
+    league_id: int | None = Field(default=None, index=True, foreign_key="league.id")
+    # The one cup a cup team was made for; null for a team of a league
+    event_id: int | None = Field(
+        default=None, index=True, foreign_key="event.id", ondelete="CASCADE"
+    )
     # the public blob the logo is served from
     icon_url: str | None = Field(default=None, max_length=500)
     user_seasons: list["DBUserTeamSeason"] = Relationship(

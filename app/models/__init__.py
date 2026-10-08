@@ -59,6 +59,7 @@ from app.models import (
     series_veto_step,
     settings,
     team,
+    team_invite,
     team_season,
     team_summary,
     types,

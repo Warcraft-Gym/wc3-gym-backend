@@ -2,6 +2,7 @@
 
 ## 2026-10-08
 
+* **Add**: team cups. `event.team_size` 2 to 4; a cup team is a team row with the cup as `teams.event_id` and may name no league; [team_invite](data/tables/team_invite.md) holds the players invited who have not answered. The routes under `/events/{id}/cup-teams` sign a team up, invite, accept, decline, leave and withdraw, and let a runner enter a team or swap a player; `GET /me/team-invites` answers the caller's; the draw refuses a short team; the ladder pool reads 2v2 or 4v4. [teams](data/tables/teams.md), [event](data/tables/event.md), the [events module](concepts/events-module.md#team-cups) and [the decision](decisions/cup-teams-live-for-one-cup.md) state it.
 * **Add**: `event.race_games_min`: an event that names it rates a player on the best current rating among the races with that many lifetime W3Champions games, refuses a player with no such race and counts the games floor over every race; every cup takes 20. `users.w3c_history_through` stamps how far a player's stored past seasons go, read once at a signup to such an event. [event](data/tables/event.md), [users](data/tables/users.md), [w3cstats](data/tables/w3cstats.md) and the [events module](concepts/events-module.md#entrants-seeds-divisions) state it.
 
 ## 2026-10-07

@@ -217,6 +217,8 @@ class Season(SeasonBase, DBModel, table=True):
     veto_by_best_of: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
+    # How many players a team of a team cup fields, 2 to 4; null is a 1v1 event
+    team_size: int | None = None
     entrant_cap: int | None = None
     # The fewest entrants the event is played with; the draw refuses below it
     entrant_min: int | None = None
@@ -641,6 +643,7 @@ class EventPublic(SQLModel):
     eligibility_required: bool = False
     bnet_required: bool = False
     veto_by_best_of: bool = False
+    team_size: int | None = None
     entrant_cap: int | None = None
     entrant_min: int | None = None
     checkin_days: int | None = None
@@ -722,6 +725,7 @@ class EventCreate(SQLModel):
     eligibility_required: bool = False
     bnet_required: bool = False
     veto_by_best_of: bool = False
+    team_size: int | None = Field(default=None, ge=2, le=4)
     entrant_cap: int | None = None
     entrant_min: int | None = Field(default=None, ge=2)
     # How many series one fixture holds, and a fixture pairs two team
@@ -773,6 +777,7 @@ class EventUpdate(SQLModel):
     eligibility_required: bool | None = None
     bnet_required: bool | None = None
     veto_by_best_of: bool | None = None
+    team_size: int | None = Field(default=None, ge=2, le=4)
     entrant_cap: int | None = None
     entrant_min: int | None = Field(default=None, ge=2)
     series_per_round: int | None = None
