@@ -10,7 +10,7 @@ import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 from sqlalchemy import (
     ColumnElement,
@@ -1686,6 +1686,61 @@ def _stats_for(
     return rating, sum(stat.games or 0 for stat in counted)
 
 
+def _lifetime_games(
+    session: OrmSession, user_ids: Iterable[int]
+) -> dict[int, dict[Race, int]]:
+    """Every player's games per race over every W3C season the app holds."""
+    ids = set(user_ids)
+    if not ids:
+        return {}
+    lifetime: dict[int, dict[Race, int]] = {}
+    for user_id, race, games in session.execute(
+        select(col(W3CStats.user_id), col(W3CStats.race), func.sum(col(W3CStats.games)))
+        .where(col(W3CStats.user_id).in_(ids))
+        .group_by(col(W3CStats.user_id), col(W3CStats.race))
+    ):
+        lifetime.setdefault(user_id, {})[race] = int(games or 0)
+    return lifetime
+
+
+class Rated(NamedTuple):
+    """A player as an event that counts races by their games rates them: the
+    highest window rating of a race with enough lifetime games, that race, the
+    window games over every race, and whether any race counted at all."""
+
+    mmr: int | None
+    race: Race | None
+    games: int
+    counted: bool
+
+
+def _rated(
+    user: User,
+    lifetime: dict[Race, int],
+    minimum: int,
+    season: int,
+    games_seasons: int | None = None,
+) -> Rated:
+    """Rate the player on the races they have really played.
+
+    A race counts once its lifetime games reach `minimum`, so a high rating
+    from a handful of games on another race never stands for the player; the
+    best current rating among the counting races does. The games floor reads
+    the window over every race.
+    """
+    counting = [race for race, games in lifetime.items() if games >= minimum]
+    rated = [
+        (mmr, race)
+        for race in counting
+        if (mmr := _stats_for(user, race, season)[0]) is not None
+    ]
+    best = max(rated, key=lambda pair: pair[0]) if rated else None
+    games = sum(_stats_for(user, race, season, games_seasons)[1] for race in Race)
+    return Rated(
+        best[0] if best else None, best[1] if best else None, games, bool(counting)
+    )
+
+
 def _warnings(
     event: Season, user: User | None, mmr: int | None, games: int
 ) -> list[str]:
@@ -1718,7 +1773,15 @@ def _entrant_publics(
         for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
     }
     means = _team_mmrs(session, rows, season)
-    return [_entrant_public(event, row, users, teams, means, season) for row in rows]
+    lifetime = (
+        _lifetime_games(session, [row.user_id for row in rows if row.user_id])
+        if event.race_games_min is not None
+        else None
+    )
+    return [
+        _entrant_public(event, row, users, teams, means, season, lifetime)
+        for row in rows
+    ]
 
 
 def _users_for(
@@ -1991,8 +2054,13 @@ def _entrant_public(
     teams: dict[int | None, Team],
     means: dict[int, int | None],
     season: int,
+    lifetime: dict[int, dict[Race, int]] | None = None,
 ) -> EventEntrantPublic:
-    """One entrant payload: the identity, the rating it is seeded on, the warnings."""
+    """One entrant payload: the identity, the rating it is seeded on, the warnings.
+
+    An event that counts races by their games warns on the best of them; the
+    rating shown and seeded on stays the race the player entered with.
+    """
     user = users.get(row.user_id)
     team = teams.get(row.team_id)
     mmr, games = (
@@ -2002,6 +2070,16 @@ def _entrant_public(
     )
     if row.team_id is not None:
         mmr = means.get(row.team_id)
+    warn_mmr, warn_games = mmr, games
+    if user is not None and lifetime is not None and event.race_games_min is not None:
+        rated = _rated(
+            user,
+            lifetime.get(ident(user), {}),
+            event.race_games_min,
+            season,
+            event.min_games_seasons,
+        )
+        warn_mmr, warn_games = rated.mmr, rated.games
     return EventEntrantPublic(
         id=ident(row),
         event_id=row.event_id,
@@ -2012,7 +2090,7 @@ def _entrant_public(
         channel=row.channel,
         mmr=mmr,
         mmr_synced_at=user.w3c_synced_at if user else None,
-        warnings=_warnings(event, user, mmr, games),
+        warnings=_warnings(event, user, warn_mmr, warn_games),
         seed=row.seed,
         seed_source=row.seed_source,
         mmr_at_seed=row.mmr_at_seed,
@@ -2140,8 +2218,10 @@ def _refresh_for(
         target = (
             (ident(user), tag.tag) if user is not None and tag is not None else None
         )
+        # a race that counts by its lifetime games needs the seasons before the window
+        history = event.race_games_min is not None
     if target is not None:
-        refresh_rating(*target)
+        refresh_rating(*target, history)
 
 
 def _hold_eligible(
@@ -2171,12 +2251,34 @@ def _hold_eligible(
         raise BadRequestError(
             f"{user.name} has no battle tag linked to Battle.net. Link it on the profile page first; this event takes linked players only."
         )
-    name = RACE_NAMES.get(race.value, race.value)
-    mmr, games = _stats_for(user, race, season, event.min_games_seasons)
-    if mmr is None:
-        raise BadRequestError(
-            f"W3Champions has no rating for {tag.tag} on {name}, so this event cannot take the signup."
+    if event.race_games_min is not None:
+        rated = _rated(
+            user,
+            _lifetime_games(session, [user_id]).get(user_id, {}),
+            event.race_games_min,
+            season,
+            event.min_games_seasons,
         )
+        if not rated.counted:
+            raise BadRequestError(
+                f"No race of {tag.tag} has {event.race_games_min} games on W3Champions yet, so this event cannot rate them."
+            )
+        if rated.mmr is None or rated.race is None:
+            raise BadRequestError(
+                f"W3Champions has no current rating for {tag.tag} on a race with {event.race_games_min} games or more, so this event cannot take the signup."
+            )
+        mmr, games = rated.mmr, rated.games
+        name = RACE_NAMES.get(rated.race.value, rated.race.value)
+        played = f"{user.name} played {games} games recently"
+    else:
+        name = RACE_NAMES.get(race.value, race.value)
+        rating, games = _stats_for(user, race, season, event.min_games_seasons)
+        if rating is None:
+            raise BadRequestError(
+                f"W3Champions has no rating for {tag.tag} on {name}, so this event cannot take the signup."
+            )
+        mmr = rating
+        played = f"{user.name} played {games} games on {name} recently"
     bounds = (
         f"from {event.mmr_min} to {event.mmr_max}"
         if event.mmr_min is not None and event.mmr_max is not None
@@ -2191,9 +2293,7 @@ def _hold_eligible(
             f"{user.name} is rated {mmr} on {name}; this event takes players rated {bounds}."
         )
     if event.min_games is not None and games < event.min_games:
-        raise BadRequestError(
-            f"{user.name} played {games} games on {name} recently; this event needs at least {event.min_games}."
-        )
+        raise BadRequestError(f"{played}; this event needs at least {event.min_games}.")
 
 
 def _enter(

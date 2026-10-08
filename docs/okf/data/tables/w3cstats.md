@@ -4,7 +4,7 @@ title: w3cstats
 description: One player's 1v1 record on W3Champions for one race in one W3Champions season, as the stats sync last read it.
 resource: ../../../../app/models/w3c_stats.py
 tags: [w3champions, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-08T14:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -42,7 +42,7 @@ Primary key `id`. Foreign key `user_id` to [users](users.md). Unique index on (`
 
 # Rules
 
-Only the 1v1 game mode is stored. The season the reads take is the `current_w3c_season` setting, else the newest stored season. `users.w3c_synced_at` stamps the sync.
+Only the 1v1 game mode is stored. The sync reads the live window; the seasons before it are read once per player, when an event that counts a race by its lifetime games first checks them, and kept, since a past season never changes. The season the reads take is the `current_w3c_season` setting, else the newest stored season. `users.w3c_synced_at` stamps the sync.
 
 The live window is that season and the one before it (`app/services/w3c_stats.py`). Eligibility, the entrant and draft board ratings, the series rows of a running event, the fantasy seeding and the Discord series cards read the window alone: the rating is the newest window row with an MMR on the race, the games are the sum of the window rows (`min_games_seasons` of 1 counts the current season alone). No read loads the rows for the summary.
 

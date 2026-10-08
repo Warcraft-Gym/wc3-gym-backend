@@ -21,19 +21,27 @@ REFRESH_TIMEOUT = 5.0
 REFRESH_AGAIN = 3600
 
 
-def refresh_rating(user_id: int, battle_tag: str) -> None:
-    """Read the player's W3Champions stats again, at most once an hour."""
+def refresh_rating(user_id: int, battle_tag: str, history: bool = False) -> None:
+    """Read the player's W3Champions stats again, at most once an hour.
+
+    An event that counts a race by its lifetime games also wants the seasons
+    before the window, which the app reads once per player and keeps.
+    """
     from app.services.settings import SettingsService
     from app.services.users import UserService
 
+    service = UserService(settings_app_service=SettingsService())
+    player = UserReduced(id=user_id, battleTag=battle_tag)
     with Session.begin() as session:
         user = session.get(User, user_id)
         asked = user.w3c_synced_at if user is not None else None
-        if asked is not None and (utcnow() - asked).total_seconds() < REFRESH_AGAIN:
-            return
-    try:
-        UserService(settings_app_service=SettingsService()).update_w3c_stats(
-            UserReduced(id=user_id, battleTag=battle_tag), timeout=REFRESH_TIMEOUT
-        )
-    except ExternalServiceError as error:
-        logger.info(f"No fresh W3Champions rating for a signup: {error}")
+    if asked is None or (utcnow() - asked).total_seconds() >= REFRESH_AGAIN:
+        try:
+            service.update_w3c_stats(player, timeout=REFRESH_TIMEOUT)
+        except ExternalServiceError as error:
+            logger.info(f"No fresh W3Champions rating for a signup: {error}")
+    if history:
+        try:
+            service.backfill_w3c_history(player, timeout=REFRESH_TIMEOUT)
+        except ExternalServiceError as error:
+            logger.info(f"No W3Champions history for a signup: {error}")

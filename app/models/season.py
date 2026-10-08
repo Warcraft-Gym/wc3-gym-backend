@@ -197,6 +197,9 @@ class Season(SeasonBase, DBModel, table=True):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = None
+    # The lifetime games a race needs before its rating counts; null reads the
+    # race of the signup alone, as a GNL season does
+    race_games_min: int | None = None
     mmr_min: int | None = None
     mmr_max: int | None = None
     # On: a signup outside the bounds is refused, not only warned, and the player
@@ -632,6 +635,7 @@ class EventPublic(SQLModel):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = None
+    race_games_min: int | None = None
     mmr_min: int | None = None
     mmr_max: int | None = None
     eligibility_required: bool = False
@@ -712,6 +716,7 @@ class EventCreate(SQLModel):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = Field(default=None, ge=1)
+    race_games_min: int | None = Field(default=None, ge=1)
     mmr_min: int | None = None
     mmr_max: int | None = None
     eligibility_required: bool = False
@@ -762,6 +767,7 @@ class EventUpdate(SQLModel):
     map_rules: Annotated[str | None, MapRules] = None
     min_games: int | None = None
     min_games_seasons: int | None = Field(default=None, ge=1)
+    race_games_min: int | None = Field(default=None, ge=1)
     mmr_min: int | None = None
     mmr_max: int | None = None
     eligibility_required: bool | None = None

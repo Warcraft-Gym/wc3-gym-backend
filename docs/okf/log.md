@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-08
+
+* **Add**: `event.race_games_min`: an event that names it rates a player on the best current rating among the races with that many lifetime W3Champions games, refuses a player with no such race and counts the games floor over every race; every cup takes 20. `users.w3c_history_through` stamps how far a player's stored past seasons go, read once at a signup to such an event. [event](data/tables/event.md), [users](data/tables/users.md), [w3cstats](data/tables/w3cstats.md) and the [events module](concepts/events-module.md#entrants-seeds-divisions) state it.
+
 ## 2026-10-07
 
 * **Add**: a draw can be taken back and a player swapped into a drawn bracket. `DELETE /events/{id}/stages/{stage_id}/series` deletes the stage's rounds with every series, result and veto under them until the event is finished, and opens the seeds again; `POST /events/{id}/entrants/{entrant_id}/replace` gives a player who has played no match a successor with their seed and series. The [events module](concepts/events-module.md#managing-an-event) and [roles and permissions](concepts/roles-and-permissions.md#organizers) state it.
