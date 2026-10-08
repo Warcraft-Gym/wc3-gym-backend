@@ -12,13 +12,13 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, make_url, select, update
+from sqlalchemy import func, make_url, or_, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.db import Session, init_engine
 from app.models.base import ident
-from app.models.enums import EventKind, StageFormat
+from app.models.enums import EventKind, Race, StageFormat
 from app.models.event_award import EventAward
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
@@ -34,7 +34,9 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame
 from app.models.types import utcnow
+from app.models.user import User
 from app.models.user_battle_tag import UserBattleTag
+from app.services.battle_tags import attach_tag
 from app.services.koth.night import _league
 
 # The archive board is bounded by these import limits, independent of source size.
@@ -601,32 +603,88 @@ def _insert_event(
     return event_id
 
 
-def link_players(links: object, *, apply: bool = False) -> dict[str, Any]:
-    """Point every archived name at the player its reviewed battle tag names.
-
-    links maps a kept name to a battle tag. A name the links leave out is
-    unlinked, so a rerun with the same links changes nothing; a tag no
-    player holds links nothing and is reported.
-    """
+def _read_links(data: object) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+    """The reviewed links file: `links` maps a kept name to a battle tag, and the
+    optional `players` maps a tag to the `country` and `race` w3champions or a
+    reviewer gave it."""
+    links = data.get("links") if isinstance(data, dict) else None
+    players = data.get("players", {}) if isinstance(data, dict) else None
     if not isinstance(links, dict) or not all(
         isinstance(k, str) and isinstance(v, str) for k, v in links.items()
     ):
         raise ValueError("Links must map each name to a battle tag")
+    if not isinstance(players, dict) or not all(
+        isinstance(tag, str)
+        and isinstance(p, dict)
+        and (
+            p.get("country") is None
+            or (isinstance(p["country"], str) and len(p["country"]) <= 6)
+        )
+        and (p.get("race") is None or p["race"] in Race.__members__)
+        for tag, p in players.items()
+    ):
+        raise ValueError("Players must map each battle tag to a country and a race")
+    return links, players
+
+
+def link_players(data: object, *, apply: bool = False) -> dict[str, Any]:
+    """Point every archived name at the player its reviewed battle tag names.
+
+    A name the links leave out is unlinked, so a rerun with the same file
+    changes nothing. A tag no player holds creates one when `players` names
+    it, as a KOTH signup does: the tag's name, no login, the given race, else
+    random, and the given country; else it links nothing and is reported. A
+    player with no country takes the given one. Dry-run rolls every change back.
+    """
+    links, players = _read_links(data)
     tags = {fold(name): tag.strip().lower() for name, tag in links.items()}
-    with Session.begin() as session:
+    given = {tag.strip().lower(): (tag.strip(), p) for tag, p in players.items()}
+    lowered = func.lower(func.trim(col(UserBattleTag.tag)))
+    with Session() as session:
         holders = {
             tag: user_id
             for tag, user_id in session.execute(
-                select(
-                    func.lower(func.trim(col(UserBattleTag.tag))),
-                    col(UserBattleTag.user_id),
-                ).where(
-                    func.lower(func.trim(col(UserBattleTag.tag))).in_(
-                        set(tags.values())
-                    )
+                select(lowered, col(UserBattleTag.user_id)).where(
+                    lowered.in_(set(tags.values()))
                 )
             )
         }
+        created = []
+        for tag in sorted(set(tags.values()) - holders.keys()):
+            if tag not in given:
+                continue
+            written, p = given[tag]
+            person = User(
+                name=written.split("#")[0],
+                discordTag=None,
+                discordId=None,
+                race=Race[p.get("race") or "RANDOM"],
+                country=p.get("country"),
+            )
+            session.add(person)
+            attach_tag(session, person, written, "archive")
+            session.flush()
+            holders[tag] = ident(person)
+            created.append(written)
+        fills = {
+            holders[tag]: p["country"]
+            for tag, (_, p) in given.items()
+            if tag in holders and p.get("country")
+        }
+        blank = session.scalars(
+            select(col(User.id)).where(
+                col(User.id).in_(fills),
+                or_(col(User.country).is_(None), col(User.country) == ""),
+            )
+        ).all()
+        for user_id in blank:
+            session.execute(
+                update(User)
+                .where(col(User.id) == user_id)
+                .values(country=fills[user_id])
+                .execution_options(synchronize_session=False)
+            )
+        filled = len(blank)
         wanted = {name: holders.get(tag) for name, tag in tags.items()}
         changed: dict[int | None, list[int]] = defaultdict(list)
         linked = 0
@@ -645,17 +703,22 @@ def link_players(links: object, *, apply: bool = False) -> dict[str, Any]:
             linked += target is not None
             if target != user_id:
                 changed[target].append(row_id)
+        for target, ids in changed.items():
+            session.execute(
+                update(HistoricalParticipant)
+                .where(col(HistoricalParticipant.id).in_(ids))
+                .values(user_id=target)
+            )
         if apply:
-            for target, ids in changed.items():
-                session.execute(
-                    update(HistoricalParticipant)
-                    .where(col(HistoricalParticipant.id).in_(ids))
-                    .values(user_id=target)
-                )
+            session.commit()
+        else:
+            session.rollback()
     return {
         "mode": "apply" if apply else "dry_run",
         "linked_rows": linked,
         "changed_rows": sum(len(ids) for ids in changed.values()),
+        "created_players": created,
+        "countries_filled": filled,
         "unknown_tags": sorted({links[n] for n in links if wanted[fold(n)] is None}),
     }
 

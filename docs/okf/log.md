@@ -2,7 +2,7 @@
 
 ## 2026-10-08
 
-* **Update**: an archived KOTH participant links to a player through a reviewed name to battle tag list, applied by the importer's `--links`; `GET /koth/winners` reads a linked archived crown with the player's name, `user_id` and `country`, and every crown carries `country`. [KOTH night](concepts/koth.md#historical-imports) and [historical_participant](data/tables/historical_participant.md) state it.
+* **Update**: an archived KOTH participant links to a player through a reviewed name to battle tag list, applied by the importer's `--links`, which also creates a reviewed player no account holds and fills a blank country from the file; `GET /koth/winners` reads a linked archived crown with the player's name, `user_id` and `country`, and every crown carries `country`. [KOTH night](concepts/koth.md#historical-imports) and [historical_participant](data/tables/historical_participant.md) state it.
 
 ## 2026-10-06
 
