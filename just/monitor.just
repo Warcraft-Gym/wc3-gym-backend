@@ -1,5 +1,5 @@
 # The egress monitor's reads from a deployment: `just monitor routes staging 7` or `days=7`. Every recipe
-# takes an environment first, prod by default: prod, staging (the shared preview deployment) or local (`just serve`).
+# takes an environment first, prod by default: prod, staging (the preview of main) or local (`just serve`).
 # CRON_SECRET comes from .env (gitignored); prod and staging share it.
 
 # Recipes run from the repository root, one level up from this file.
@@ -17,7 +17,7 @@ api env="prod":
     set -euo pipefail
     case "{{ env }}" in
     (prod)    echo "https://wc3-gym-backend-snowy.vercel.app" ;;
-    (staging) echo "https://wc3-gym-backend-git-staging-wc-3-gym.vercel.app" ;;
+    (staging) echo "https://wc3-gym-backend-git-main-wc-3-gym.vercel.app" ;;
     (local)   echo "http://localhost:5002" ;;
     (*)       echo "env must be prod, staging or local" >&2; exit 2 ;;
     esac

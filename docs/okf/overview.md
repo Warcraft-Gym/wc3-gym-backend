@@ -4,7 +4,7 @@ title: wc3-gym-backend
 description: The FastAPI backend of the Warcraft Gym league app, on Vercel with a Supabase Postgres, serving the web app, the GNL website, the Discord adapter and Nightbot.
 resource: https://github.com/Warcraft-Gym/wc3-gym-backend
 tags: [data, api, deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T12:53:50Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-09T10:40:00Z }
 sources:
   - id: readme
     resource: ../../README.md
@@ -22,9 +22,9 @@ The one backend of the Gym Newbie League (GNL) and the other Warcraft Gym events
 
 | Target | What |
 |---|---|
-| production | Vercel project `wc3-gym-backend`, built from `main`, database on the production Supabase project through the transaction pooler |
-| staging | the `staging` branch and the shared staging database, which a workflow moves to the merged commit on every push to `main`; Vercel builds no preview from that push, so the staging alias does not follow `main` |
-| previews | none from a push: Vercel builds only `main`; a preview exists when someone makes one by hand |
+| production | Vercel project `wc3-gym-backend`, built from the `release` branch, which a GitHub Release moves to a commit on `main`; database on the production Supabase project through the transaction pooler |
+| staging | the preview of `main`, built on every merge; its build migrates the shared staging database it serves from |
+| previews | none from a pull request: Vercel builds only `main` and `release`; a preview of another branch exists when someone makes one by hand |
 | local | `uv run just up` (Docker) or `uv run just serve` (the Vercel entry point from the working tree) |
 
 # Layout

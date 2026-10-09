@@ -1,23 +1,24 @@
 # Preview databases
 
-Vercel builds a preview only when someone makes one by hand; no push builds one. Vercel calls these deployments previews; the database project they use is the staging project. Previews used to run against the production Supabase database with the production admin token, so a preview of a migration served new code on the old schema, and anything written through a preview URL landed in real data. Previews now run against a separate Supabase project, the staging project, and this page says how.
+Vercel builds a preview of `main` on every merge, and that preview is staging. A preview of another branch exists only when someone makes one by hand. Vercel calls these deployments previews; the database project they use is the staging project. Previews used to run against the production Supabase database with the production admin token, so a preview of a migration served new code on the old schema, and anything written through a preview URL landed in real data. Previews now run against a separate Supabase project, the staging project, and this page says how.
 
 ## The three databases on the staging project
 
 | Database | What it is |
 |---|---|
 | `wc3gym_template` | Seeded from the prod dump, migrated to the same revision as `main`. Locked only while it is copied. Only ever copied. |
-| `wc3gym_staging` | The shared staging database, same content as the template, open for connections. Every preview that adds no migration uses it. |
+| `wc3gym_staging` | The shared staging database, same content as the template, open for connections. Staging, the preview of `main`, serves from it, and so does every other preview that adds no migration. |
 | `wc3gym_<branch>` | A branch's own copy of the template. Exists only while a branch that adds a migration is alive. |
 
-The template and the shared database follow `main`: on every push to `main`, the `Vercel staging database` workflow runs `alembic upgrade head` on both, the same command the production build runs for prod. So after a merge, prod, the template and the shared database all sit at the merged revision.
+The template and the shared database follow `main`: the preview build of `main` runs `alembic upgrade head` on both before it serves, the same command the production build of a release runs for prod. So after a merge's staging build, the template and the shared database sit at the merged revision, and prod reaches it with the next release.
 
 ## What a preview build does
 
-`vercel.json` runs `api/preview_db.py` in every preview build. It compares the branch's latest migration with the revision `wc3gym_staging` is at:
+`vercel.json` runs `api/preview_db.py` in every preview build. On `main` it migrates staging; on any other branch it compares the branch's latest migration with the revision `wc3gym_staging` is at:
 
 | Situation | Action |
 |---|---|
+| The branch is `main` | Migrate the template and `wc3gym_staging`, then use `wc3gym_staging`. `main` never gets a copy. |
 | Same revision | Use `wc3gym_staging`. Nothing is created. |
 | The branch adds migrations on top of it | Copy the template to `wc3gym_<branch>` if it does not exist (`CREATE DATABASE ... TEMPLATE`, well under a second), run the branch's migrations on the copy. |
 | The copy exists but the branch's migration files changed | Drop it (`WITH (FORCE)`, which disconnects the older preview) and copy the template again. |
@@ -38,10 +39,10 @@ Exactly one trigger: GitHub reports the branch deleted. The `Vercel staging data
 
 - **Pull request without a migration.** Every push builds against the shared database. Nothing to clean up.
 - **Migration pull request, closed unmerged.** The first push made a copy. Branch deleted: copy dropped. Branch kept: copy stays until the branch goes.
-- **Migration pull request, merged.** Prod, template and shared database migrate to the new revision. The merged branch is deleted, its copy dropped. New branches match the shared database again and create nothing.
+- **Migration pull request, merged.** The staging build of `main` migrates the template and the shared database to the new revision; prod migrates with the next release. The merged branch is deleted, its copy dropped. New branches match the shared database again and create nothing.
 - **Two migration pull requests open at once.** Two copies, independent of each other.
 - **One of them merges first.** The shared database moves to the merged revision; the other branch does not know it, so its next build fails with "rebase onto main". That rebase is needed anyway, or `main` would end up with two migration heads. After the rebase the branch gets a fresh copy from the now newer template.
-- **Both merge and the second was never rebased.** `main` has two heads; `alembic upgrade head` refuses, so the production build fails and nothing deploys. The single-head test fails on the pull request first.
+- **Both merge and the second was never rebased.** `main` has two heads; `alembic upgrade head` refuses, so the staging build fails, and a release of that commit would fail the same way. The single-head test fails on the pull request first.
 - **An old branch while `main` gained a migration.** Build fails with "rebase onto main". Stricter than needed, never a preview that silently errors.
 - **A build fails halfway through a copy.** The copy is partly migrated and has no fingerprint comment. The next push drops it and copies the template again, rather than continuing on a half-migrated database.
 - **A push edits a migration in place.** The revision id is unchanged, so alembic sees the copy at head, but the fingerprint differs: the copy is dropped and rebuilt.
@@ -61,7 +62,7 @@ A Supabase project is one Postgres instance. Extra databases work through the po
 |---|---|---|
 | Choose or create the branch database, migrate it | `api/preview_db.py` build, called from `vercel.json` | Preview build |
 | Point the app at its database | `api/index.py` | Cold start |
-| Migrate template and shared database | `.github/workflows/vercel-staging-db.yml` → `api/preview_db.py migrate` | Push to `main` |
+| Migrate template and shared database | `api/preview_db.py` build on `main`, called from `vercel.json` | Preview build of `main` |
 | Drop a branch's copy | `.github/workflows/vercel-staging-db-drop.yml` → `api/preview_db.py drop-branch <branch>` | Branch deleted |
 | Single migration head | `tests/test_migrations.py` | Every pull request |
 | Reseed, list, manual drop | `just vercel seed staging`, `just vercel list`, `just vercel drop <database>` | By hand |

@@ -1,9 +1,9 @@
 ---
 type: Pitfall
 title: Two Alembic heads after a squash
-description: Two branches that each add a migration on the same parent leave two heads on main after the second squash, breaking CI and the staging migrate job.
+description: Two branches that each add a migration on the same parent leave two heads on main after the second squash, breaking CI and the staging build.
 tags: [data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-09T10:40:00Z }
 sources:
   - id: source
     resource: ../../../tests/test_migrations.py
