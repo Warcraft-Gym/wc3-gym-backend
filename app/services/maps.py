@@ -8,6 +8,7 @@ from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
 from app.models.map import LadderMapRow, Map, MapCreate, MapPublic, MapUpdate
+from app.models.types import map_modes
 from app.services import blob, ladder_maps
 
 
@@ -168,9 +169,11 @@ class MapService:
             for row in ladder_maps.ladder_rows(by_base, mode)
             if row.w3c_name in set(names)
         }
+        tag = ladder_maps.MODE_NAMES.get(mode)
         with Session.begin() as session:
             maps = Map.get_all(session)
             known = _known(maps)
+            modes = {ident(map): map.modes for map in maps}
             # a map that already has a picture, uploaded or published, is left alone
             pictured = set(
                 session.scalars(select(col(Map.id)).where(col(Map.image).is_not(None)))
@@ -195,12 +198,35 @@ class MapService:
                     taken.add(shortname.lower())
                     map = Map.add(
                         session,
-                        {"name": name, "shortname": shortname, "image": row.image_url},
+                        {
+                            "name": name,
+                            "shortname": shortname,
+                            "image": row.image_url,
+                            "modes": map_modes([tag] if tag else None),
+                        },
                     )
                     map_id = ident(map)
                 elif row.image_url and map_id not in pictured:
-                    Map.update(session, map_id, name=name, image=row.image_url)
+                    Map.update(
+                        session,
+                        map_id,
+                        name=name,
+                        image=row.image_url,
+                        modes=_tagged(modes.get(map_id), tag),
+                    )
                 else:
-                    Map.update(session, map_id, name=name)
+                    Map.update(
+                        session,
+                        map_id,
+                        name=name,
+                        modes=_tagged(modes.get(map_id), tag),
+                    )
                 map_ids.append(map_id)
         return map_ids
+
+
+def _tagged(current: str | None, tag: str | None) -> str | None:
+    """The modes of a map with the ladder it was imported from added."""
+    if not tag:
+        return current
+    return map_modes([*(current or "").split(","), tag])

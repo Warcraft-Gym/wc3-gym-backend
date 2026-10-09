@@ -364,6 +364,8 @@ def test_an_organizer_imports_the_ladder_maps_and_nothing_else(
 
     assert resp.status_code == 200, resp.text
     assert [row["name"] for row in resp.json()] == ["Turtle Rock v2"]
+    # the map is tagged with the ladder it came from
+    assert resp.json()[0]["modes"] == "1v1"
     listed = {
         row["w3c_name"]: row
         for row in client.get("/maps/ladder-import", headers=headers).json()
@@ -470,3 +472,19 @@ def test_a_map_off_the_ladder_lists_with_the_picture_warcraft3_info_has(
         for row in client.get("/maps/ladder-import", headers=auth_headers).json()
     }
     assert "War Hail" not in listed
+
+
+def test_a_map_names_the_modes_it_is_played_as(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The modes read back each once, in their own order; an unknown one is refused."""
+    map_id = seeded["map_id"]
+    resp = client.put(
+        f"/maps/{map_id}",
+        json={"modes": ["ffa", "2v2", "1v1", "2v2"]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["modes"] == "1v1,2v2,ffa"
+    refused = client.put(f"/maps/{map_id}", json={"modes": "7v7"}, headers=auth_headers)
+    assert refused.status_code == 422

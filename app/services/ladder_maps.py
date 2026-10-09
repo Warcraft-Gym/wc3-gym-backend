@@ -25,6 +25,8 @@ IMAGE_BASE_URL = "https://d3upx5peno0o6w.cloudfront.net/"
 
 # The w3champions game mode the league plays.
 SOLO_MODE = 1
+# The W3Champions game modes a pool is read from, by the mode a map is tagged with
+MODE_NAMES = {1: "1v1", 2: "2v2", 4: "4v4"}
 
 # A trailing version word: "v2", "2.0", "v1.3".
 _VERSION = re.compile(r"^v?(\d+(?:\.\d+)*)$")

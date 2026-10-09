@@ -86,6 +86,8 @@ BEFORE_ORGANIZERS = "d2a8f5c1e736"
 BEFORE_CUP_BEST_OF = "a8d3e1f6c924"
 # The revision before a race counts by its lifetime games
 BEFORE_RACE_GAMES = "c7e2b9d4a613"
+# The revision before a map names the modes it is played as
+BEFORE_MAP_MODES = "e7b4f2a9c5d1"
 
 
 def comparable(
@@ -1624,3 +1626,16 @@ def test_the_race_games_floor_and_the_history_stamp_are_added_and_dropped(
     downgrade_to(url, BEFORE_RACE_GAMES)
     assert "race_games_min" not in columns("event")
     assert "w3c_history_through" not in columns("users")
+
+
+def test_the_map_modes_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "map_modes")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("maps")}
+
+    assert "modes" in columns()
+    downgrade_to(url, BEFORE_MAP_MODES)
+    assert "modes" not in columns()
