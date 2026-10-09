@@ -162,7 +162,7 @@ FRONTEND_URL="http://localhost:5003"
 | `CLOUDFLARE_ACCESS_KEY_ID` | The R2 API token's key id, scoped to that bucket | `a1b2c3...` |
 | `CLOUDFLARE_SECRET_ACCESS_KEY` | The R2 API token's secret | 64-character hex string |
 
-This table is the deploy list: every variable a deployment sets. Vercel injects two more the code reads. `VERCEL_ENV` opens every replay key in the R2 bucket, so one deployment never overwrites another's file (`production/replays/12/game1.w3g`; off Vercel the key starts with `development`). `VERCEL_ENV` also gates the preview database: only a deployment reading `preview` picks a database at all, and it takes the copy named by `VERCEL_GIT_COMMIT_REF` when the build made one, the shared `wc3gym_staging` otherwise. `.env.example` is the local list, the subset a working tree needs, and the four `CLOUDFLARE_*` rows carry their bucket note there.
+This table is the deploy list: every variable a deployment sets. Vercel injects two more the code reads. `VERCEL_ENV` opens every replay key in the R2 bucket, so one deployment never overwrites another's file (`production/replays/12/game1.w3g`; off Vercel the key starts with `development`). `VERCEL_ENV` also gates the preview database: only a deployment reading `preview` picks a database at all, and it takes the copy named by its branch (`PREVIEW_BRANCH`, which the deploy workflow sets on staging, else `VERCEL_GIT_COMMIT_REF`) when the build made one, the shared `wc3gym_staging` otherwise. `.env.example` is the local list, the subset a working tree needs, and the four `CLOUDFLARE_*` rows carry their bucket note there.
 
 **Important Notes:**
 - `host.docker.internal` is a special DNS name that resolves to the host machine from within a Docker container

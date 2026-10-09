@@ -43,7 +43,7 @@ DB_RED = 0.9  # a database over this share of DB_CAP_MB alerts
 VERCEL_KEY = "vercel"
 # The staging project shares the egress cap; Vercel runs crons on production only, so prod's run
 # takes staging's snapshot through its own route and reads its windows back
-STAGING_API = "https://wc3-gym-backend-git-main-wc-3-gym.vercel.app"
+STAGING_API = "https://staging-api.warcraft-gym.com"
 VERCEL_API = "https://api.vercel.com"
 VERCEL_CREDIT_USD = 20.0  # Pro's monthly usage credit (vercel.com/docs/plans/pro-plan); past it, usage bills on demand
 VERCEL_FEES = "Subscription Licenses"  # the charge category of plan and add-on fees, which is not usage
