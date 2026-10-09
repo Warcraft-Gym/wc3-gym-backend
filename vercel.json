@@ -2,11 +2,10 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "main": true,
-      "release": true
+      "main": true
     }
   },
-  "ignoreCommand": "[ \"$VERCEL_GIT_PREVIOUS_SHA\" != \"$VERCEL_GIT_COMMIT_SHA\" ] && git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . ':!docs' ':!AGENTS.md' ':!CLAUDE.md' ':!justfile' ':!.github' ':!.gitignore' || exit 1",
+  "ignoreCommand": "[ \"$VERCEL_ENV\" != production ] && [ \"$VERCEL_GIT_PREVIOUS_SHA\" != \"$VERCEL_GIT_COMMIT_SHA\" ] && git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . ':!docs' ':!AGENTS.md' ':!CLAUDE.md' ':!justfile' ':!.github' ':!.gitignore' || exit 1",
   "buildCommand": "pip install uv && case \"$VERCEL_ENV\" in production) uv run --frozen alembic upgrade head ;; preview) uv run --frozen python api/preview_db.py ;; esac",
   "crons": [
     { "path": "/jobs/w3c-sync", "schedule": "0 4 * * *" },

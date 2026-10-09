@@ -1,7 +1,7 @@
 ---
 type: Runbook
 title: Deploy to Vercel
-description: A merge to main builds staging and migrates the staging database in that build; a GitHub Release builds production and migrates it in the build; the Hobby plan sets the limits.
+description: A merge to main builds staging and migrates the staging database in that build; a GitHub Release of a commit on main builds production and migrates it in the build; the Hobby plan sets the limits.
 resource: ../../../vercel.json
 tags: [deploy]
 generated: { by: claude-code/claude-opus-5-5, at: 2026-10-09T10:40:00Z }
@@ -31,13 +31,13 @@ sources:
 
 # A release: production
 
-1. `uv run just release` publishes a GitHub Release of `main`, tagged with the date (`v2026.10.09`; `uv run just release v2026.10.09.2` for a second one that day). The notes list the pull requests since the last release.
-2. The `Release` workflow moves the `release` branch to the tagged commit. Release only a commit on `main`. `release` only moves forward, so roll back with Vercel, not with an older tag. A pre-release ships nothing.
-3. Vercel builds production from `release`. The build runs `alembic upgrade head` against the production database before the new code is promoted. A failed migration stops the deploy and the previous build keeps serving.
+1. `uv run just release` publishes a GitHub Release of `main`, tagged `vYYYY.MM.DD.N`: the UTC date and that day's release count from 1, for example `v2026.10.09.1`. The notes list the pull requests since the last release.
+2. The `Release` workflow asks Vercel to build the tagged commit as production and waits until it serves. Release only a commit on `main`; a pre-release ships nothing. The workflow reads `VERCEL_TOKEN` and `VERCEL_TEAM_ID` from the GitHub environment `release`; keep that environment open to `v*` tags only.
+3. The production build runs `alembic upgrade head` against the production database before the new code is promoted. A failed migration stops the deploy, the previous build keeps serving, and the workflow fails.
 4. Release the backend before the frontend: the backend stays compatible with the old frontend, and a new frontend may need the new backend.
 5. Check what production serves by asking the API for a field the change added, not by looking for a deployment row: a rate-limited day produces no row and production stays on the previous build.
 
-A release can carry several migrations. A migration that drops or changes a column ships in a release after the one whose code stopped reading it ([the pitfall](../pitfalls/column-drop-two-deploys.md)). A rollback is Vercel's Instant Rollback to the previous production deployment. It brings back the old code and leaves the schema as it is.
+A release can carry several migrations. A migration that drops or changes a column ships in a release after the one whose code stopped reading it ([the pitfall](../pitfalls/column-drop-two-deploys.md)). The project's production branch is `releases-only`, a name no branch uses, so no push builds production. Never create a branch with that name. A rollback is Vercel's Instant Rollback to the previous production deployment. It brings back the old code and leaves the schema as it is.
 
 # Environment
 
@@ -45,7 +45,7 @@ The README's variable table is the whole deploy list. Vercel adds `VERCEL_ENV` a
 
 # Previews
 
-Vercel builds `main` and `release` only (`git.deploymentEnabled` in `vercel.json`): a pull request builds no preview. A preview of another branch exists only when someone makes one by hand. A preview build picks its database in the staging Supabase project by its branch name: `main` migrates and uses the shared staging database; another branch with no migration uses the shared database; a branch with a migration gets a copy of the locked template and migrates it. A branch that does not know the shared database's revision fails its build with "rebase onto main". The copy is dropped when the branch is deleted. A preview deployed from an export of the tree carries no branch name, so the build picks no database for it: it shows that the code builds and starts, and nothing about data. See [preview databases](../../PREVIEW-DATABASES.md). Previews sign in on the Clerk dev instance and are public.
+Git builds `main` only (`git.deploymentEnabled` in `vercel.json`), as staging: a pull request builds no preview. A preview of another branch exists only when someone makes one by hand. A preview build picks its database in the staging Supabase project by its branch name: `main` migrates and uses the shared staging database; another branch with no migration uses the shared database; a branch with a migration gets a copy of the locked template and migrates it. A branch that does not know the shared database's revision fails its build with "rebase onto main". The copy is dropped when the branch is deleted. A preview deployed from an export of the tree carries no branch name, so the build picks no database for it: it shows that the code builds and starts, and nothing about data. See [preview databases](../../PREVIEW-DATABASES.md). Previews sign in on the Clerk dev instance and are public.
 
 # The recipes
 
