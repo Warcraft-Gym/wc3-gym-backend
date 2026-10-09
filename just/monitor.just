@@ -17,7 +17,7 @@ api env="prod":
     set -euo pipefail
     case "{{ env }}" in
     (prod)    echo "https://wc3-gym-backend-snowy.vercel.app" ;;
-    (staging) echo "https://staging-api.warcraft-gym.com" ;;
+    (staging) echo "https://wc3-gym-backend-staging.vercel.app" ;;
     (local)   echo "http://localhost:5002" ;;
     (*)       echo "env must be prod, staging or local" >&2; exit 2 ;;
     esac

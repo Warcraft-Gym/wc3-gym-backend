@@ -31,7 +31,7 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_RELEASE_TOKEN }}
       VERCEL_ORG_ID: team_GhXgXCLZZajQ2vbY5ovL1ovx
       VERCEL_PROJECT_ID: prj_pHhKJFTM7T3SbOKtT54PWHu7Ttqc
-      STAGING: staging-api.warcraft-gym.com
+      STAGING: wc3-gym-backend-staging.vercel.app
     steps:
       - uses: actions/checkout@v4
         with:
