@@ -1,8 +1,8 @@
 name: Release
 
-# A published GitHub Release moves the `release` branch to the tagged commit; Vercel builds production
-# from `release`, and a push to main builds only the staging preview. Only a commit on main ships, and
-# `release` only moves forward, so a rollback goes through Vercel. A pre-release ships nothing.
+# A published GitHub Release of a commit on main deploys that commit to production: Vercel builds it
+# from GitHub, and the job waits until production serves it. A merge to main builds only staging, and a
+# pre-release ships nothing. VERCEL_TOKEN and VERCEL_TEAM_ID live on the `release` environment.
 on:
   release:
     types: [published]
@@ -10,16 +10,40 @@ on:
 concurrency: release
 
 jobs:
-  release-branch:
-    if: github.repository == 'Warcraft-Gym/wc3-gym-backend' && !github.event.release.prerelease
+  production:
+    if: github.repository_owner == 'Warcraft-Gym' && !github.event.release.prerelease
     runs-on: ubuntu-latest
+    environment: release
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Only a commit on main ships
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - name: Move release to the tagged commit
-        run: git push origin "$GITHUB_SHA:refs/heads/release"
+      - name: Build production on Vercel and wait until it serves
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          api="https://api.vercel.com"
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          body=$(jq -n --arg repo "$REPO" --arg sha "$GITHUB_SHA" '{name: $repo, project: $repo, target: "production",
+            gitSource: {type: "github", org: "Warcraft-Gym", repo: $repo, ref: "main", sha: $sha}}')
+          id=$(curl -sS --fail-with-body -X POST "$api/v13/deployments?teamId=$VERCEL_TEAM_ID&forceNew=1" \
+            -H "$auth" -H "Content-Type: application/json" -d "$body" | jq -er .id)
+          echo "Vercel deployment $id"
+          for _ in $(seq 90); do
+            state=$(curl -sS --fail-with-body "$api/v13/deployments/$id?teamId=$VERCEL_TEAM_ID" -H "$auth" | jq -r .readyState)
+            echo "$state"
+            case "$state" in
+              READY) exit 0 ;;
+              ERROR | CANCELED | BLOCKED) exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "not ready after 15 minutes"
+          exit 1

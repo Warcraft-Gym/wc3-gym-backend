@@ -2,7 +2,7 @@
 
 ## 2026-10-09
 
-* **Update**: a merge to `main` builds staging, the preview of `main`, whose build migrates the shared staging database; a GitHub Release moves the `release` branch, which Vercel builds as production. The `staging` branch and the staging migrate workflow are gone. [Deploy to Vercel](runbooks/deploy-vercel.md), [overview](overview.md), [migrations](data/migrations.md), [git and pull requests](conventions/git-and-pull-requests.md), [column drop](pitfalls/column-drop-two-deploys.md).
+* **Update**: a merge to `main` builds staging, the preview of `main`, whose build migrates the shared staging database; a GitHub Release of a commit on `main` deploys that commit to production through the release workflow, and no push builds production; tags are `vYYYY.MM.DD.N`. The `staging` branch and the staging migrate workflow are gone. [Deploy to Vercel](runbooks/deploy-vercel.md), [overview](overview.md), [migrations](data/migrations.md), [git and pull requests](conventions/git-and-pull-requests.md), [column drop](pitfalls/column-drop-two-deploys.md).
 * **Update**: `POST /events` for a GNL season checks `pick_ban` against the `map_ids` the body names, so an order with bans is taken with a pool that carries it. [GNL season](concepts/gnl-season.md) states it.
 
 ## 2026-10-08

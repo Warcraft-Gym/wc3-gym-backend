@@ -31,7 +31,7 @@ sources:
 - Alembic owns the schema. A model change ships with its migration, and `tests/test_migrations.py` fails when the migrated schema and the models differ.
 - The production build runs `alembic upgrade head` while the previous deployment keeps serving. Every migration must work with the code before it and the code after it: add a column nullable or with a default; drop a column, or change its type, only in a later pull request, released after the release whose code stopped reading it is live. See [the pitfall](../pitfalls/column-drop-two-deploys.md).
 - One migration in flight at a time. Two open pull requests that both add a migration produce two Alembic heads on `main` after the second squash, which breaks CI and the staging build. After merging `main` into a branch that carries a migration, run `uv run alembic heads` and re-point the revision before pushing.
-- A pull request builds no preview: Vercel builds only `main`, as staging, and `release`, as production. [Preview databases](../../PREVIEW-DATABASES.md) says which database a preview build of a branch takes.
+- A pull request builds no preview: Git builds only `main`, as staging; production comes from a GitHub Release. [Preview databases](../../PREVIEW-DATABASES.md) says which database a preview build of a branch takes.
 
 # Checks before a merge
 

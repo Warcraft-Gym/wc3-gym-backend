@@ -22,9 +22,9 @@ The one backend of the Gym Newbie League (GNL) and the other Warcraft Gym events
 
 | Target | What |
 |---|---|
-| production | Vercel project `wc3-gym-backend`, built from the `release` branch, which a GitHub Release moves to a commit on `main`; database on the production Supabase project through the transaction pooler |
+| production | Vercel project `wc3-gym-backend`, built from a GitHub Release of a commit on `main`, through the release workflow; database on the production Supabase project through the transaction pooler |
 | staging | the preview of `main`, built on every merge; its build migrates the shared staging database it serves from |
-| previews | none from a pull request: Vercel builds only `main` and `release`; a preview of another branch exists when someone makes one by hand |
+| previews | none from a pull request: Git builds only `main`; a preview of another branch exists when someone makes one by hand |
 | local | `uv run just up` (Docker) or `uv run just serve` (the Vercel entry point from the working tree) |
 
 # Layout
