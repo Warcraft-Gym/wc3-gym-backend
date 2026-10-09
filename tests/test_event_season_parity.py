@@ -62,6 +62,50 @@ def test_events_create_a_complete_gnl_run(
     assert client.get(f"/events/{event['id']}/achievements").json()
 
 
+def test_the_order_is_checked_against_the_pool_the_create_names(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Four maps under fixed,loser,loser leave three in the veto, two picks and one ban."""
+    with Session.begin() as session:
+        league = League(
+            name="Gym Newbie League",
+            short_name="GNL",
+            kind=LeagueKind.gnl,
+            entrant_kind=EntrantKind.drafted_teams,
+        )
+        maps = [Map(name=name, shortname=name) for name in ("CH", "EI", "TS", "LR")]
+        session.add_all([league, *maps])
+        session.flush()
+        league_id, map_ids = ident(league), [ident(game_map) for game_map in maps]
+
+    def create(name: str, pick_ban: str) -> Any:  # noqa: ANN401  # a response
+        return client.post(
+            "/events",
+            json={
+                "league_id": league_id,
+                "name": name,
+                "map_ids": map_ids,
+                "map_rules": "fixed,loser,loser",
+                "pick_ban": pick_ban,
+            },
+            headers=auth_headers,
+        )
+
+    fits = create("Season 19", "Ban_A|Pick_A|Pick_B")
+    assert fits.status_code == 201, fits.text
+    assert fits.json()["pick_ban"] == "Ban_A|Pick_A|Pick_B"
+
+    over = create("Season 20", "Ban_A|Ban_B|Pick_A|Pick_B")
+    assert over.status_code == 400, over.text
+    assert (
+        over.json()["error"] == "The pool allows 1 bans after 2 picks, the order has 2"
+    )
+    names = [
+        event["name"] for event in client.get(f"/events?league_id={league_id}").json()
+    ]
+    assert names == ["Season 19"]
+
+
 def test_event_reads_carry_the_useful_season_fields(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
