@@ -4,7 +4,7 @@ title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived on every read and ends on the admin's close.
 resource: ../../../app/models/season.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-09T12:00:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -31,7 +31,7 @@ A GNL season is one event of the GNL league with one stage of format `gnl`. Six 
 
 The event routes are the canonical API for a GNL season. A client reads `GET /leagues`, selects the league whose `kind` is `gnl`, then reads `GET /events?league_id={league_id}`. The league id is enough to select the GNL; the event query does not also need `kind=gnl`.
 
-`POST /events` creates a GNL season when `league_id` names the GNL league. The body may include `round_count`, `map_ids`, `series_per_round`, `map_rules`, `pick_ban`, `score_system` and `fantasy_grind`. The write creates the event, its single `gnl` stage, its rounds, its ordered map pool and its achievement rules in one transaction. The same event path updates and deletes it.
+`POST /events` creates a GNL season when `league_id` names the GNL league. The body may include `round_count`, `map_ids`, `series_per_round`, `map_rules`, `pick_ban`, `score_system` and `fantasy_grind`. The write creates the event, its single `gnl` stage, its rounds, its ordered map pool and its achievement rules in one transaction. The `pick_ban` of the body is checked against the `map_ids` of the same body: its picks fit the games of `map_rules`, and its bans fit the maps left in the veto after the picks. An order the pool cannot play refuses the whole write. The same event path updates and deletes it.
 
 GNL management uses `/events/{event_id}/teams`, `/series`, `/maps`, `/rounds`, `/signups`, `/ladder`, `/ladder-sync`, `/fantasy` and `/achievements`. Team identities are managed under `/leagues/{league_id}/teams`; their rosters, captains, availability and event standings are under `/events/{event_id}/teams`. No `/seasons` route and no season-named team, series or fantasy route exists.
 

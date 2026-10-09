@@ -6,8 +6,9 @@ achievement catalogue. They are written in one transaction here.
 """
 
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import selectinload
 
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.enums import EventKind, LeagueKind, StageFormat
@@ -46,11 +47,9 @@ class GnlEventService:
             fields = data.model_dump(
                 exclude={"stages", "round_count", "map_ids", "entrant_kind"}
             )
-            # The pool is written after the order check, so it starts empty
             event = Season(**fields, entrant_kind=league.entrant_kind, maps=[])
             session.add(event)
             session.flush()
-            check_order(event)
 
             stages = self._stages(data)
             session.add_all(
@@ -64,6 +63,14 @@ class GnlEventService:
             self._add_maps(session, event, data.map_ids)
             session.add_all(default_rows(ident(event)))
             session.flush()
+            # The order is checked against the pool the request names, so it reads the maps just added
+            pooled = session.get(
+                Season,
+                ident(event),
+                options=(selectinload(rel(Season.maps)),),
+                populate_existing=True,
+            )
+            check_order(pooled or event)
             return ident(event)
 
     @staticmethod

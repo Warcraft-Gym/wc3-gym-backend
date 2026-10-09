@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-09
+
+* **Update**: `POST /events` for a GNL season checks `pick_ban` against the `map_ids` the body names, so an order with bans is taken with a pool that carries it. [GNL season](concepts/gnl-season.md) states it.
+
 ## 2026-10-08
 
 * **Update**: an archived KOTH participant links to a player through a reviewed name to battle tag list, applied by the importer's `--links`, which also creates a reviewed player no account holds and fills a blank country from the file; `GET /koth/winners` reads a linked archived crown with the player's name, `user_id` and `country`, and every crown carries `country`. [KOTH night](concepts/koth.md#historical-imports) and [historical_participant](data/tables/historical_participant.md) state it.
