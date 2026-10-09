@@ -1,0 +1,59 @@
+name: Deploy
+
+# Vercel deploys nothing by itself (git.deploymentEnabled is false in vercel.json); this workflow does, with the
+# Vercel CLI. A push to main builds staging and serves it at $STAGING. A published GitHub Release tagged
+# vYYYY.MM.DD.N on a commit on main builds production. Vercel builds the uploaded tree with the project's own
+# variables, so no build secret reaches this runner. VERCEL_RELEASE_TOKEN is a repository secret: a token scoped to
+# this Vercel project. The two ids name the project and are not credentials.
+on:
+  push:
+    branches: [main]
+    paths-ignore: [docs/**, AGENTS.md, CLAUDE.md, justfile, .github/**, .gitignore]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # staging only from main, production only from a full release
+    if: >-
+      github.repository_owner == 'Warcraft-Gym' &&
+      (github.event_name == 'release' && !github.event.release.prerelease || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency: deploy-${{ github.event_name == 'release' && 'production' || 'staging' }}
+    environment:
+      name: ${{ github.event_name == 'release' && 'Production' || 'Preview' }}
+      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      contents: read
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_RELEASE_TOKEN }}
+      VERCEL_ORG_ID: team_GhXgXCLZZajQ2vbY5ovL1ovx
+      VERCEL_PROJECT_ID: prj_pHhKJFTM7T3SbOKtT54PWHu7Ttqc
+      STAGING: wc3-gym-backend-staging.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Only a calendar version on main ships
+        if: github.event_name == 'release'
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]] || { echo "tag $GITHUB_REF_NAME is not vYYYY.MM.DD.N"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Build on Vercel and wait until it serves
+        id: deploy
+        run: |
+          # Vercel blocks a CLI deploy whose git author is not on its team, so the tree goes up without .git
+          rm -rf .git
+          deploy() { npx --yes vercel@63.1.0 deploy --yes --archive=tgz --meta commit="$GITHUB_SHA" "$@"; }
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            url=$(deploy --prod)
+          else
+            # an upload carries no branch name: PREVIEW_BRANCH tells api/preview_db.py this build is staging
+            url=$(deploy --build-env PREVIEW_BRANCH=main --env PREVIEW_BRANCH=main)
+            curl -sS --fail-with-body -X POST "https://api.vercel.com/v2/deployments/${url#https://}/aliases?teamId=$VERCEL_ORG_ID" \
+              -H "Authorization: Bearer $VERCEL_TOKEN" -H "Content-Type: application/json" -d "{\"alias\": \"$STAGING\"}"
+            url="https://$STAGING"
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"

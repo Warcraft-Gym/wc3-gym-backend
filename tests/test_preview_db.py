@@ -59,13 +59,15 @@ def test_main_migrates_staging_not_a_copy(monkeypatch: pytest.MonkeyPatch) -> No
 
     calls: list[str] = []
     monkeypatch.setenv("VERCEL_ENV", "preview")
-    monkeypatch.setenv("VERCEL_GIT_COMMIT_REF", "main")
+    monkeypatch.setenv("PREVIEW_BRANCH", "main")
+    monkeypatch.delenv("VERCEL_GIT_COMMIT_REF", raising=False)
     monkeypatch.setattr(preview_db, "migrate", lambda: calls.append("migrate"))
     monkeypatch.setattr(preview_db, "connect", no_connection)
     preview_db.build()
     assert calls == ["migrate"]
     assert preview_db.runtime_database() == preview_db.SHARED
-    # any other branch still reads the shared revision to choose or copy
+    # a git build of any other branch still reads the shared revision to choose or copy
+    monkeypatch.delenv("PREVIEW_BRANCH")
     monkeypatch.setenv("VERCEL_GIT_COMMIT_REF", "feature/x")
     with pytest.raises(LookupError):
         preview_db.build()

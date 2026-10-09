@@ -70,7 +70,12 @@ def exists(conn: psycopg.Connection, name: str) -> bool:
 def preview_branch() -> str | None:
     if os.environ.get("VERCEL_ENV") != "preview":
         return None
-    return os.environ.get("VERCEL_GIT_COMMIT_REF") or None
+    # the Deploy workflow uploads without git metadata, so it names the branch in PREVIEW_BRANCH
+    return (
+        os.environ.get("PREVIEW_BRANCH")
+        or os.environ.get("VERCEL_GIT_COMMIT_REF")
+        or None
+    )
 
 
 def runtime_database() -> str | None:

@@ -71,4 +71,4 @@ A Supabase project is one Postgres instance. Extra databases work through the po
 
 - Vercel project, preview environment only: `DB_URL` naming the staging project (`.../postgres`; the database part is replaced per preview), and preview-only `ADMIN_TOKEN` and `JWT_SECRET_KEY`. Production and development keep their own values.
 - Repository secret `VERCEL_STAGING_DB_URL`: the same preview `DB_URL`, for the workflow.
-- Vercel exposes `VERCEL_ENV` and `VERCEL_GIT_COMMIT_REF` to build and runtime (system environment variables on).
+- Vercel exposes `VERCEL_ENV` and, on a build from git, `VERCEL_GIT_COMMIT_REF` to build and runtime (system environment variables on). The deploy workflow's staging upload has no git ref and sets `PREVIEW_BRANCH=main` instead.
