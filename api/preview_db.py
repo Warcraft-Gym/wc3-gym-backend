@@ -1,10 +1,11 @@
 """Which database a Vercel preview uses on the staging Supabase project, and the admin steps on it.
 
-Every preview uses the shared wc3gym_staging database. A branch that adds a migration gets its own
-copy of wc3gym_template instead, named after the branch, migrated in the preview build.
+The preview of main is staging: its build migrates wc3gym_template and wc3gym_staging, and it serves
+wc3gym_staging. Every other preview uses wc3gym_staging too, unless its branch adds a migration: then it
+gets its own copy of wc3gym_template, named after the branch, migrated in the preview build.
 Imported by api/index.py to point the app at the right database at cold start. DB_URL names the project.
 
-python -m api.preview_db                       the preview build: choose or create the branch copy (vercel.json)
+python -m api.preview_db                       the preview build: migrate staging on main, else choose or create the branch copy (vercel.json)
 python -m api.preview_db migrate               bring wc3gym_template and wc3gym_staging to head
 python -m api.preview_db seed <seed_dir>       reseed the template from a seed directory, then recreate wc3gym_staging from it
 python -m api.preview_db list                  the databases on the project
@@ -24,6 +25,7 @@ import psycopg
 
 SHARED = "wc3gym_staging"
 TEMPLATE = "wc3gym_template"
+STAGING_BRANCH = "main"  # its preview is staging: it owns SHARED, never a copy
 
 
 def branch_db_name(branch: str) -> str:
@@ -76,6 +78,8 @@ def runtime_database() -> str | None:
     branch = preview_branch()
     if not branch:
         return None
+    if branch == STAGING_BRANCH:
+        return SHARED
     name = branch_db_name(branch)
     with connect("postgres") as conn:
         return name if exists(conn, name) else SHARED
@@ -161,12 +165,16 @@ def drop(name: str) -> None:
 
 
 def build() -> None:
-    """The preview build: pick the shared database, or create and migrate the branch copy."""
+    """The preview build: on main, migrate staging; elsewhere pick the shared database, or create and
+    migrate the branch copy."""
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
     branch = preview_branch()
     if not branch:
+        return
+    if branch == STAGING_BRANCH:
+        migrate()
         return
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
     heads = scripts.get_heads()

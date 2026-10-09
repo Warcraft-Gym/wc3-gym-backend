@@ -59,7 +59,7 @@ One code, two mechanisms, two places you can reach from a laptop. Docker runs th
 | `seed` | the private seed repo | the seed repo |
 | Only here | `up`, `down`, `restart`, `psql`, `serve`, `import-xlsx`, `revision`, `reset` | `list`, `drop` (the preview databases), `url` |
 
-`just vercel` takes an environment, `prod` by default: `just vercel migrate` is production, `just vercel migrate staging` is the preview project. A push to `main` deploys production on its own; `just vercel deploy` is the same deploy from a working tree.
+`just vercel` takes an environment, `prod` by default: `just vercel migrate` is production, `just vercel migrate staging` is the preview project. A merge to `main` builds staging, and a GitHub Release (`uv run just release`) builds production; `just vercel deploy` deploys a working tree.
 
 The values come from `.env`, copied from `.env.example` and gitignored: `LOCAL_DB_URL`, `VERCEL_PROD_DB_URL` and `VERCEL_STAGING_DB_URL`.
 
@@ -69,7 +69,7 @@ The values come from `.env`, copied from `.env.example` and gitignored: `LOCAL_D
 
 Vercel serves `api/index.py`, which imports the same application the container runs. Set `DB_URL`, `JWT_SECRET_KEY`, `ADMIN_TOKEN`, `FRONTEND_URL`, `CLERK_SECRET_KEY`, `CLERK_AUTHORIZED_PARTIES`, `DISCORD_GUILD_ID` and the four `CLOUDFLARE_*` values in the project settings, plus the optional rows in the variable table below: `DISCORD_PUBLIC_KEY` is one of them, and `POST /discord/interactions` answers 503 while it is unset. That table is the whole list, and the deployment reads no `.env` file. `CRON_SECRET` is optional; when set, Vercel Cron sends it as a bearer token to `/jobs/w3c-sync`, and every `/jobs` route answers 503 without it. `/jobs/cast-reminders` takes `CLOUDFLARE_CRON_SECRET` instead. Vercel Hobby runs a cron once a day, so a Cloudflare Worker in `wc3-gym-discord-bot` (`cron/`, deployed by `deploy-cron.yml`) calls that one every five minutes; its failures show in that Worker's Cron Events.
 
-The production build runs `alembic upgrade head` (`vercel.json`) before the new code is promoted, so a migration that fails stops the deploy. Previews run against the staging Supabase project: the shared `wc3gym_staging` database, or a branch's own copy when the branch adds a migration. How and why is in [docs/PREVIEW-DATABASES.md](docs/PREVIEW-DATABASES.md). The old code keeps serving while the build runs, so every migration must work with the code before it and after it: add columns nullable or with a default, drop a column only after the code that read it has shipped.
+The production build runs `alembic upgrade head` (`vercel.json`) before the new code is promoted, so a migration that fails stops the deploy. Previews run against the staging Supabase project: the preview of `main` is staging, and its build migrates the shared `wc3gym_staging` database it serves from; any other preview uses that database, or a branch's own copy when the branch adds a migration. How and why is in [docs/PREVIEW-DATABASES.md](docs/PREVIEW-DATABASES.md). The old code keeps serving while the build runs, so every migration must work with the code before it and after it: add columns nullable or with a default, drop a column only after the code that read it has been released.
 
 Use the transaction pooler on port 6543 for `DB_URL`. The session pooler on port 5432 allows 15 clients in total, and every warm function instance holds pooled connections, so a few instances fill it and every other request answers `Database error`.
 

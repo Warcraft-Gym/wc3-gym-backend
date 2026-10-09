@@ -4,7 +4,7 @@ title: Migrations
 description: Alembic owns the schema, the production build migrates while the old code serves, a preview gets its own database copy, and one head is allowed at a time.
 resource: ../../../migrations/env.py
 tags: [data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-09T10:40:00Z }
 sources:
   - id: env
     resource: ../../../migrations/env.py
@@ -30,13 +30,13 @@ The production build runs the migration while the previous deployment keeps serv
 
 1. Add a column nullable or with a server default. Rename a table by creating the new one and leaving a view under the old name.
 2. Ship the code that reads the new shape.
-3. Drop the old column or view in a later pull request, merged after step 2 is live.
+3. Drop the old column or view in a later pull request, released after the release that carries step 2 is live.
 
 The schema parity test is strict, so an unread column stays declared on the table class until the drop pull request. See [the pitfall](../pitfalls/column-drop-two-deploys.md).
 
 # Heads
 
-Two pull requests that each add a migration on the same parent produce two heads on `main` after the second squash, which breaks CI and the staging migrate job. One migration in flight at a time. After merging `main` into a branch that carries a migration, run `uv run alembic heads` and re-point the revision. See [the pitfall](../pitfalls/alembic-two-heads.md).
+Two pull requests that each add a migration on the same parent produce two heads on `main` after the second squash, which breaks CI and the staging build. One migration in flight at a time. After merging `main` into a branch that carries a migration, run `uv run alembic heads` and re-point the revision. See [the pitfall](../pitfalls/alembic-two-heads.md).
 
 # Where migrations run
 
@@ -44,9 +44,9 @@ Two pull requests that each add a migration on the same parent produce two heads
 |---|---|
 | tests | on a temporary SQLite file, every run |
 | local Docker | at every container start; a start with nothing to do logs no `Running upgrade` line |
-| Vercel production | in the build command, before the new code is promoted; a failed migration stops the deploy |
-| Vercel preview | in the build, against the branch's own copy of the staging template when the branch adds a migration, else the shared staging database. See [preview databases](../../PREVIEW-DATABASES.md). |
-| staging template and shared database | a workflow on every push to `main` |
+| Vercel production | in the build command of a release, before the new code is promoted; a failed migration stops the deploy |
+| Vercel preview of `main` (staging) | in the build, against the staging template and the shared staging database |
+| Vercel preview of another branch | in the build, against the branch's own copy of the staging template when the branch adds a migration. See [preview databases](../../PREVIEW-DATABASES.md). |
 
 # Before a drop in production
 

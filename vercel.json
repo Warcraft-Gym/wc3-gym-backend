@@ -3,7 +3,7 @@
     "deploymentEnabled": {
       "**": false,
       "main": true,
-      "staging": true
+      "release": true
     }
   },
   "ignoreCommand": "[ \"$VERCEL_GIT_PREVIOUS_SHA\" != \"$VERCEL_GIT_COMMIT_SHA\" ] && git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . ':!docs' ':!AGENTS.md' ':!CLAUDE.md' ':!justfile' ':!.github' ':!.gitignore' || exit 1",

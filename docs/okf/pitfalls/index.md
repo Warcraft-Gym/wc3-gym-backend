@@ -15,5 +15,5 @@
 * [The ladder table is the egress driver](ladder-egress.md) - Reading a whole season window of ladder matches on every view grows through a season and multiplies with viewers.
 * [The session pooler holds 15 clients](transaction-pooler.md) - Serverless functions on the session pooler fill its 15 slots with idle connections and every other request answers Database error; use the transaction pooler on port 6543.
 * [The staging URL is not the served database](staging-url-wrong-db.md) - The staging connection string names the anchor database, which holds no app tables; the preview serves from the shared staging database or a branch copy.
-* [Two Alembic heads after a squash](alembic-two-heads.md) - Two branches that each add a migration on the same parent leave two heads on main after the second squash, breaking CI and the staging migrate job.
+* [Two Alembic heads after a squash](alembic-two-heads.md) - Two branches that each add a migration on the same parent leave two heads on main after the second squash, breaking CI and the staging build.
 * [Vercel CLI traps](vercel-cli-traps.md) - Three ways a CLI deploy goes wrong: no token, a worktree without the project link, and a commit author outside the team.
