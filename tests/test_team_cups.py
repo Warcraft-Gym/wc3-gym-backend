@@ -147,6 +147,29 @@ def test_a_player_plays_for_one_team_of_a_cup_and_a_team_fields_its_size(
     assert full.status_code == 400
 
 
+def test_a_removed_team_frees_the_players_it_invited(
+    client: Client,
+    member: Member,
+    auth_headers: Headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    no_refresh(monkeypatch)
+    event = cup()
+    captain, invited, other = players(3)
+    made = sign_up(client, event, headers_of(member, captain), "Red", invited)
+    assert made.status_code == 201, made.text
+
+    removed = client.delete(
+        f"/events/{event}/entrants/{made.json()['id']}", headers=auth_headers
+    )
+    assert removed.status_code == 204, removed.text
+    invites = client.get("/me/team-invites", headers=headers_of(member, invited))
+    assert invites.status_code == 200, invites.text
+    assert invites.json() == []
+    joined = sign_up(client, event, headers_of(member, other), "Blue", invited)
+    assert joined.status_code == 201, joined.text
+
+
 def test_every_player_is_held_to_the_cups_eligibility(
     client: Client, member: Member, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -227,6 +250,14 @@ def test_a_team_cup_draws_complete_teams_and_any_member_reports(
     by_entrant = {row["id"]: row for row in entrants(client, event)}
     reporter = next(
         one["user"]["id"] for one in by_entrant[entrant]["roster"] if not one["captain"]
+    )
+    # the veto board lists a team side's players, so a step one of them enters is the side's own
+    board = client.get(
+        f"/player-series/{series_id}/veto", headers=headers_of(member, reporter)
+    )
+    assert board.status_code == 200, board.text
+    assert board.json()["player1"]["member_ids"] == sorted(
+        one["user"]["id"] for one in by_entrant[entrant]["roster"]
     )
     report = client.put(
         f"/player-series/{series_id}",

@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-08T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T19:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -98,7 +98,7 @@ Every event has one card the app posts and edits in Discord, with two buttons, S
 
 # Team cups
 
-A cup with `team_size` 2 to 4 plays real team games. A member signs a team up with `POST /events/{id}/cup-teams` and the names of the other players: the caller captains it, the team is a team row with the cup as its `event_id`, and every other player gets a [team_invite](../data/tables/team_invite.md), which they accept or decline; the captain invites again or takes an invite back, a player who is not the captain leaves, and the captain withdraws the team. An event's runner enters a whole team with `POST /events/{id}/cup-teams/admin` and swaps a player with `POST /events/{id}/cup-teams/{team_id}/members/{user_id}/replace` until the team has played. Every player is held to the cup's eligibility on their own, a player stands in one team of a cup at most, and the draw refuses while a team is short of players. `GET /events/{id}/entrants` answers each cup team's roster, the captain first and each player with the rating the cup checks, and its open invites; `GET /me/team-invites` answers the caller's. Any player of the roster checks the team in, vetoes and reports. `GET /maps/ladder-import?mode=2v2` or `4v4` reads that ladder pool. See [the decision](../decisions/cup-teams-live-for-one-cup.md).
+A cup with `team_size` 2 to 4 plays real team games. A member signs a team up with `POST /events/{id}/cup-teams` and the names of the other players: the caller captains it, the team is a team row with the cup as its `event_id`, and every other player gets a [team_invite](../data/tables/team_invite.md), which they accept or decline; the captain invites again or takes an invite back, a player who is not the captain leaves, and the captain withdraws the team. A withdrawn team, and one a runner removes with `DELETE /events/{id}/entrants/{entrant_id}`, takes its open invites with it, so the players it invited are free for another team. An event's runner enters a whole team with `POST /events/{id}/cup-teams/admin` and swaps a player with `POST /events/{id}/cup-teams/{team_id}/members/{user_id}/replace` until the team has played. Every player is held to the cup's eligibility on their own, a player stands in one team of a cup at most, and the draw refuses while a team is short of players. `GET /events/{id}/entrants` answers each cup team's roster, the captain first and each player with the rating the cup checks, and its open invites; `GET /me/team-invites` answers the caller's. Any player of the roster checks the team in, vetoes and reports. `GET /maps/ladder-import?mode=2v2` or `4v4` reads that ladder pool. See [the decision](../decisions/cup-teams-live-for-one-cup.md).
 
 # Managing an event
 

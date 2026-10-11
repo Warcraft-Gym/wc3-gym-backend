@@ -62,6 +62,8 @@ class VetoPlayer(SQLModel):
     team_name: str | None = None
     # Where the team's logo is served from; null until one is uploaded
     team_icon_url: str | None = None
+    # The players a team side fields, so a step one of them enters reads as the side's own
+    member_ids: list[int] = []
 
 
 class SeriesVetoPublic(SQLModel):

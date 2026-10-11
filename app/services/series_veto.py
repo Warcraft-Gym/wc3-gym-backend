@@ -26,6 +26,7 @@ from app.models.series_veto_step import (
 )
 from app.models.team import Team
 from app.models.user import User
+from app.models.user_team_season import DBUserTeamSeason
 from app.services.series_rules import (
     SeriesRules,
     acts_for_side,
@@ -257,7 +258,8 @@ def _veto_side(session: OrmSession, series: Series, side: int) -> VetoPlayer:
     """The name the board prints for one side: the player, or the team.
 
     `id` is the user of the side or nothing at all, so a client may compare it
-    with its own user id; a team side names the team in its own two fields.
+    with its own user id; a team side names the team in its own two fields and
+    lists its players, so a step any of them enters reads as the side's own.
     """
     user_id = series.player1_id if side == 1 else series.player2_id
     user = session.get(User, user_id) if user_id else None
@@ -266,13 +268,20 @@ def _veto_side(session: OrmSession, series: Series, side: int) -> VetoPlayer:
     entrant_id = series.entrant1_id if side == 1 else series.entrant2_id
     entrant = session.get(EventEntrant, entrant_id) if entrant_id else None
     team = session.get(Team, entrant.team_id) if entrant and entrant.team_id else None
-    if team is None:
+    if entrant is None or team is None:
         return VetoPlayer()
+    members = session.scalars(
+        select(col(DBUserTeamSeason.user_id)).where(
+            col(DBUserTeamSeason.team_id) == ident(team),
+            col(DBUserTeamSeason.season_id) == entrant.event_id,
+        )
+    ).all()
     return VetoPlayer(
         name=team.name,
         team_id=ident(team),
         team_name=team.name,
         team_icon_url=team.icon_url,
+        member_ids=sorted(members),
     )
 
 

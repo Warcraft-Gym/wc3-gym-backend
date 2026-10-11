@@ -896,9 +896,18 @@ class EventService:
             return _entrant_publics(session, event, [new])[0]
 
     def remove_entrant(self, event_id: int, entrant_id: int) -> None:
-        """Delete one entrant row; an admin removes what a withdrawal would keep."""
+        """Delete one entrant row; an admin removes what a withdrawal would keep.
+        A cup team's open invites go with it, so an invited player is free again."""
         with Session.begin() as session:
-            session.delete(_entrant(session, event_id, entrant_id))
+            row = _entrant(session, event_id, entrant_id)
+            if row.team_id is not None:
+                session.execute(
+                    delete(TeamInvite).where(
+                        col(TeamInvite.event_id) == event_id,
+                        col(TeamInvite.team_id) == row.team_id,
+                    )
+                )
+            session.delete(row)
 
     def place_entrant(
         self, event_id: int, entrant_id: int, data: EntrantPlacement
