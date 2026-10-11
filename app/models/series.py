@@ -451,6 +451,9 @@ class StageSeriesRow(SeriesPublic):
     slot1_takes_loser: bool = False
     slot2_from_series_id: int | None = None
     slot2_takes_loser: bool = False
+    # The places a placement bracket series' group plays for; null on every other format
+    place_from: int | None = None
+    place_to: int | None = None
 
     @classmethod
     def from_series(cls, series: Series, event_id: int | None = None) -> Self:

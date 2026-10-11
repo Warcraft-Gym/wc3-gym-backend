@@ -2,6 +2,7 @@
 
 ## 2026-10-11
 
+* **Add**: the `placement` stage format, a bracket that plays out every place, and `event_stage.placement_lives`, the losses that end a run. The planner pads to a power of two and passes a side facing an empty slot on unplayed, so the places close up; the final for places 1 and 2 is a round of its own with the `final` best-of, and the rest of the last round plays `last_round`. The stage series read names each group in `place_from` and `place_to`. [event_stage](data/tables/event_stage.md), the [events module](concepts/events-module.md) and [the decision](decisions/placement-bracket.md) state it.
 * **Update**: each side of the veto board answer carries `member_ids`, the players a team side fields in the event, read in one statement a team side; a player side's list is empty. [Series reporting](concepts/series-reporting.md) states it.
 * **Update**: a runner who removes a cup team with `DELETE /events/{id}/entrants/{entrant_id}` deletes its open invites too, as the captain's withdrawal does, so an invited player can join another team of the cup. The [events module](concepts/events-module.md#team-cups) states it.
 

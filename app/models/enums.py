@@ -84,6 +84,9 @@ class StageFormat(enum.Enum):
     gnl = "gnl"
     single_elimination = "single_elimination"
     double_elimination = "double_elimination"
+    # Every round splits each group into its winners and its losers, so the
+    # last round decides every place
+    placement = "placement"
     swiss = "swiss"
     koth = "koth"
     ffa = "ffa"

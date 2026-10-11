@@ -30,6 +30,7 @@ FORMATS = {
     StageFormat.gnl: "league",
     StageFormat.single_elimination: "single elimination",
     StageFormat.double_elimination: "double elimination",
+    StageFormat.placement: "placement bracket",
     StageFormat.swiss: "swiss",
     StageFormat.koth: "king of the hill",
     StageFormat.ffa: "free for all",

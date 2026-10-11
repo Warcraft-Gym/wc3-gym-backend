@@ -250,6 +250,7 @@ _STAGE_PLAN = load_only(
     rel(EventStage.format),
     rel(EventStage.third_place),
     rel(EventStage.grand_final_modifier),
+    rel(EventStage.placement_lives),
     rel(EventStage.series_per_entrant_per_round),
     rel(EventStage.swiss_rounds),
     rel(EventStage.lobby_size),

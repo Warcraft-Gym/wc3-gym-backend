@@ -4,7 +4,7 @@ title: event_stage
 description: One format played over the entrants of an event, with the points, the tie breaks and the advance rule; standings are computed from it, never stored.
 resource: ../../../../app/models/event_stage.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-07T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T21:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -26,7 +26,7 @@ sources:
 | `event_id` | INTEGER | no | The event the stage belongs to. |
 | `position` | INTEGER | no | The order stages play in; the first is 1. Unique per event. |
 | `name` | VARCHAR | yes | A display name. |
-| `format` | VARCHAR | no | `round_robin`, `gnl`, `single_elimination`, `double_elimination`, `swiss`, `koth` or `ffa`. A `gnl` stage refuses generate. |
+| `format` | VARCHAR | no | `round_robin`, `gnl`, `single_elimination`, `double_elimination`, `placement`, `swiss`, `koth` or `ffa`. A `gnl` stage refuses generate. |
 | `best_of` | INTEGER | no | Games a series holds. A round may override it. |
 | `best_of_by_round` | VARCHAR | yes | The best-of of a bracket part, counted back from the end, as `semifinal:3,final:5`. The parts are `quarterfinal`, `semifinal`, `final`, `upper_semifinal`, `upper_final`, `lower_semifinal`, `lower_final` and `grand_final`, whose reset plays like it. The draw writes it onto `event_round.best_of`; a part it leaves out plays `best_of`. |
 | `series_per_entrant_per_round` | INTEGER | no | How many series each entrant plays per round of a round robin. At least 1. |
@@ -46,6 +46,7 @@ sources:
 | `seeds_locked_at` | TIMESTAMP | yes | When an admin locked the seeds. A locked stage refuses a seed write. Null means unlocked. |
 | `third_place` | BOOLEAN | no | On: a single elimination adds the series the beaten semi-finalists play. |
 | `grand_final_modifier` | VARCHAR | no | What a double elimination final holds: `one` series, a `reset`, or `skip`. |
+| `placement_lives` | INTEGER | yes | A placement bracket: the losses that end a player's run, who then shares the places of the group they stopped in. Null plays every place. |
 | `max_mmr_difference` | INTEGER | yes | The largest MMR difference a captain draft pairs inside, 1 or more. A `gnl` stage only; the write refuses it on any other format. Null on a `gnl` stage reads as 100, which is never written into the row. Answered on the stage read, and read behind the working value one fixture's draft keeps in [match_draft_state](match_draft_state.md). |
 
 # Keys and joins

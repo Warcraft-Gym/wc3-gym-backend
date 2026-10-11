@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T19:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T21:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -33,7 +33,7 @@ The event API is the canonical HTTP surface for every kind. `EventPublic` includ
 
 # Stages
 
-`EventStage` names the format, the best-of, the map rules, the scheduling mode, the ranking rule and the advance count. Formats: `round_robin`, `gnl`, `single_elimination`, `double_elimination`, `swiss`, `koth`, `ffa`. A stage may split into groups that merge at the next stage; a division never merges.
+`EventStage` names the format, the best-of, the map rules, the scheduling mode, the ranking rule and the advance count. Formats: `round_robin`, `gnl`, `single_elimination`, `double_elimination`, `placement`, `swiss`, `koth`, `ffa`. A `placement` bracket splits every group into its winners and its losers each round, so the last round decides every place; `placement_lives` ends a run after that many losses, and the players who stop share the places of their group. The stage series read names each series' group in `place_from` and `place_to`, and the table gives a shared place one position. See [the decision](../decisions/placement-bracket.md). A stage may split into groups that merge at the next stage; a division never merges.
 
 The stage engine (`app/services/stage_engine.py`) generates the series of a stage, follows results through the feeder graph, and ranks the entrants. A `gnl` stage is drafted by its admin and its captains and a `koth` stage is paired by its admin during the night, so the engine refuses to generate either. A Swiss stage draws one round at a time. An `ffa` stage plays lobbies whose result is an order of places. A `koth` stage is a chain per division.
 

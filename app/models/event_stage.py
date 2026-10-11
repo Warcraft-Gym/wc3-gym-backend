@@ -99,6 +99,8 @@ class EventStage(DBModel, table=True):
     grand_final_modifier: str = Field(
         default="one", max_length=10, sa_column_kwargs={"server_default": "one"}
     )
+    # How many losses end a player's run in a placement bracket; null plays every place
+    placement_lives: int | None = None
     # The largest MMR difference a captain draft pairs inside; a gnl stage only
     max_mmr_difference: int | None = None
 
@@ -129,6 +131,7 @@ class EventStagePublic(SQLModel):
     seeds_locked_at: Annotated[datetime | None, AwareUTC] = None
     third_place: bool = False
     grand_final_modifier: str = "one"
+    placement_lives: int | None = None
     # Null on every format but gnl, where an unset stage reads the default
     max_mmr_difference: int | None = None
 
@@ -168,6 +171,8 @@ class EventStageWrite(SQLModel):
     auto_advance: bool = False
     third_place: bool = False
     grand_final_modifier: Literal["one", "reset", "skip"] = "one"
+    # How many losses end a player's run in a placement bracket; null plays every place
+    placement_lives: int | None = Field(default=None, ge=1)
     # The largest MMR difference a captain draft pairs inside; a gnl stage only
     max_mmr_difference: int | None = Field(default=None, ge=1)
 
