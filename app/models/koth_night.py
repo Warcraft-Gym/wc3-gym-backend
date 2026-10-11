@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 import pydantic
 from sqlmodel import SQLModel
 
+from app.models.event_division import LowerBound
 from app.models.event_history import EventVideoPublic
 from app.models.types import AwareUTC, NumToStr
 
@@ -25,7 +26,7 @@ class NightOpen(SQLModel):
 
     starts_at: Annotated[datetime, AwareUTC]
     name: Annotated[str | None, NumToStr] = None
-    lower_bounds: list[int] | None = None
+    lower_bounds: list[Annotated[LowerBound, pydantic.Field(ge=0)]] | None = None
 
 
 class ResultAdd(SQLModel):
@@ -70,7 +71,7 @@ class BracketBound(SQLModel):
     """The MMR one bracket of the night opens at."""
 
     division_id: int
-    lower_bound: int
+    lower_bound: LowerBound
 
 
 class BoundsWrite(SQLModel):
