@@ -81,7 +81,7 @@ BEFORE_TAG_DROP = "e07324d2b4f9"
 # The revision before every row under an event goes with it
 BEFORE_EVENT_CASCADE = "55ae9f9d1db6"
 # The revision before the event organizers
-BEFORE_ORGANIZERS = "d2a8f5c1e736"
+BEFORE_ORGANIZERS = "a6d3e9b14c27"
 # The revision before the best-of per bracket part and the veto by best-of
 BEFORE_CUP_BEST_OF = "a8d3e1f6c924"
 # The revision before a race counts by its lifetime games

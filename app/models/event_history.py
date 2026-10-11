@@ -18,6 +18,10 @@ class HistoricalParticipant(DBModel, table=True):
     event_id: int = Field(index=True, foreign_key="event.id", ondelete="CASCADE")
     source_key: str = Field(max_length=200)
     source_name: str = Field(max_length=200)
+    # The player a reviewed link says wrote under this name; null until linked
+    user_id: int | None = Field(
+        default=None, index=True, foreign_key="users.id", ondelete="SET NULL"
+    )
 
 
 class KothHistoryEvent(DBModel, table=True):

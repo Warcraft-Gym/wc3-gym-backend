@@ -42,9 +42,13 @@ class EventDivisionPublic(SQLModel):
     entrant_count: int | None = None
 
 
+# The column is int4, so a larger bound would overflow it on Postgres
+LowerBound = Annotated[int, Field(le=2_147_483_647)]
+
+
 class EventDivisionWrite(SQLModel):
     """One division as an admin writes it; its place in the list is its position."""
 
     name: Annotated[str | None, NumToStr] = None
-    lower_bound: int | None = None
+    lower_bound: LowerBound | None = Field(default=None, ge=0)
     size: int | None = None

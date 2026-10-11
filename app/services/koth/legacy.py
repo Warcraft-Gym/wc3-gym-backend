@@ -41,7 +41,12 @@ from app.models.series import Series, SeriesUpdate
 from app.models.user import User
 from app.services import stage_engine
 from app.services.battle_tags import person_by_tag
-from app.services.events import EventService, _stats_for, _users_for
+from app.services.events import (
+    EventService,
+    _stats_for,
+    _users_for,
+    archived_filter,
+)
 from app.services.koth import carry, live, night, nightbot
 from app.services.series import SeriesService, update_in
 from app.services.w3c_stats import w3c_season
@@ -58,7 +63,7 @@ NO_MANUAL_KING = (
 
 # ============ Events ============
 def all_events() -> list[KothEventSummary]:
-    """Every night, oldest first, without its signups and matches."""
+    """Every night not archived, oldest first, without its signups and matches."""
     with Session.begin() as session:
         rows = _nights(session)
         bounds = _thresholds(session, [ident(row) for row in rows])
@@ -377,7 +382,7 @@ def _nights(session: OrmSession) -> list[Season]:
     return list(
         session.scalars(
             select(Season)
-            .where(col(Season.kind) == EventKind.koth)
+            .where(col(Season.kind) == EventKind.koth, archived_filter(False))
             .order_by(col(Season.id))
         )
     )

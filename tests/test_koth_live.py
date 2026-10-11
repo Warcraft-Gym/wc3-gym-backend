@@ -20,7 +20,7 @@ from app.models.w3c_stats import W3CStats
 from app.services.koth import legacy
 from tests.test_awards import awarded
 from tests.test_koth import silent_w3c
-from tests.test_koth_night import LATER, enrol, entrants, open_night, sign_up
+from tests.test_koth_night import LATER, NIGHT, enrol, entrants, open_night, sign_up
 from tests.test_query_budget import count_statements
 
 # Every signup asks W3Champions, so each test here answers for it
@@ -1065,6 +1065,38 @@ def test_the_bounds_a_night_refuses(
         1450,
         0,
     ]
+
+
+def test_a_bound_above_the_column_range_is_refused(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A bound the int4 column cannot hold is refused before any write."""
+    night = open_night(client, auth_headers)
+
+    resp = set_bounds(client, auth_headers, night, [3_000_000_000, 1450, 0])
+
+    assert resp.status_code == 422, resp.text
+    assert "lower_bound" in resp.json()["error"], resp.text
+    assert [row["lower_bound"] for row in board(client, night["id"])["brackets"]] == [
+        1600,
+        1450,
+        0,
+    ]
+
+
+def test_a_night_opens_with_no_bound_above_the_column_range(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The open refuses such a bound too, so no night is left half written."""
+    resp = client.post(
+        "/koth/nights",
+        json={"starts_at": NIGHT, "lower_bounds": [0, 1450, 3_000_000_000]},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert "lower_bounds" in resp.json()["error"], resp.text
+    open_night(client, auth_headers)
 
 
 def test_a_closed_night_takes_no_new_bound(
