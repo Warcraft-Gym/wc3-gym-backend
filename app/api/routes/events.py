@@ -395,9 +395,9 @@ def generate_stage(
     event_id: int, stage_id: int, service: EventServiceDep
 ) -> dict[str, int]:
     """Seed the unseeded entrants, then create every series of the stage from
-    the seeds, one bracket per division, and lock the seeds."""
-    service.seed_for_draw(event_id, stage_id)
-    return stage_engine.generate(event_id, stage_id)
+    the seeds, one bracket per division, and lock the seeds. A refused draw
+    writes no seed."""
+    return stage_engine.generate(event_id, stage_id, fill=service.seed_for_draw)
 
 
 @router.post(
@@ -411,10 +411,12 @@ def draw_next_round(
 
     It answers the round it drew and the series in it. The stage refuses while
     a series already drawn carries no result, and once it has drawn every
-    round it plays. The first round seeds the unseeded entrants first.
+    round it plays. The first round seeds the unseeded entrants first, and a
+    refused round writes no seed.
     """
-    service.seed_for_draw(event_id, stage_id)
-    return stage_engine.generate_next_round(event_id, stage_id)
+    return stage_engine.generate_next_round(
+        event_id, stage_id, fill=service.seed_for_draw
+    )
 
 
 @router.delete(

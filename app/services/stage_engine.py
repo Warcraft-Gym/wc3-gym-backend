@@ -9,7 +9,7 @@ A round robin over team entrants writes a fixture per pair, which the series
 of that pair hang under, so a team league is read exactly as GNL is read.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select
@@ -69,6 +69,8 @@ from app.services.series_rules import (
 BRACKETS = (StageFormat.single_elimination, StageFormat.double_elimination)
 # The formats that draw one round at a time, from the table as it stands
 BY_ROUND = (StageFormat.swiss,)
+# Seeds the unseeded entrants inside the draw's transaction, so a refusal writes none
+type SeedFill = Callable[[OrmSession, EventStage], None]
 
 
 def scored(row: Series) -> bool:
@@ -100,14 +102,18 @@ def series_wins(session: OrmSession, row: Series) -> int:
 
 
 def generate(
-    event_id: int, stage_id: int, division_id: int | None = None
+    event_id: int,
+    stage_id: int,
+    division_id: int | None = None,
+    fill: SeedFill | None = None,
 ) -> dict[str, int]:
     """Create every series of the stage from the seeds, per division, and lock them.
 
     Each bracket column is one round under the stage, and the divisions share
     those rounds: a bracket aligns on its final, a table on its first round. A
     named division draws alone into the rounds the stage already holds, so a
-    stage whose divisions fill one at a time opens each as it is ready.
+    stage whose divisions fill one at a time opens each as it is ready. `fill`
+    seeds the unseeded entrants first, in the same transaction as the draw.
     """
     with Session.begin() as session:
         stage = _stage(session, event_id, stage_id)
@@ -126,6 +132,8 @@ def generate(
             raise BadRequestError("This division already holds series")
         if division_id is not None and stage.format in BRACKETS:
             raise BadRequestError("A bracket stage draws every division together")
+        if fill is not None:
+            fill(session, stage)
         fields = _fields(_entrants(session, event_id))
         _hold_minimum(session, stage, fields)
         event = session.get(Season, event_id)
@@ -279,7 +287,10 @@ def undraw(event_id: int, stage_id: int, confirm: bool = False) -> dict[str, int
 
 
 def generate_next_round(
-    event_id: int, stage_id: int, division_id: int | None = None
+    event_id: int,
+    stage_id: int,
+    division_id: int | None = None,
+    fill: SeedFill | None = None,
 ) -> StageSeriesPublic:
     """Draw one more round of a stage that pairs a round at a time, per division.
 
@@ -288,7 +299,8 @@ def generate_next_round(
     not met, which keeps a pair inside its score group while one is free
     there, and an odd field gives the bye to the lowest entrant without one,
     as a walkover series holding a single side. The first call on an empty
-    stage pairs round 1 from the seeds and locks them.
+    stage pairs round 1 from the seeds and locks them; `fill` seeds the
+    unseeded entrants first, in the same transaction as the draw.
     """
     with Session.begin() as session:
         stage = _stage(session, event_id, stage_id)
@@ -298,6 +310,8 @@ def generate_next_round(
             )
         drawn = _series_of(session, stage_id)
         held = list(_rounds_of(session, stage_id))
+        if fill is not None:
+            fill(session, stage)
         fields = _fields(_entrants(session, event_id))
         if not drawn:
             _hold_minimum(session, stage, fields)

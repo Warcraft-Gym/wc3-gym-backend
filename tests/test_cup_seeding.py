@@ -223,6 +223,43 @@ def test_a_draw_on_a_manual_stage_refuses_until_every_entrant_has_a_seed(
     assert first_pair(stage) == {user_of(order[0]), user_of(order[3])}
 
 
+@pytest.mark.parametrize(
+    ("stage_body", "draw"),
+    [(STAGES[0], "generate"), ({"format": "swiss", "swiss_rounds": 2}, "rounds")],
+)
+def test_a_refused_draw_writes_no_seed(
+    client: Client, auth_headers: Headers, stage_body: dict[str, Any], draw: str
+) -> None:
+    event = add_event(kind=EventKind.cup)
+    single_stage(event)
+    written = client.put(
+        f"/events/{event}/stages", json=[stage_body], headers=auth_headers
+    )
+    assert written.status_code == 200, written.text
+    stage = written.json()["stages"][0]["id"]
+    held = client.put(f"/events/{event}", json={"entrant_min": 4}, headers=auth_headers)
+    assert held.status_code == 200, held.text
+    early = [
+        enter(event, add_player(f"P{mmr}", {Race.HU: mmr}))
+        for mmr in (1500, 1600, 1700)
+    ]
+
+    refused = client.post(
+        f"/events/{event}/stages/{stage}/{draw}", headers=auth_headers
+    )
+
+    assert refused.status_code == 400
+    assert "at least 4" in refused.json()["error"]
+    assert {seed for seed, _, _ in seeds(event).values()} == {None}
+    assert stage_of(client, event, stage)["seeds_locked_at"] is None
+    late = enter(event, add_player("Late", {Race.HU: 2000}))
+    drawn = client.post(f"/events/{event}/stages/{stage}/{draw}", headers=auth_headers)
+    assert drawn.status_code == 200, drawn.text
+    after = seeds(event)
+    assert after[late] == (1, "mmr", 2000)
+    assert [after[entrant][0] for entrant in reversed(early)] == [2, 3, 4]
+
+
 def test_a_later_stage_draws_only_the_entrants_advance_seeded(
     client: Client, auth_headers: Headers
 ) -> None:

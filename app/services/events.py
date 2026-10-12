@@ -1089,49 +1089,45 @@ class EventService:
             session.flush()
             return EventStagePublic.model_validate(stage)
 
-    def seed_for_draw(self, event_id: int, stage_id: int) -> None:
+    def seed_for_draw(self, session: OrmSession, stage: EventStage) -> None:
         """Seed every live entrant without a seed by the stage's seed source.
 
         mmr puts the newest rating first and the unrated last, random shuffles,
         and manual refuses until every entrant has a seed. Each takes the
         numbers after the last seed of its division. Only the first stage
         fills, before its first round: a later one plays what `advance` seeded.
+        It runs in the draw's transaction, so a refused draw keeps no seed.
         """
-        with Session.begin() as session:
-            stage = _stage(session, event_id, stage_id)
-            # The engine draws neither, and a KOTH line orders by seed
-            if stage.format in (StageFormat.gnl, StageFormat.koth):
-                return
-            drawn = session.scalar(
-                select(col(DBEventRound.id))
-                .where(col(DBEventRound.stage_id) == stage_id)
-                .limit(1)
-            )
-            if drawn is not None or stage_engine.previous_stage(
-                session, event_id, stage
-            ):
-                return
-            rows = _live_entrants(session, event_id)
-            unseeded = [row for row in rows if row.seed is None]
-            if not unseeded:
-                return
-            source = SeedSource(stage.seed_source)
-            if source is SeedSource.manual:
-                raise ApiError(409, {"error": "Seed every entrant first"})
-            mmrs = _mmrs(session, unseeded)
-            order = _by_mmr(unseeded, mmrs)
-            if source is SeedSource.random:
-                random.shuffle(order)
-            last: dict[int | None, int] = {}
-            for row in rows:
-                if row.seed is not None:
-                    last[row.division_id] = max(last.get(row.division_id, 0), row.seed)
-            for row in order:
-                last[row.division_id] = last.get(row.division_id, 0) + 1
-                row.seed = last[row.division_id]
-                row.seed_source = source.value
-                row.mmr_at_seed = mmrs[ident(row)]
-            session.flush()
+        drawn = session.scalar(
+            select(col(DBEventRound.id))
+            .where(col(DBEventRound.stage_id) == ident(stage))
+            .limit(1)
+        )
+        if drawn is not None or stage_engine.previous_stage(
+            session, stage.event_id, stage
+        ):
+            return
+        rows = _live_entrants(session, stage.event_id)
+        unseeded = [row for row in rows if row.seed is None]
+        if not unseeded:
+            return
+        source = SeedSource(stage.seed_source)
+        if source is SeedSource.manual:
+            raise ApiError(409, {"error": "Seed every entrant first"})
+        mmrs = _mmrs(session, unseeded)
+        order = _by_mmr(unseeded, mmrs)
+        if source is SeedSource.random:
+            random.shuffle(order)
+        last: dict[int | None, int] = {}
+        for row in rows:
+            if row.seed is not None:
+                last[row.division_id] = max(last.get(row.division_id, 0), row.seed)
+        for row in order:
+            last[row.division_id] = last.get(row.division_id, 0) + 1
+            row.seed = last[row.division_id]
+            row.seed_source = source.value
+            row.mmr_at_seed = mmrs[ident(row)]
+        session.flush()
 
 
 def _nested(events: list[EventPublic]) -> list[EventPublic]:
