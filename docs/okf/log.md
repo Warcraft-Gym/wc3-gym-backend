@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-12
+
+* **Add**: `GET /me/organized-events` lists the events an organizer runs, drafts included, in the rows and the order of `GET /events`: each row carries `archived`, newest start first. [Roles and permissions](concepts/roles-and-permissions.md#organizers) states it.
+
 ## 2026-10-09
 
 * **Update**: Vercel deploys nothing by itself. The deploy workflow builds staging on a push to `main` and production on a published release tagged `vYYYY.MM.DD.N` on `main`, both through the Vercel CLI with `VERCEL_RELEASE_TOKEN`, a repository secret scoped to the Vercel project. [Deploy to Vercel](runbooks/deploy-vercel.md).

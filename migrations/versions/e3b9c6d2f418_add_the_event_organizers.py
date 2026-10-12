@@ -6,7 +6,7 @@ event names the fewest entrants it is played with, and a cancelled event
 carries the time it was called off.
 
 Revision ID: e3b9c6d2f418
-Revises: d2a8f5c1e736
+Revises: a6d3e9b14c27
 Create Date: 2026-10-05 18:00:00.000000
 
 """
@@ -18,7 +18,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "e3b9c6d2f418"
-down_revision: str | Sequence[str] | None = "d2a8f5c1e736"
+down_revision: str | Sequence[str] | None = "a6d3e9b14c27"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -399,13 +399,14 @@ class EventService:
         if not event_ids:
             return []
         with Session.begin() as session:
-            events = session.scalars(
+            rows = session.execute(
                 select(Season)
                 .options(*_EVENT_OPTIONS)
+                .add_columns(ARCHIVED)
                 .where(col(Season.id).in_(event_ids))
-                .order_by(col(Season.id).desc())
+                .order_by(*NEWEST_FIRST)
             ).all()
-            return _publics(session, events)
+            return _publics(session, rows)
 
     def search(
         self,

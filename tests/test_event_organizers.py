@@ -5,9 +5,12 @@ The minimum an event is played with, and calling an event off, sit here too:
 both are steps an organizer takes on the evening of a cup.
 """
 
+import warnings
 from collections.abc import Callable
 from typing import Any
 
+from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
 from httpx2 import Client
 from sqlmodel import select
 
@@ -324,9 +327,35 @@ def test_a_draft_reads_for_its_organizers_only(
     assert client.get(f"/events/{event['id']}", headers=headers).status_code == 200
     assert client.get(f"/events/{event['id']}", headers=member("90")).status_code == 404
     assert client.get(f"/events/{event['id']}").status_code == 404
-    mine = client.get("/me/organized-events", headers=headers).json()
-    assert [row["id"] for row in mine] == [event["id"]]
+    mine = client.get("/me/organized-events", headers=headers)
+    assert mine.status_code == 200
+    assert [row["id"] for row in mine.json()] == [event["id"]]
     assert client.get("/me/organized-events", headers=member("90")).json() == []
+
+
+def test_the_organized_events_read_as_the_events_list_does(
+    client: Client, auth_headers: Headers, member: Member
+) -> None:
+    """Newest start first, each row with its archived flag."""
+    grant(client, auth_headers, "50")
+    headers = member("50")
+    later = create(client, headers, name="Late Cup", start_date="2026-11-20")
+    sooner = create(client, headers, name="Early Cup", start_date="2026-11-06")
+    mine = client.get("/me/organized-events", headers=headers)
+    assert mine.status_code == 200, mine.text
+    assert [(row["id"], row["archived"]) for row in mine.json()] == [
+        (later["id"], False),
+        (sooner["id"], False),
+    ]
+
+
+def test_the_organizer_routes_are_mounted_once(app: FastAPI) -> None:
+    """A router included twice names each of its operations twice."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        get_openapi(title=app.title, version=app.version, routes=app.routes)
+    messages = [str(w.message) for w in caught]
+    assert [m for m in messages if m.startswith("Duplicate Operation ID")] == []
 
 
 def test_a_grant_counts_only_for_a_member_acting_as_itself() -> None:
