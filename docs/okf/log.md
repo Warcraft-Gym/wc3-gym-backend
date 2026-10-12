@@ -2,6 +2,7 @@
 
 ## 2026-10-12
 
+* **Update**: an event's organizer edits a result with `PUT /series/{id}` and clears one with `DELETE /series/{id}/result` for the series of that event, as an admin does; a GNL series keeps its captains' rule. [Roles and permissions](concepts/roles-and-permissions.md#organizers) states it.
 * **Add**: a stage played straight away plays on by itself: a Swiss round's last result draws the next round, up to `swiss_rounds` cut to what the field holds, an earlier round's result stays once the next is drawn, and a stage with `auto_advance` that ends seeds and draws the next stage, a cup's playoff. Closing places every entrant, the last stage first and the rest in the stage before's order. The [events module](concepts/events-module.md) and [event_stage](data/tables/event_stage.md) state it.
 * **Add**: a cup's waitlist. A signup to a cup that is drawn or full waits (`event_entrant.waitlisted_at`) instead of being refused; a runner admits it before the draw with `POST /events/{id}/entrants/{entrant_id}/admit`, or swaps it in after the draw. [event_entrant](data/tables/event_entrant.md), [event](data/tables/event.md) and the [events module](concepts/events-module.md#entrants-seeds-divisions) state it.
 * **Add**: a withdrawal from a drawn cup forfeits every series the entrant still owes, at once or as soon as a later series fills, and a runner withdraws an entrant with `POST /events/{id}/entrants/{entrant_id}/withdraw`. The [events module](concepts/events-module.md#entrants-seeds-divisions) states it.

@@ -148,6 +148,65 @@ def test_an_organizer_reports_a_result_without_a_player_row(
     assert stranger.status_code in (403, 404)
 
 
+def test_an_organizer_edits_and_clears_a_result_of_its_own_cup_only(
+    client: Client, auth_headers: Headers, member: Member, seeded: dict[str, Any]
+) -> None:
+    """The run page edits a result through PUT /series and the report dialog
+    clears one through DELETE /series/{id}/result: a cup's organizer does both
+    as an admin does, a stranger does neither, and a GNL series keeps its
+    captains' rules."""
+    grant(client, auth_headers, "54")
+    headers = member("54")
+    event = create(client, headers, name="Result Edit Cup")
+    enter(client, headers, event["id"], players(2))
+    assert draw(client, headers, event).status_code == 200
+    [row] = client.get(
+        f"/events/{event['id']}/stages/{event['stages'][0]['id']}/series"
+    ).json()["series"]
+    series_id = row["id"]
+
+    scored = client.put(
+        f"/series/{series_id}",
+        json={"player1_score": 2, "player2_score": 0},
+        headers=headers,
+    )
+    assert scored.status_code == 200, scored.text
+    turned = client.put(
+        f"/series/{series_id}?force=true",
+        json={"player1_score": 0, "player2_score": 2},
+        headers=headers,
+    )
+    assert turned.status_code == 200, turned.text
+    assert (turned.json()["player1_score"], turned.json()["player2_score"]) == (0, 2)
+
+    stranger = member("55")
+    refused = client.put(
+        f"/series/{series_id}",
+        json={"player1_score": 2, "player2_score": 0},
+        headers=stranger,
+    )
+    assert refused.status_code == 403, refused.text
+    assert (
+        client.delete(f"/series/{series_id}/result", headers=stranger).status_code
+        == 403
+    )
+
+    cleared = client.delete(f"/series/{series_id}/result", headers=headers)
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["player1_score"] is None
+
+    gnl = seeded["series_open_id"]
+    assert (
+        client.put(
+            f"/series/{gnl}",
+            json={"player1_score": 2, "player2_score": 0},
+            headers=headers,
+        ).status_code
+        == 403
+    )
+    assert client.delete(f"/series/{gnl}/result", headers=headers).status_code == 403
+
+
 def test_an_organizer_runs_only_the_events_it_holds_a_row_of(
     client: Client, auth_headers: Headers, member: Member, seeded: dict[str, Any]
 ) -> None:

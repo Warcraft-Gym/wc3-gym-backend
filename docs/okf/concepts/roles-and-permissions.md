@@ -4,7 +4,7 @@ title: Roles and permissions
 description: Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T21:00:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -45,7 +45,7 @@ An organizer is not a fifth role. It is a capability a guild member holds beside
 - **Maps.** An organizer reads `GET /maps/ladder-import` to fill a cup's pool from the 1v1, 2v2 or 4v4 ladder, and imports the ladder maps the app lacks with `POST /maps/ladder-import`, which for an organizer creates or renames the maps of that ladder alone and leaves every other map as it is, and writes the pool of an event it runs with `PUT /events/{id}/maps`. Creating or changing any other map stays the admins'.
 - **Becoming one.** A member sends `POST /organizers/requests` with an optional note. An admin approves or declines it under Admin › Access, or grants an account directly by Discord id. See [organizer_request](../data/tables/organizer_request.md).
 - **What a grant allows.** `POST /events` for a small event: a `cup` or `signup` kind, of no league or a `custom` league, with no event Discord role, no `gnl` or `koth` stage, and a parent only among the events it runs. An admin writes any event.
-- **Running an event.** An [event_organizer](../data/tables/event_organizer.md) row lets its account run that one event: every event write `require_event_runner` guards, the event's series results (`PUT /player-series/{id}`, where it acts for either side as an admin does; `PUT /series/{id}/result-kind`; `PUT /series/{id}/places`), its co-organizers, whose list (`GET /events/{id}/organizers`) is an open read so the event page names them, and its draft, which it reads as an admin does. The row outlives a revoked grant. A GNL season and a KOTH night never hold a row, so their writes stay the admins'. Posting the event card in a Discord channel stays an admin's. `GET /me/organized-events` lists the events the account runs, drafts included, in the rows and the order of `GET /events`, newest start first.
+- **Running an event.** An [event_organizer](../data/tables/event_organizer.md) row lets its account run that one event: every event write `require_event_runner` guards, the event's series results (`PUT /player-series/{id}`, where it acts for either side as an admin does; `PUT /series/{id}` and `DELETE /series/{id}/result`, where it edits and clears any result of the event as an admin does, `force` included, while a GNL series keeps its captains' rule; `PUT /series/{id}/result-kind`; `PUT /series/{id}/places`), its co-organizers, whose list (`GET /events/{id}/organizers`) is an open read so the event page names them, and its draft, which it reads as an admin does. The row outlives a revoked grant. A GNL season and a KOTH night never hold a row, so their writes stay the admins'. Posting the event card in a Discord channel stays an admin's. `GET /me/organized-events` lists the events the account runs, drafts included, in the rows and the order of `GET /events`, newest start first.
 
 # Reads open, writes admin
 

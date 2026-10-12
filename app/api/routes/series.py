@@ -25,7 +25,7 @@ from app.models.series import (
 from app.models.series_cast import CastPublic, CastWrite, ClaimWrite, VodWrite
 from app.models.series_side import LobbySidesWrite, PlacesWrite
 from app.models.series_summary import SeriesSummaryPublic
-from app.services import casts, series_edit, series_summary, stage_engine
+from app.services import casts, organizers, series_edit, series_summary, stage_engine
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +53,21 @@ def update_series(
     """Update the series data of an existing series.
 
     A captain of either team of its fixture sends the time, the scores, the
-    races played, the host and the fantasy mark; an admin sends any field.
-    Clearing the score reopens the bracket below it; `force`, an admin's,
-    allows the reopen when a later series already carries a result.
+    races played, the host and the fantasy mark; an admin sends any field, and
+    so does an organizer of the event the series plays in, for that event's
+    series alone. Clearing the score reopens the bracket below it; `force`,
+    an admin's or an organizer's, allows the reopen when a later series
+    already carries a result.
     """
     admin = is_admin(claims)
     if not admin:
-        own_match(claims, series_edit.fixture_of(series_id), matches)
+        try:
+            own_match(claims, series_edit.fixture_of(series_id), matches)
+        except ApiError:
+            # a cup's series has no fixture: its organizers edit it as an admin does
+            if not organizers.runs_series(claims, series_id):
+                raise
+            admin = True
     return series_edit.edit(series_id, data, admin=admin, force=force)
 
 
@@ -73,11 +81,22 @@ def clear_series_result(
     """Take back a reported result, for whoever may report it.
 
     The scores, the races played and the games go, and the replays stay. A
-    walkover or a forfeit, and `force`, are an admin's.
+    walkover or a forfeit, and `force`, are an admin's, or an organizer's of
+    the event the series plays in.
     """
     admin = is_admin(claims)
     caller = None if admin else users.id_by_discord_id(str(claims["sub"]))
-    return series_edit.clear_result(series_id, admin=admin, user_id=caller, force=force)
+    try:
+        return series_edit.clear_result(
+            series_id, admin=admin, user_id=caller, force=force
+        )
+    except ApiError as refused:
+        # a side clears its own result; an organizer of the event clears any
+        if admin or refused.status_code != 403:
+            raise
+        if not organizers.runs_series(claims, series_id):
+            raise
+    return series_edit.clear_result(series_id, admin=True, user_id=None, force=force)
 
 
 @router.put(
