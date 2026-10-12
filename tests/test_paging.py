@@ -47,6 +47,7 @@ PAGED_ROUTES = [
     ("GET", "/draft-series/match/{match_id}"),
     ("GET", "/player-series"),
     ("GET", "/users/{player_id}/series?event_id={season_id}"),
+    ("GET", "/koth/winners"),
 ]
 
 
@@ -194,8 +195,12 @@ def summary(players: int) -> str:
 
 # The ORDER BY every route writes when no sort parameter is sent
 DEFAULT_ORDER = {
-    # Newest first; the collection statements order the rounds and the map pool
-    "GET /events": ["event.id DESC", "event_round.number", "map_season.position"],
+    # Newest start first; the collection statements order the rounds and the map pool
+    "GET /events": [
+        "coalesce(event.starts_at, event.start_date) DESC NULLS LAST, event.id DESC",
+        "event_round.number",
+        "map_season.position",
+    ],
     "POST /events/search?query=id > 0": [
         "event.id DESC",
         "event_round.number",
@@ -263,6 +268,14 @@ DEFAULT_ORDER = {
     "GET /users/{player_id}/series?event_id={season_id}": [
         "side.season_id, side.week NULLS LAST, side.date_time NULLS LAST, side.id",
         "series_cast.id",
+    ],
+    # The page of nights, then those nights with their brackets
+    "GET /koth/winners": [
+        "coalesce(event.starts_at, event.start_date) DESC NULLS LAST, event.id DESC",
+        (
+            "coalesce(event.starts_at, event.start_date) DESC NULLS LAST, event.id DESC,"
+            " event_division.position"
+        ),
     ],
 }
 

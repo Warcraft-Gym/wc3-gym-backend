@@ -5,9 +5,9 @@ while the night runs, and each write answers the board, which is the one read
 the run page and the night page both draw.
 """
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import PlainTextResponse
 
 from app.api.deps import SettingsServiceDep, edge_cache, require_admin
@@ -16,6 +16,7 @@ from app.models.koth_night import (
     BracketMove,
     CrownWrite,
     KothBoard,
+    KothNightWinners,
     NightOpen,
     QueueWrite,
     ResultAdd,
@@ -23,7 +24,7 @@ from app.models.koth_night import (
     SeriesStart,
 )
 from app.models.season import EventPublic
-from app.services.koth import board, live, night, nightbot
+from app.services.koth import board, carry, live, night, nightbot
 
 router = APIRouter(tags=["koth"])
 
@@ -168,6 +169,20 @@ def _board(response: Response, night_id: int | None) -> KothBoard:
     answer = board.read(night_id, public=True)
     edge_cache(response, "settled" if answer.closed else "live")
     return answer
+
+
+@router.get("/koth/winners")
+def get_winners(
+    response: Response,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[KothNightWinners]:
+    """One page of the published closed nights, at most 500, newest start first,
+    each with the king every bracket ended with. The header counts the nights."""
+    edge_cache(response, "settled")
+    nights, total = carry.winners(limit, offset)
+    response.headers["X-Total-Count"] = str(total)
+    return nights
 
 
 @router.get(
