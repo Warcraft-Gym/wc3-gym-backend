@@ -375,6 +375,17 @@ def withdraw(
     service.withdraw(event_id, claims, race)
 
 
+@router.post(
+    "/events/{event_id}/entrants/{entrant_id}/withdraw",
+    status_code=204,
+    dependencies=[Depends(require_event_runner)],
+)
+def withdraw_entrant(event_id: int, entrant_id: int, service: EventServiceDep) -> None:
+    """A runner withdraws one entrant: the row stays, and on a drawn cup the
+    entrant forfeits every series it still owes."""
+    service.withdraw_entrant(event_id, entrant_id)
+
+
 @router.post("/events/{event_id}/entrants/{entrant_id}/checkin")
 def check_in(
     event_id: int,

@@ -170,11 +170,15 @@ def leave(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None:
 
 
 def withdraw(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None:
-    """The captain withdraws the team; its open invites go with it."""
+    """The captain withdraws the team; its open invites go with it, and on a
+    drawn cup it forfeits every series it still owes."""
     with Session.begin() as session:
         _hold_captain(session, event_id, team_id, claims)
-        _entrant_of(session, event_id, team_id).withdrawn_at = utcnow()
+        entrant = _entrant_of(session, event_id, team_id)
+        entrant.withdrawn_at = utcnow()
         session.execute(delete(TeamInvite).where(col(TeamInvite.team_id) == team_id))
+        session.flush()
+        stage_engine.forfeit_open(session, [ident(entrant)])
 
 
 def replace_member(

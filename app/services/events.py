@@ -793,7 +793,8 @@ class EventService:
 
         A race names one row of an event that takes one entry per race; no
         race withdraws every active row of the caller. A KOTH night takes a
-        withdraw until it closes or expires, and the rows forfeit what they owe.
+        withdraw until it closes or expires, and the rows forfeit what they owe;
+        so do the rows of a drawn cup, every open series it still holds.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
@@ -815,9 +816,19 @@ class EventService:
             if event.kind is EventKind.koth:
                 _leave_night(session, event, rows)
             else:
-                for row in rows:
-                    row.withdrawn_at = utcnow()
-                stage_engine.uncrown(session, [ident(row) for row in rows])
+                _withdraw_rows(session, event, rows)
+
+    def withdraw_entrant(self, event_id: int, entrant_id: int) -> None:
+        """A runner withdraws one entrant and keeps the row; on a drawn cup it
+        forfeits what it still owes, as the entrant's own withdraw does."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if event.kind is EventKind.koth:
+                raise BadRequestError("A KOTH night removes a player on its run page")
+            row = _entrant(session, event_id, entrant_id)
+            if row.withdrawn_at is not None:
+                raise BadRequestError("This entrant has withdrawn already")
+            _withdraw_rows(session, event, [row])
 
     def check_in(
         self, event_id: int, entrant_id: int, claims: dict[str, Any] | None
@@ -1171,6 +1182,18 @@ def _league_entrant_kind(session: OrmSession, league_id: int | None) -> EntrantK
     """The entrant kind a new event copies from its league; solo without one."""
     league = session.get(League, league_id) if league_id else None
     return league.entrant_kind if league else EntrantKind.solo
+
+
+def _withdraw_rows(
+    session: OrmSession, event: Season, rows: Sequence[EventEntrant]
+) -> None:
+    """Stamp the rows withdrawn; a cup's rows forfeit the series they still owe."""
+    for row in rows:
+        row.withdrawn_at = utcnow()
+    session.flush()
+    stage_engine.uncrown(session, [ident(row) for row in rows])
+    if event.kind is EventKind.cup:
+        stage_engine.forfeit_open(session, [ident(row) for row in rows])
 
 
 def _leave_night(

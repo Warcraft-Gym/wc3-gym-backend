@@ -1384,7 +1384,7 @@ def _side(row: Series, takes_loser: bool) -> int | None:
 
 def _settle(session: OrmSession, row: Series) -> None:
     """A series nobody plays is a walkover: a bye, a double bye, or a reset the
-    final settled."""
+    final settled. A series that a withdrawn entrant stands in is a forfeit."""
     if scored(row):
         return
     final = _reset_final(session, row)
@@ -1396,7 +1396,10 @@ def _settle(session: OrmSession, row: Series) -> None:
         return
     first, first_known = _resolved(session, row, 1)
     second, second_known = _resolved(session, row, 2)
-    if not (first_known and second_known) or (first is not None and second is not None):
+    if not (first_known and second_known):
+        return
+    if first is not None and second is not None:
+        _forfeit(session, row, _withdrawn_sides(session, row))
         return
     if first is None and second is None:
         # Two empty sides: a walkover nobody wins; the series below gets an empty side
@@ -1406,6 +1409,75 @@ def _settle(session: OrmSession, row: Series) -> None:
     else:
         _award(session, row, first is not None, "walkover")
     on_scored(session, row)
+
+
+def forfeit_open(session: OrmSession, entrant_ids: Sequence[int]) -> int:
+    """Settle every open series these withdrawn entrants stand in with both sides
+    known, as a forfeit; a series they reach later forfeits when it fills.
+
+    The series below each forfeit fill and settle on, so a withdrawal plays its
+    whole way through a bracket at once. Answers the count of forfeits written.
+    """
+    ids = [entrant_id for entrant_id in entrant_ids if entrant_id is not None]
+    if not ids:
+        return 0
+    rows = session.scalars(
+        select(Series)
+        .where(
+            or_(
+                col(Series.entrant1_id).in_(ids),
+                col(Series.entrant2_id).in_(ids),
+            ),
+            col(Series.player1_score).is_(None),
+            col(Series.player2_score).is_(None),
+        )
+        .order_by(col(Series.id))
+    ).all()
+    written = 0
+    for row in rows:
+        if scored(row) or row.entrant1_id is None or row.entrant2_id is None:
+            continue
+        written += _forfeit(session, row, _withdrawn_sides(session, row))
+    return written
+
+
+def _withdrawn_sides(session: OrmSession, row: Series) -> set[int]:
+    """The sides of a two-sided series whose entrant has withdrawn, on a stage
+    whose bracket a withdrawal plays on; a KOTH night and a GNL season settle
+    their own leavers, so they answer none."""
+    by_side = {1: row.entrant1_id, 2: row.entrant2_id}
+    ids = [entrant_id for entrant_id in by_side.values() if entrant_id is not None]
+    if not ids:
+        return set()
+    gone = set(
+        session.scalars(
+            select(col(EventEntrant.id)).where(
+                col(EventEntrant.id).in_(ids),
+                col(EventEntrant.withdrawn_at).is_not(None),
+            )
+        )
+    )
+    if not gone:
+        return set()
+    stage = _stage_of(session, row)
+    if stage is None or stage.format in (StageFormat.koth, StageFormat.gnl):
+        return set()
+    return {side for side, entrant_id in by_side.items() if entrant_id in gone}
+
+
+def _forfeit(session: OrmSession, row: Series, gone: set[int]) -> int:
+    """Settle a series the withdrawn sides give up: the other side wins it, and
+    a series both sides left is a forfeit nobody wins. Answers 1 when written."""
+    if not gone or scored(row):
+        return 0
+    if gone == {1, 2}:
+        row.player1_score = row.player2_score = 0
+        row.result_kind = "forfeit"
+        session.flush()
+    else:
+        _award(session, row, to_first=2 in gone, kind="forfeit")
+    on_scored(session, row)
+    return 1
 
 
 def _reset_final(session: OrmSession, row: Series) -> Series | None:
