@@ -363,7 +363,6 @@ class TeamService:
                     col(Team.league_id) == league_id
                     if league_id is not None
                     else true(),
-                    col(Team.event_id).is_(None),
                 )
                 .order_by(col(Team.id))
                 .offset(offset)
@@ -388,9 +387,7 @@ class TeamService:
                 .where(
                     col(Team.league_id) == league_id
                     if league_id is not None
-                    else true(),
-                    # a team made for one cup is no team of its league's lists
-                    col(Team.event_id).is_(None),
+                    else true()
                 )
                 .order_by(col(Team.id))
                 .offset(offset)
@@ -417,9 +414,7 @@ class TeamService:
                 .where(
                     col(Team.league_id) == league_id
                     if league_id is not None
-                    else true(),
-                    # a team made for one cup is no team of its league's lists
-                    col(Team.event_id).is_(None),
+                    else true()
                 )
                 .order_by(col(Team.id))
                 .offset(offset)

@@ -10,10 +10,10 @@ from sqlmodel import col, select
 from app.core import brackets
 from app.core.db import Session
 from app.models.base import ident
+from app.models.cup_series import CupSeries
 from app.models.enums import StageFormat
 from app.models.event_stage import EventStage
 from app.models.relationships import DBEventRound
-from app.models.series import Series
 from tests.test_awards import finish, play_out
 from tests.test_event_organizers import Member
 from tests.test_stage_engine import bracket, cup, generate, players, stage_series
@@ -197,8 +197,8 @@ def test_four_teams_play_every_place_with_their_rosters(
     assert generate(client, auth_headers, event, stage_id)["series"] == 4
     with Session.begin() as session:
         sizes = session.scalars(
-            select(Series.side_size).where(
-                col(Series.round_id).in_(
+            select(CupSeries.side_size).where(
+                col(CupSeries.round_id).in_(
                     select(DBEventRound.id).where(
                         col(DBEventRound.stage_id) == stage_id
                     )

@@ -29,9 +29,7 @@ from app.models.organizer import (
     OrganizerRequestPublic,
 )
 from app.models.season import Season
-from app.models.series import Series
 from app.models.user import User
-from app.services.series_rules import series_event
 
 ALREADY = "Already an organizer"
 
@@ -68,32 +66,23 @@ def is_organizer(claims: dict[str, Any] | None) -> bool:
 
 def runs(claims: dict[str, Any] | None, event_id: int) -> bool:
     """Whether the caller runs that event: an admin, or a member holding its row."""
+    with Session.begin() as session:
+        return runs_in(session, claims, event_id)
+
+
+def runs_in(session: OrmSession, claims: dict[str, Any] | None, event_id: int) -> bool:
+    """`runs`, inside the caller's session: an admin reads nothing."""
     if is_admin(claims):
         return True
     if not _member(claims):
         return False
-    with Session.begin() as session:
-        return session.get(EventOrganizer, (event_id, str(claims["sub"]))) is not None
+    return session.get(EventOrganizer, (event_id, str(claims["sub"]))) is not None
 
 
 def shows_seeds(claims: dict[str, Any] | None, event: Season) -> bool:
     """Whether the caller reads the event's seed numbers: always, unless the
     event hides them, and then only for a caller who runs it."""
     return not event.hide_seeds or runs(claims, ident(event))
-
-
-def runs_series(claims: dict[str, Any] | None, series_id: int) -> bool:
-    """Whether the caller runs the event the series belongs to."""
-    if is_admin(claims):
-        return True
-    if not _member(claims):
-        return False
-    with Session.begin() as session:
-        series = session.get(Series, series_id)
-        event = series_event(session, series) if series is not None else None
-        if event is None:
-            return False
-        return session.get(EventOrganizer, (event.id, str(claims["sub"]))) is not None
 
 
 def _player_name(session: OrmSession, discord_id: str) -> str:

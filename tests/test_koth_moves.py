@@ -566,21 +566,17 @@ def test_an_erase_refuses_a_row_a_seat_of_another_series_names(
     top = bracket_ids(night)[0]
     seated = place(client, auth_headers, night, "Lobby#1", 1700, top)
     other = place(client, auth_headers, night, "Lobby#2", 1700, top)
-    # A series of no round with two empty seats, as the season import writes a 2v2
+    # A series of no round whose two seats name the two entrants
     with Session.begin() as session:
         lobby = Series(host_player_id=user_of(client, night["id"], seated))
         session.add(lobby)
         session.flush()
         session.add_all(
-            [SeriesSide(series_id=ident(lobby), side_no=side) for side in (1, 2)]
+            [
+                SeriesSide(series_id=ident(lobby), side_no=side, entrant_id=entrant)
+                for side, entrant in ((1, seated), (2, other))
+            ]
         )
-        lobby_id = ident(lobby)
-    seats = client.put(
-        f"/series/{lobby_id}/sides",
-        json={"entrant_ids": [seated, other]},
-        headers=auth_headers,
-    )
-    assert seats.status_code == 200, seats.text
 
     resp = erase(client, auth_headers, night["id"], seated)
 

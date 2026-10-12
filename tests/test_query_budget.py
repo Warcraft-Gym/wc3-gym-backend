@@ -148,11 +148,6 @@ from app.services.users import UserService, summary_loads
 from tests.test_auth import PNG
 from tests.test_fantasy_locks import schedule, score
 from tests.test_ffa import ffa, lobbies, play
-from tests.test_mixed_fixture import (  # noqa: F401  # clan_war is a fixture
-    clan_war,
-    roster,
-    template,
-)
 from tests.test_player_session import member_session
 from tests.test_stage_engine import generate
 
@@ -1540,8 +1535,8 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"accept": True},
             w.member(),
         ),
-        # the merge behind an accepted prompt walks team_invite and historical_participant too
-        118,
+        # the merge behind an accepted prompt walks the cup tables and historical_participant too
+        131,
     ),
     "PUT /users/me/tags/{tag_id}/active": (
         lambda w: ("PUT", f"/users/me/tags/{w.tag()}/active", None, w.member()),
@@ -1567,8 +1562,8 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"into_user_id": w.p3},
             w.admin,
         ),
-        # the merge walks every table that holds a user id, team_invite and historical_participant among them
-        82,
+        # the merge walks every table that holds a user id, the cup tables and historical_participant among them
+        91,
     ),
     "PUT /users/{user_id}": (
         lambda w: ("PUT", f"/users/{w.p1}", {"country": "NL"}, w.admin),
@@ -1946,7 +1941,7 @@ def test_every_write_pins_its_statements(
 def test_a_lobby_place_write_pins_its_statements(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    """PUT /series/{id}/places on the first lobby of a four player FFA: the
+    """PUT /cup-series/{id}/places on the first lobby of a four player FFA: the
     write, the advance and the stage row it answers."""
     event, stage, _ = ffa(4)
     generate(client, auth_headers, event, stage)
@@ -1955,20 +1950,3 @@ def test_a_lobby_place_write_pins_its_statements(
         response = play(client, auth_headers, lobby, [1, 2, 3, 4])
     assert response.status_code == 200, response.text
     assert tally[0] <= 16
-
-
-def test_a_side_write_pins_its_statements(
-    client: Client,
-    auth_headers: dict[str, str],
-    member: Callable[..., dict[str, str]],
-    clan_war: dict[str, Any],  # noqa: F811  # the fixture imported above
-) -> None:
-    """PUT /series/{id}/sides by the captain of one clan, on the 2v2 of a
-    clan war: the roster checks, the write and the stage row it answers."""
-    pair = template(client, auth_headers, clan_war).json()[1]
-    first, _ = clan_war["rosters"]
-    captain = member(clan_war["captains"][0])
-    with count_statements() as tally:
-        response = roster(client, captain, pair["id"], 1, first[:2])
-    assert response.status_code == 200, response.text
-    assert tally[0] <= 33

@@ -15,10 +15,10 @@ from httpx2 import Client
 from sqlmodel import select
 
 from app.core.db import Session
+from app.models.cup_series import CupSeries
 from app.models.enums import LeagueKind
 from app.models.league import League
 from app.models.season import Season
-from app.models.series import Series
 from app.services import organizers
 from tests.test_stage_engine import cup, players
 
@@ -110,7 +110,7 @@ def test_an_organizer_creates_a_cup_and_runs_it_to_the_end(
     ).json()
     first = series["series"][0]["id"]
     walkover = client.put(
-        f"/series/{first}/result-kind",
+        f"/cup-series/{first}/result-kind",
         json={"result_kind": "walkover", "winner": 1},
         headers=headers,
     )
@@ -131,30 +131,30 @@ def test_an_organizer_reports_a_result_without_a_player_row(
     enter(client, headers, event["id"], players(2))
     assert draw(client, headers, event).status_code == 200
     with Session.begin() as session:
-        series = session.scalars(select(Series)).one()
+        series = session.scalars(select(CupSeries)).one()
         series_id = series.id
 
+    stranger = client.put(
+        f"/cup-series/{series_id}/report",
+        json={"player1_score": 0, "player2_score": 2},
+        headers=member("53"),
+    )
+    assert stranger.status_code == 403, stranger.text
     report = client.put(
-        f"/player-series/{series_id}",
+        f"/cup-series/{series_id}/report",
         json={"player1_score": 2, "player2_score": 0},
         headers=headers,
     )
     assert report.status_code == 200, report.text
-    stranger = client.put(
-        f"/player-series/{series_id}",
-        json={"player1_score": 0, "player2_score": 2},
-        headers=member("53"),
-    )
-    assert stranger.status_code in (403, 404)
 
 
 def test_an_organizer_edits_and_clears_a_result_of_its_own_cup_only(
     client: Client, auth_headers: Headers, member: Member, seeded: dict[str, Any]
 ) -> None:
-    """The run page edits a result through PUT /series and the report dialog
-    clears one through DELETE /series/{id}/result: a cup's organizer does both
-    as an admin does, a stranger does neither, and a GNL series keeps its
-    captains' rules."""
+    """The run page edits a result through PUT /cup-series and the report
+    dialog clears one through DELETE /cup-series/{id}/result: a cup's organizer
+    does both as an admin does, a stranger does neither, and a GNL series keeps
+    its captains' rules."""
     grant(client, auth_headers, "54")
     headers = member("54")
     event = create(client, headers, name="Result Edit Cup")
@@ -166,13 +166,13 @@ def test_an_organizer_edits_and_clears_a_result_of_its_own_cup_only(
     series_id = row["id"]
 
     scored = client.put(
-        f"/series/{series_id}",
+        f"/cup-series/{series_id}",
         json={"player1_score": 2, "player2_score": 0},
         headers=headers,
     )
     assert scored.status_code == 200, scored.text
     turned = client.put(
-        f"/series/{series_id}?force=true",
+        f"/cup-series/{series_id}?force=true",
         json={"player1_score": 0, "player2_score": 2},
         headers=headers,
     )
@@ -181,17 +181,17 @@ def test_an_organizer_edits_and_clears_a_result_of_its_own_cup_only(
 
     stranger = member("55")
     refused = client.put(
-        f"/series/{series_id}",
+        f"/cup-series/{series_id}",
         json={"player1_score": 2, "player2_score": 0},
         headers=stranger,
     )
     assert refused.status_code == 403, refused.text
     assert (
-        client.delete(f"/series/{series_id}/result", headers=stranger).status_code
+        client.delete(f"/cup-series/{series_id}/result", headers=stranger).status_code
         == 403
     )
 
-    cleared = client.delete(f"/series/{series_id}/result", headers=headers)
+    cleared = client.delete(f"/cup-series/{series_id}/result", headers=headers)
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["player1_score"] is None
 

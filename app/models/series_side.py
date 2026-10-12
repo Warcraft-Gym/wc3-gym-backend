@@ -59,21 +59,8 @@ class PlacesWrite(SQLModel):
     places: list[PlaceWrite] = []
 
 
-class SideRoster(SQLModel):
-    """Who one side of a fixture series fields: `side_size` of its roster."""
-
-    side_no: int = Field(ge=1, le=2)
-    user_ids: list[int] = []
-
-
 class LobbySidesWrite(SQLModel):
-    """Who plays a series that names no player of its own.
-
-    `entrant_ids` seats a lobby, in seat order; an organiser writes it before
-    the round starts, so an entrant may move from one lobby to another.
-    `sides` names the roster each side of a fixture series fields, which a
-    captain of that side writes.
-    """
+    """Who sits in a free for all lobby, in seat order; an organiser writes it
+    before the round starts, so an entrant may move from one lobby to another."""
 
     entrant_ids: list[int] = []
-    sides: list[SideRoster] = []

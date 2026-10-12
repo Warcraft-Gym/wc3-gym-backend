@@ -16,6 +16,7 @@ from sqlalchemy import (
     table,
     text,
     true,
+    union_all,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Session, column_property
@@ -308,11 +309,12 @@ def series_counts_by_event(
 
     Every series names its round and every round names its event, so the count
     joins through the round and takes a generated bracket series, which has no
-    fixture, the same way as a GNL one. A series has started once it is scored
-    or its time has passed; a bracket series carries no time until it is
-    scheduled, so it counts as started only once it is scored. An event with no
-    series has no row here.
+    fixture, the same way as a GNL one, and a cup's series from its own table.
+    A series has started once it is scored or its time has passed; a cup
+    series carries no time, so it counts as started only once it is scored.
+    An event with no series has no row here.
     """
+    from app.models.cup_series import CupSeries
     from app.models.relationships import DBEventRound
     from app.models.series import Series
 
@@ -321,17 +323,37 @@ def series_counts_by_event(
         return {}
     scored = series_scored()
     started = or_(scored, col(Series.date_time) <= utcnow())
-    rows = session.execute(
+    cup_scored = and_(
+        col(CupSeries.player1_score).is_not(None),
+        col(CupSeries.player2_score).is_not(None),
+    )
+    flag = case((scored, 1), else_=0)
+    cup_flag = case((cup_scored, 1), else_=0)
+    both = union_all(
         select(
-            col(DBEventRound.season_id),
-            func.count(),
-            func.coalesce(func.sum(case((started, 1), else_=0)), 0),
-            func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
+            col(DBEventRound.season_id).label("event_id"),
+            case((started, 1), else_=0).label("started"),
+            flag.label("scored"),
         )
         .select_from(Series)
         .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
-        .where(col(DBEventRound.season_id).in_(ids))
-        .group_by(col(DBEventRound.season_id))
+        .where(col(DBEventRound.season_id).in_(ids)),
+        select(
+            col(DBEventRound.season_id).label("event_id"),
+            cup_flag.label("started"),
+            cup_flag.label("scored"),
+        )
+        .select_from(CupSeries)
+        .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
+        .where(col(DBEventRound.season_id).in_(ids)),
+    ).subquery()
+    rows = session.execute(
+        select(
+            both.c.event_id,
+            func.count(),
+            func.coalesce(func.sum(both.c.started), 0),
+            func.coalesce(func.sum(both.c.scored), 0),
+        ).group_by(both.c.event_id)
     ).all()
     return {row[0]: (row[1], row[2], row[3]) for row in rows}
 

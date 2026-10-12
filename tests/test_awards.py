@@ -120,7 +120,7 @@ def test_closing_a_koth_night_crowns_the_king_of_every_bracket(
     pair = entrants(client, night["id"])
     series = open_chain(night["id"], night["stages"][0]["id"])
     # The admin paired them in signup order, so the second side takes the throne
-    assert score(client, auth_headers, series, 0, 1).status_code == 200
+    assert score(client, auth_headers, series, 0, 1, "series").status_code == 200
 
     closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
 

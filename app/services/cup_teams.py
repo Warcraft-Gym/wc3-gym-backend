@@ -1,11 +1,11 @@
 """The teams of a team cup: made for one cup, signed up by a captain, confirmed
 by every player they invite.
 
-A cup team is a team row with the cup as its `event_id`; its roster
-(user_team_season against the cup) holds confirmed players only, its captain
-sits in team_season_captain, and an invited player waits in team_invite. The
-engine plays the team's entrant as any team entrant: the roster fills the side.
-Every player is held to the cup's eligibility on their own.
+A cup team is a `cup_team` row of the cup; its members (`cup_team_member`)
+are the confirmed players, the captain among them, and an invited player
+waits in `cup_team_invite`. No GNL read sees it. The engine plays the team's
+entrant as one side, and every member acts for it. Every player is held to
+the cup's eligibility on their own.
 """
 
 from typing import Any
@@ -16,28 +16,25 @@ from sqlmodel import col, or_
 
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.core.outcome import scored
 from app.models.base import ident
-from app.models.enums import EntrantKind
-from app.models.event_entrant import EntrantAdd, EventEntrant, EventEntrantPublic
-from app.models.relationships import DBEventRound, DBTeamSeasonCaptain
-from app.models.season import Season
-from app.models.series import Series
-from app.models.series_side import SeriesSide
-from app.models.series_veto_step import DBSeriesVetoStep
-from app.models.team import Team
-from app.models.team_invite import (
+from app.models.cup_series import CupSeries
+from app.models.cup_team import (
+    CupTeam,
     CupTeamAdd,
     CupTeamCreate,
-    TeamInvite,
+    CupTeamInvite,
+    CupTeamMember,
     TeamInvitePublic,
+    team_summary,
 )
-from app.models.team_season import DBTeamSeason
-from app.models.team_summary import TeamSummaryPublic
+from app.models.enums import EntrantKind
+from app.models.event_entrant import EntrantAdd, EventEntrant, EventEntrantPublic
+from app.models.season import Season
 from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
-from app.models.user_team_season import DBUserTeamSeason
+from app.services import cup_engine
 from app.services import events as event_service
-from app.services import stage_engine
 
 
 def sign_up(
@@ -114,9 +111,7 @@ def accept(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None:
         invite = _invite(session, event_id, team_id, user_id)
         _hold(session, event, _players(session, [user_id])[0])
         session.delete(invite)
-        session.add(
-            DBUserTeamSeason(user_id=user_id, team_id=team_id, season_id=event_id)
-        )
+        session.add(CupTeamMember(team_id=team_id, user_id=user_id))
 
 
 def decline(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None:
@@ -138,15 +133,13 @@ def invite(
     with Session.begin() as session:
         event = _team_cup(session, event_id)
         _hold_captain(session, event_id, team_id, claims)
-        held = _roster_count(session, event_id, team_id) + _invite_count(
-            session, team_id
-        )
+        held = _roster_count(session, team_id) + _invite_count(session, team_id)
         if held >= (event.team_size or 0):
             raise BadRequestError("The team is full; take an invite back first")
         players = _players(session, [user_id])
         _hold_free(session, event, players)
         _hold(session, event, players[0])
-        session.add(TeamInvite(team_id=team_id, user_id=user_id, event_id=event_id))
+        session.add(CupTeamInvite(team_id=team_id, user_id=user_id, event_id=event_id))
 
 
 def take_back(
@@ -166,12 +159,13 @@ def leave(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None:
             raise ApiError(
                 403, {"error": "No player profile is linked to this Discord account"}
             )
-        if session.get(DBTeamSeasonCaptain, (team_id, event_id, ident(caller))):
-            raise BadRequestError("The captain withdraws the team instead")
-        row = session.get(DBUserTeamSeason, (ident(caller), team_id, event_id))
+        entrant = _entrant_of(session, event_id, team_id)
+        row = session.get(CupTeamMember, (team_id, ident(caller)))
         if row is None:
             raise NotFoundError("You are not in this team")
-        _hold_unplayed(session, _entrant_of(session, event_id, team_id))
+        if row.captain:
+            raise BadRequestError("The captain withdraws the team instead")
+        _hold_unplayed(session, entrant)
         session.delete(row)
 
 
@@ -182,9 +176,11 @@ def withdraw(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None
         _hold_captain(session, event_id, team_id, claims)
         entrant = _entrant_of(session, event_id, team_id)
         entrant.withdrawn_at = utcnow()
-        session.execute(delete(TeamInvite).where(col(TeamInvite.team_id) == team_id))
+        session.execute(
+            delete(CupTeamInvite).where(col(CupTeamInvite.team_id) == team_id)
+        )
         session.flush()
-        stage_engine.forfeit_open(session, [ident(entrant)])
+        cup_engine.forfeit_open(session, [ident(entrant)])
 
 
 def replace_member(
@@ -192,57 +188,26 @@ def replace_member(
 ) -> EventEntrantPublic:
     """A runner puts another player in a team's place of one who leaves it.
 
-    The new player takes the old one's seat on the roster, the captaincy with
-    it, and their place on every series the team has still to play, whose veto
-    starts over. A team that has played a match keeps its roster.
+    The new player takes the old one's seat on the roster, and the captaincy
+    with it. A team that has played a match keeps its roster.
     """
     _refresh(event_id, [data_user_id])
     with Session.begin() as session:
         event = _team_cup(session, event_id)
         entrant = _entrant_of(session, event_id, team_id)
         _hold_unplayed(session, entrant)
-        row = session.get(DBUserTeamSeason, (user_id, team_id, event_id))
+        row = session.get(CupTeamMember, (team_id, user_id))
         if row is None:
             raise NotFoundError("That player is not in this team")
         players = _players(session, [data_user_id])
         _hold_free(session, event, players)
         _hold(session, event, players[0])
+        captain = row.captain
         session.delete(row)
+        session.flush()
         session.add(
-            DBUserTeamSeason(user_id=data_user_id, team_id=team_id, season_id=event_id)
+            CupTeamMember(team_id=team_id, user_id=data_user_id, captain=captain)
         )
-        captain = session.get(DBTeamSeasonCaptain, (team_id, event_id, user_id))
-        if captain is not None:
-            session.delete(captain)
-            session.add(
-                DBTeamSeasonCaptain(
-                    team_id=team_id, season_id=event_id, user_id=data_user_id
-                )
-            )
-        for side in session.scalars(
-            select(SeriesSide).where(
-                col(SeriesSide.entrant_id) == ident(entrant),
-                col(SeriesSide.user_id) == user_id,
-            )
-        ).all():
-            series = session.get(Series, side.series_id)
-            if series is None or stage_engine.scored(series):
-                continue
-            session.add(
-                SeriesSide(
-                    series_id=side.series_id,
-                    side_no=side.side_no,
-                    user_id=data_user_id,
-                    entrant_id=side.entrant_id,
-                    place=side.place,
-                )
-            )
-            session.delete(side)
-            session.execute(
-                delete(DBSeriesVetoStep).where(
-                    col(DBSeriesVetoStep.series_id) == side.series_id
-                )
-            )
         session.flush()
         return event_service._entrant_publics(session, event, [entrant])[0]
 
@@ -254,21 +219,22 @@ def invites_for(claims: dict[str, Any] | None) -> list[TeamInvitePublic]:
         if caller is None:
             return []
         rows = session.execute(
-            select(TeamInvite, Team, Season)
-            .join(Team, col(Team.id) == col(TeamInvite.team_id))
-            .join(Season, col(Season.id) == col(TeamInvite.event_id))
-            .where(col(TeamInvite.user_id) == ident(caller))
-            .order_by(col(TeamInvite.invited_at).desc())
+            select(CupTeamInvite, CupTeam, Season)
+            .join(CupTeam, col(CupTeam.id) == col(CupTeamInvite.team_id))
+            .join(Season, col(Season.id) == col(CupTeamInvite.event_id))
+            .where(col(CupTeamInvite.user_id) == ident(caller))
+            .order_by(col(CupTeamInvite.invited_at).desc())
         ).all()
         captains = {
             team_id: user
             for team_id, user in session.execute(
-                select(col(DBTeamSeasonCaptain.team_id), User)
-                .join(User, col(User.id) == col(DBTeamSeasonCaptain.user_id))
+                select(col(CupTeamMember.team_id), User)
+                .join(User, col(User.id) == col(CupTeamMember.user_id))
                 .where(
-                    col(DBTeamSeasonCaptain.team_id).in_(
+                    col(CupTeamMember.team_id).in_(
                         [ident(team) for _, team, _ in rows]
-                    )
+                    ),
+                    col(CupTeamMember.captain),
                 )
             ).all()
         }
@@ -276,7 +242,7 @@ def invites_for(claims: dict[str, Any] | None) -> list[TeamInvitePublic]:
             TeamInvitePublic(
                 event_id=ident(event),
                 event_name=event.name,
-                team=TeamSummaryPublic.from_team(team),
+                team=team_summary(team),
                 captain=UserSummaryPublic.from_user(captains[ident(team)])
                 if ident(team) in captains
                 else None,
@@ -293,14 +259,15 @@ def incomplete(session: OrmSession, event: Season) -> list[str]:
     counts: dict[int, int] = {
         team_id: total
         for team_id, total in session.execute(
-            select(col(DBUserTeamSeason.team_id), func.count())
-            .where(col(DBUserTeamSeason.season_id) == ident(event))
-            .group_by(col(DBUserTeamSeason.team_id))
+            select(col(CupTeamMember.team_id), func.count())
+            .join(CupTeam, col(CupTeam.id) == col(CupTeamMember.team_id))
+            .where(col(CupTeam.event_id) == ident(event))
+            .group_by(col(CupTeamMember.team_id))
         ).all()
     }
     teams = session.execute(
-        select(col(Team.id), col(Team.name))
-        .join(EventEntrant, col(EventEntrant.team_id) == col(Team.id))
+        select(col(CupTeam.id), col(CupTeam.name))
+        .join(EventEntrant, col(EventEntrant.cup_team_id) == col(CupTeam.id))
         .where(
             col(EventEntrant.event_id) == ident(event),
             col(EventEntrant.withdrawn_at).is_(None),
@@ -343,23 +310,22 @@ def _hold_free(session: OrmSession, event: Season, players: list[User]) -> None:
     ids = [ident(player) for player in players]
     taken = set(
         session.scalars(
-            select(col(DBUserTeamSeason.user_id))
+            select(col(CupTeamMember.user_id))
             .join(
                 EventEntrant,
-                (col(EventEntrant.team_id) == col(DBUserTeamSeason.team_id))
-                & (col(EventEntrant.event_id) == col(DBUserTeamSeason.season_id)),
+                col(EventEntrant.cup_team_id) == col(CupTeamMember.team_id),
             )
             .where(
-                col(DBUserTeamSeason.season_id) == ident(event),
-                col(DBUserTeamSeason.user_id).in_(ids),
+                col(EventEntrant.event_id) == ident(event),
+                col(CupTeamMember.user_id).in_(ids),
                 col(EventEntrant.withdrawn_at).is_(None),
             )
         )
     ) | set(
         session.scalars(
-            select(col(TeamInvite.user_id)).where(
-                col(TeamInvite.event_id) == ident(event),
-                col(TeamInvite.user_id).in_(ids),
+            select(col(CupTeamInvite.user_id)).where(
+                col(CupTeamInvite.event_id) == ident(event),
+                col(CupTeamInvite.user_id).in_(ids),
             )
         )
     )
@@ -398,25 +364,20 @@ def _write_team(
     waits = may_wait and event_service._waits(session, event)
     if not waits:
         event_service._room_for_one_more(session, event)
-    team = Team(name=name.strip(), event_id=ident(event), league_id=event.league_id)
+    team = CupTeam(name=name.strip(), event_id=ident(event))
     session.add(team)
     session.flush()
     team_id = ident(team)
-    session.add(DBTeamSeason(team_id=team_id, season_id=ident(event)))
-    session.add(
-        DBTeamSeasonCaptain(
-            team_id=team_id, season_id=ident(event), user_id=ident(captain)
-        )
-    )
-    for user_id in [ident(captain), *confirmed]:
-        session.add(
-            DBUserTeamSeason(user_id=user_id, team_id=team_id, season_id=ident(event))
-        )
+    session.add(CupTeamMember(team_id=team_id, user_id=ident(captain), captain=True))
+    for user_id in confirmed:
+        session.add(CupTeamMember(team_id=team_id, user_id=user_id))
     for user_id in invited:
-        session.add(TeamInvite(team_id=team_id, user_id=user_id, event_id=ident(event)))
+        session.add(
+            CupTeamInvite(team_id=team_id, user_id=user_id, event_id=ident(event))
+        )
     row = EventEntrant(
         event_id=ident(event),
-        team_id=team_id,
+        cup_team_id=team_id,
         waitlisted_at=utcnow() if waits else None,
     )
     session.add(row)
@@ -426,8 +387,8 @@ def _write_team(
 
 def _invite(
     session: OrmSession, event_id: int, team_id: int, user_id: int
-) -> TeamInvite:
-    row = session.get(TeamInvite, (team_id, user_id))
+) -> CupTeamInvite:
+    row = session.get(CupTeamInvite, (team_id, user_id))
     if row is None or row.event_id != event_id:
         raise NotFoundError("No invite of this team for that player")
     return row
@@ -437,21 +398,22 @@ def _hold_captain(
     session: OrmSession, event_id: int, team_id: int, claims: dict[str, Any] | None
 ) -> None:
     caller = event_service._caller(session, claims)
-    if caller is None or not session.get(
-        DBTeamSeasonCaptain, (team_id, event_id, ident(caller))
-    ):
+    seat = (
+        session.get(CupTeamMember, (team_id, ident(caller)))
+        if caller is not None
+        else None
+    )
+    team = session.get(CupTeam, team_id)
+    if seat is None or not seat.captain or team is None or team.event_id != event_id:
         raise ApiError(403, {"error": "Only the captain of the team does this"})
 
 
-def _roster_count(session: OrmSession, event_id: int, team_id: int) -> int:
+def _roster_count(session: OrmSession, team_id: int) -> int:
     return (
         session.scalar(
             select(func.count())
-            .select_from(DBUserTeamSeason)
-            .where(
-                col(DBUserTeamSeason.team_id) == team_id,
-                col(DBUserTeamSeason.season_id) == event_id,
-            )
+            .select_from(CupTeamMember)
+            .where(col(CupTeamMember.team_id) == team_id)
         )
         or 0
     )
@@ -461,8 +423,8 @@ def _invite_count(session: OrmSession, team_id: int) -> int:
     return (
         session.scalar(
             select(func.count())
-            .select_from(TeamInvite)
-            .where(col(TeamInvite.team_id) == team_id)
+            .select_from(CupTeamInvite)
+            .where(col(CupTeamInvite.team_id) == team_id)
         )
         or 0
     )
@@ -472,7 +434,7 @@ def _entrant_of(session: OrmSession, event_id: int, team_id: int) -> EventEntran
     row = session.scalars(
         select(EventEntrant).where(
             col(EventEntrant.event_id) == event_id,
-            col(EventEntrant.team_id) == team_id,
+            col(EventEntrant.cup_team_id) == team_id,
         )
     ).first()
     if row is None:
@@ -484,18 +446,16 @@ def _hold_unplayed(session: OrmSession, entrant: EventEntrant) -> None:
     """Refuse a change of roster once the team has played a match."""
     entrant_id = ident(entrant)
     played = session.scalars(
-        select(Series)
-        .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
-        .where(
+        select(CupSeries).where(
             or_(
-                col(Series.entrant1_id) == entrant_id,
-                col(Series.entrant2_id) == entrant_id,
+                col(CupSeries.entrant1_id) == entrant_id,
+                col(CupSeries.entrant2_id) == entrant_id,
             ),
-            col(Series.entrant1_id).is_not(None),
-            col(Series.entrant2_id).is_not(None),
+            col(CupSeries.entrant1_id).is_not(None),
+            col(CupSeries.entrant2_id).is_not(None),
         )
     ).all()
-    if any(stage_engine.scored(row) for row in played):
+    if any(scored(row) for row in played):
         raise BadRequestError(
             "This team has played a match already, so its roster stays"
         )

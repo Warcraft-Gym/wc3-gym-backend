@@ -1,4 +1,4 @@
-"""One entrant of an event: a player, a pre-made team, or an archival identity.
+"""One entrant of an event: a player, a pre-made team, a cup team, or an archival identity.
 
 Eligibility warns and never blocks (NE-8), so nothing here refuses a signup:
 a withdrawn or unchecked-in entrant keeps its row and its stamps say so. The
@@ -39,10 +39,11 @@ class EventEntrant(DBModel, table=True):
         UniqueConstraint(
             "event_id", "team_id", name="uq_event_entrant_event_id_team_id"
         ),
-        # A side names exactly one account, team or archival identity
+        # A side names exactly one account, team, cup team or archival identity
         CheckConstraint(
             "(CASE WHEN user_id IS NULL THEN 0 ELSE 1 END "
             "+ CASE WHEN team_id IS NULL THEN 0 ELSE 1 END "
+            "+ CASE WHEN cup_team_id IS NULL THEN 0 ELSE 1 END "
             "+ CASE WHEN historical_participant_id IS NULL THEN 0 ELSE 1 END) = 1",
             name="one_entrant",
         ),
@@ -56,6 +57,10 @@ class EventEntrant(DBModel, table=True):
     # A team event enters pre-made teams
     team_id: int | None = Field(
         default=None, index=True, foreign_key="teams.id", ondelete="CASCADE"
+    )
+    # A cup enters the teams made for it, one entrant each
+    cup_team_id: int | None = Field(
+        default=None, unique=True, foreign_key="cup_team.id", ondelete="CASCADE"
     )
     historical_participant_id: int | None = Field(
         default=None,

@@ -178,7 +178,7 @@ def play(
         if given:
             given = False
             answer = client.put(
-                f"/series/{row['id']}/result-kind",
+                f"/cup-series/{row['id']}/result-kind",
                 json={"result_kind": "walkover", "winner": 1 if first else 2},
                 headers=headers,
             )
@@ -260,9 +260,8 @@ def test_the_run_page_reads_the_rounds_the_sequences_and_no_feeders(
         assert (row["slot1_takes_loser"], row["slot2_takes_loser"]) == (False, False)
         assert row["result_kind"] == "played"
         assert row["side_size"] == 1
-        assert row["pick_rule"] is None
-        # A stage series hangs off its round, not off a fixture
-        assert row["match"] is None
+        # A cup series hangs off its round, never off a fixture
+        assert not {"pick_rule", "match", "match_id"} & set(row)
 
 
 def test_the_season_plays_out_to_one_winner_in_each_division(
@@ -353,7 +352,7 @@ def test_the_season_plays_out_to_one_winner_in_each_division(
 
     last = finals[0]
     cleared = client.put(
-        f"/series/{last['id']}?force=true",
+        f"/cup-series/{last['id']}?force=true",
         json={"player1_score": None, "player2_score": None},
         headers=auth_headers,
     )

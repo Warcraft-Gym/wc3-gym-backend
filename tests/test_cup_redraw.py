@@ -11,11 +11,10 @@ from httpx2 import Client
 from sqlmodel import col, select
 
 from app.core.db import Session
+from app.models.cup_series import CupSeries, CupVetoStep
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.relationships import DBEventRound
-from app.models.series import Series
-from app.models.series_veto_step import DBSeriesVetoStep
 from tests.test_cup_best_of import maps
 from tests.test_event_organizers import Headers, Member, create, draw, enter, grant
 from tests.test_stage_engine import players
@@ -33,13 +32,13 @@ def entrants(event: int) -> dict[int, EventEntrant]:
         return {row.user_id: row for row in rows if row.user_id is not None}
 
 
-def series_of(event: int) -> list[Series]:
+def series_of(event: int) -> list[CupSeries]:
     with Session.begin() as session:
         rows = session.scalars(
-            select(Series)
-            .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+            select(CupSeries)
+            .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
             .where(col(DBEventRound.season_id) == event)
-            .order_by(col(Series.id))
+            .order_by(col(CupSeries.id))
         ).all()
         session.expunge_all()
         return list(rows)
@@ -49,7 +48,7 @@ def veto_step(series_id: int | None) -> None:
     assert series_id is not None
     with Session.begin() as session:
         session.add(
-            DBSeriesVetoStep(
+            CupVetoStep(
                 series_id=series_id,
                 step_no=1,
                 side="A",
@@ -62,7 +61,7 @@ def veto_step(series_id: int | None) -> None:
 def walkover(client: Client, headers: Headers, series_id: int | None) -> None:
     assert series_id is not None
     response = client.put(
-        f"/series/{series_id}/result-kind",
+        f"/cup-series/{series_id}/result-kind",
         json={"result_kind": "walkover", "winner": 1},
         headers=headers,
     )
@@ -109,7 +108,7 @@ def test_the_draw_is_taken_back_with_every_series_and_drawn_anew(
         assert not session.scalars(
             select(DBEventRound).where(col(DBEventRound.season_id) == event["id"])
         ).all()
-        assert not session.scalars(select(DBSeriesVetoStep)).all()
+        assert not session.scalars(select(CupVetoStep)).all()
         stage_row = session.get(EventStage, stage)
         assert stage_row is not None
         assert stage_row.seeds_locked_at is None
@@ -202,7 +201,7 @@ def test_a_swap_starts_the_veto_over_and_never_takes_a_played_place(
     )
     assert swapped.status_code == 200, swapped.text
     with Session.begin() as session:
-        assert not session.scalars(select(DBSeriesVetoStep)).all()
+        assert not session.scalars(select(CupVetoStep)).all()
 
     walkover(client, auth_headers, only.id)
     played = entrants(event["id"])[late]

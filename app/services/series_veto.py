@@ -121,7 +121,7 @@ def _steps(session: OrmSession, series_id: int) -> list[DBSeriesVetoStep]:
     )
 
 
-def _order(event: Season | None) -> list[str]:
+def order_of(event: Season | None) -> list[str]:
     """The steps the event plays, for example Ban_A, Ban_B, Pick_A, Pick_B."""
     return [
         step for step in ((event.pick_ban if event else None) or "").split("|") if step
@@ -135,7 +135,7 @@ def _series_order(session: OrmSession, series: Series) -> list[str]:
     if event is not None and event.veto_by_best_of:
         rules = series_rules(session, series)
         return cup_order(rules.best_of, len(rules.map_pool))
-    return _order(event)
+    return order_of(event)
 
 
 def _side(entry: str) -> str:
@@ -157,7 +157,7 @@ def veto_limits(season: Season) -> tuple[int, int]:
 
 def check_order(season: Season) -> None:
     """Refuse an order the season cannot play through."""
-    order = _order(season)
+    order = order_of(season)
     for step in order:
         if step not in STEPS:
             raise BadRequestError(

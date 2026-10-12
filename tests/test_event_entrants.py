@@ -108,7 +108,8 @@ def test_a_members_event_refuses_a_caller_with_no_session(client: Client) -> Non
 def test_a_captain_enters_the_team_and_another_member_may_not(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
-    event = add_event(kind=EventKind.cup, league_id=seeded["league_id"])
+    event = add_event(kind=EventKind.signup, league_id=seeded["league_id"])
+    cup = add_event(kind=EventKind.cup, league_id=seeded["league_id"], name="Team Cup")
     with Session.begin() as session:
         session.add(
             DBTeamSeasonCaptain(
@@ -126,6 +127,12 @@ def test_a_captain_enters_the_team_and_another_member_may_not(
     refused = sign_up(client, event, member("2"), team_id=seeded["team_b_id"])
     assert refused.status_code == 403
     assert refused.json() == {"error": "Only a captain of the team enters it"}
+    # a cup enters the teams made for it, and refuses a league team
+    league_team = sign_up(client, cup, member("1"), team_id=seeded["team_a_id"])
+    assert league_team.status_code == 400
+    assert league_team.json() == {
+        "error": "A cup enters the teams made for it, not a league team"
+    }
 
 
 def test_the_signup_refuses_when_it_is_closed_full_or_already_taken(
@@ -336,7 +343,7 @@ def test_a_team_enters_on_no_race_and_carries_its_note(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
     """A team fields the races of its roster, so its row names none of them."""
-    event = add_event(kind=EventKind.cup, league_id=seeded["league_id"])
+    event = add_event(kind=EventKind.signup, league_id=seeded["league_id"])
     with Session.begin() as session:
         session.add(
             DBTeamSeasonCaptain(

@@ -15,15 +15,15 @@ from sqlmodel import col
 from app.core.db import Session
 from app.core.exceptions import BadRequestError
 from app.models.base import ident
-from app.models.enums import EntrantKind, EventKind, Race, StageFormat
+from app.models.cup_series import CupSeries
+from app.models.cup_team import CupTeamMember
+from app.models.enums import EventKind, Race, StageFormat
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
-from app.models.league import League
 from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
-from app.models.team import Team
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services import stage_engine
@@ -56,17 +56,17 @@ def cup(
     divisions: int = 0,
     stages: int = 1,
     ids: list[int] | None = None,
+    kind: EventKind = EventKind.cup,
     **fields: Any,  # noqa: ANN401
 ) -> tuple[int, list[int]]:
     """An event whose first stage plays `count` seeded entrants per division.
 
-    The players are fresh unless the caller names the ones to enter.
+    The players are fresh unless the caller names the ones to enter. A cup
+    plays on the cup tables; a chain is a KOTH night's, on `series`.
     """
     ids = ids or players(count * max(divisions, 1))
     with Session.begin() as session:
-        event = Season(
-            name="Autumn Cup", kind=EventKind.cup, series_per_round=1, published=True
-        )
+        event = Season(name="Autumn Cup", kind=kind, series_per_round=1, published=True)
         session.add(event)
         session.flush()
         rows = [EventStage(event_id=ident(event), position=1, format=fmt, **fields)]
@@ -107,8 +107,11 @@ def generate(client: Client, headers: dict[str, str], event: int, stage: int) ->
     return response.json()
 
 
-def bracket(stage: int) -> list[dict[str, Any]]:
-    """Every series of the stage, in play order, as plain values."""
+def bracket(
+    stage: int, model: type[CupSeries] | type[Series] = CupSeries
+) -> list[dict[str, Any]]:
+    """Every series of the stage, in play order, as plain values: a cup's, or
+    with `Series` a KOTH night's."""
     with Session.begin() as session:
         rounds = {
             ident(row): (row.number, row.name)
@@ -117,7 +120,7 @@ def bracket(stage: int) -> list[dict[str, Any]]:
             )
         }
         rows = session.scalars(
-            select(Series).where(col(Series.round_id).in_(list(rounds)))
+            select(model).where(col(model.round_id).in_(list(rounds)))
         ).all()
         return sorted(
             (
@@ -150,10 +153,16 @@ def names(rows: list[dict[str, Any]]) -> list[str]:
 
 
 def score(
-    client: Client, headers: dict[str, str], series_id: int, first: int, second: int
+    client: Client,
+    headers: dict[str, str],
+    series_id: int,
+    first: int,
+    second: int,
+    route: str = "cup-series",
 ) -> Any:  # noqa: ANN401
+    """A runner's result on a cup series, or with `route` "series" a GNL or KOTH one."""
     return client.put(
-        f"/series/{series_id}",
+        f"/{route}/{series_id}",
         json={"player1_score": first, "player2_score": second},
         headers=headers,
     )
@@ -428,7 +437,7 @@ def test_a_chain_stage_is_never_generated(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """A chain is built pair by pair by its admin, so the draw refuses it."""
-    event, (stage,) = cup(4, StageFormat.koth)
+    event, (stage,) = cup(4, StageFormat.koth, kind=EventKind.koth)
 
     response = client.post(
         f"/events/{event}/stages/{stage}/generate", headers=auth_headers
@@ -436,16 +445,16 @@ def test_a_chain_stage_is_never_generated(
 
     assert response.status_code == 400, response.text
     assert "paired by its admin" in response.json()["error"]
-    assert bracket(stage) == []
+    assert bracket(stage, Series) == []
 
 
 def test_a_chain_of_four_runs_in_one_round(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """Seeds 1 and 2 open and the winner meets the next seed, in sequence."""
-    event, (stage,) = cup(4, StageFormat.koth)
+    event, (stage,) = cup(4, StageFormat.koth, kind=EventKind.koth)
     chain_of(client, auth_headers, event, stage)
-    rows = bracket(stage)
+    rows = bracket(stage, Series)
     assert [row["sequence"] for row in rows] == [1, 2, 3]
     seeds = players_of(event)
     assert rows[0]["sides"] == (seeds[0], seeds[1])
@@ -528,25 +537,27 @@ def players_of(event: int) -> list[int]:
 def test_a_result_fills_the_series_below_it(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    event, (stage,) = cup(4, StageFormat.koth)
+    event, (stage,) = cup(4, StageFormat.koth, kind=EventKind.koth)
     chain_of(client, auth_headers, event, stage)
-    rows = bracket(stage)
+    rows = bracket(stage, Series)
     seeds = players_of(event)
-    assert score(client, auth_headers, rows[0]["id"], 2, 0).status_code == 200
-    after = bracket(stage)
+    assert score(client, auth_headers, rows[0]["id"], 2, 0, "series").status_code == 200
+    after = bracket(stage, Series)
     assert after[1]["sides"] == (seeds[0], seeds[2])
     # The third series still waits on the second
     assert after[2]["sides"] == (None, seeds[3])
-    assert score(client, auth_headers, after[1]["id"], 0, 2).status_code == 200
-    assert bracket(stage)[2]["sides"] == (seeds[2], seeds[3])
+    assert (
+        score(client, auth_headers, after[1]["id"], 0, 2, "series").status_code == 200
+    )
+    assert bracket(stage, Series)[2]["sides"] == (seeds[2], seeds[3])
 
 
 def test_a_walkover_scores_a_series_with_no_games(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    event, (stage,) = cup(4, StageFormat.koth)
+    event, (stage,) = cup(4, StageFormat.koth, kind=EventKind.koth)
     chain_of(client, auth_headers, event, stage)
-    rows = bracket(stage)
+    rows = bracket(stage, Series)
     seeds = players_of(event)
     response = client.put(
         f"/series/{rows[0]['id']}/result-kind",
@@ -558,7 +569,7 @@ def test_a_walkover_scores_a_series_with_no_games(
         0,
         2,
     )
-    after = bracket(stage)
+    after = bracket(stage, Series)
     assert after[0]["result_kind"] == "walkover"
     # The walkover carries its winner on like any other result
     assert after[1]["sides"] == (seeds[1], seeds[2])
@@ -575,31 +586,31 @@ def test_a_reopen_is_refused_while_a_later_series_is_scored(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """Clearing a score takes the side back off everything below it."""
-    event, (stage,) = cup(4, StageFormat.koth)
+    event, (stage,) = cup(4, StageFormat.koth, kind=EventKind.koth)
     chain_of(client, auth_headers, event, stage)
-    rows = bracket(stage)
+    rows = bracket(stage, Series)
     seeds = players_of(event)
-    score(client, auth_headers, rows[0]["id"], 2, 0)
-    score(client, auth_headers, rows[1]["id"], 2, 0)
+    score(client, auth_headers, rows[0]["id"], 2, 0, "series")
+    score(client, auth_headers, rows[1]["id"], 2, 0, "series")
     clear = {"player1_score": None, "player2_score": None}
     refused = client.put(f"/series/{rows[0]['id']}", json=clear, headers=auth_headers)
     assert refused.status_code == 400
     assert "force" in refused.json()["error"]
-    assert bracket(stage)[1]["score"] == (2, 0)
+    assert bracket(stage, Series)[1]["score"] == (2, 0)
 
     forced = client.put(
         f"/series/{rows[0]['id']}?force=true", json=clear, headers=auth_headers
     )
     assert forced.status_code == 200, forced.text
-    after = bracket(stage)
+    after = bracket(stage, Series)
     assert after[0]["score"] == (None, None)
     assert after[1]["score"] == (None, None)
     assert after[1]["sides"] == (None, seeds[2])
     # A reopen with nothing scored below it needs no force
-    score(client, auth_headers, after[0]["id"], 2, 0)
+    score(client, auth_headers, after[0]["id"], 2, 0, "series")
     plain = client.put(f"/series/{after[0]['id']}", json=clear, headers=auth_headers)
     assert plain.status_code == 200, plain.text
-    assert bracket(stage)[1]["sides"] == (None, seeds[2])
+    assert bracket(stage, Series)[1]["sides"] == (None, seeds[2])
 
 
 def test_a_corrected_winner_re_points_the_series_below(
@@ -640,7 +651,7 @@ def test_a_corrected_winner_is_refused_while_the_final_is_scored(
     assert held[2]["score"] == (2, 0)
 
     flipped = client.put(
-        f"/series/{rows[0]['id']}?force=true",
+        f"/cup-series/{rows[0]['id']}?force=true",
         json={"player1_score": 0, "player2_score": 2},
         headers=auth_headers,
     )
@@ -696,13 +707,13 @@ def test_the_standings_read_the_points_the_stage_pays(
 def test_a_koth_table_puts_the_last_winner_on_the_throne(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    event, (stage,) = cup(4, StageFormat.koth)
+    event, (stage,) = cup(4, StageFormat.koth, kind=EventKind.koth)
     chain_of(client, auth_headers, event, stage)
     seeds = players_of(event)
-    rows = bracket(stage)
-    score(client, auth_headers, rows[0]["id"], 2, 0)
-    score(client, auth_headers, bracket(stage)[1]["id"], 2, 0)
-    score(client, auth_headers, bracket(stage)[2]["id"], 0, 2)
+    rows = bracket(stage, Series)
+    score(client, auth_headers, rows[0]["id"], 2, 0, "series")
+    score(client, auth_headers, bracket(stage, Series)[1]["id"], 2, 0, "series")
+    score(client, auth_headers, bracket(stage, Series)[2]["id"], 0, 2, "series")
     table = client.get(f"/events/{event}/stages/{stage}/standings").json()[0]["rows"]
     # The last series crowned the fourth seed, whatever the rest of the table says
     assert table[0]["user_id"] == seeds[3]
@@ -832,7 +843,7 @@ def test_scoring_a_gnl_series_moves_nothing(
             other.id: (other.player1_id, other.player2_id, other.player1_score)
             for other in session.scalars(select(Series))
         }
-    assert score(client, auth_headers, series_id, 2, 0).status_code == 200
+    assert score(client, auth_headers, series_id, 2, 0, "series").status_code == 200
     with Session.begin() as session:
         after = {
             other.id: (other.player1_id, other.player2_id, other.player1_score)
@@ -985,7 +996,8 @@ def test_the_run_page_reads_the_rounds_and_the_series_of_a_stage(
     assert [row["division_id"] for row in rows] == [None, None, None]
     assert [row["result_kind"] for row in rows] == ["played"] * 3
     assert [row["side_size"] for row in rows] == [1, 1, 1]
-    assert [row["pick_rule"] for row in rows] == [None, None, None]
+    # a cup series hangs off no fixture, so it names no pick rule, host or cast
+    assert not {"pick_rule", "host_player_id", "casts", "match_id"} & set(rows[0])
 
 
 def test_a_waiting_side_names_the_series_it_comes_from(
@@ -1132,19 +1144,19 @@ def test_a_challenger_joins_the_chain_after_two_results(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """The third series is fed by the second, and the king fills its front side."""
-    event, (stage,) = cup(3, StageFormat.koth)
+    event, (stage,) = cup(3, StageFormat.koth, kind=EventKind.koth)
     chain_of(client, auth_headers, event, stage)
-    rows = bracket(stage)
+    rows = bracket(stage, Series)
     seeds = players_of(event)
-    assert score(client, auth_headers, rows[0]["id"], 2, 0).status_code == 200
-    assert score(client, auth_headers, rows[1]["id"], 2, 0).status_code == 200
+    assert score(client, auth_headers, rows[0]["id"], 2, 0, "series").status_code == 200
+    assert score(client, auth_headers, rows[1]["id"], 2, 0, "series").status_code == 200
     entrant = join(event, None, "Challenger")
     response = append(client, auth_headers, event, stage, entrant)
     assert response.status_code == 200, response.text
     added = response.json()
     assert added["sequence"] == 3
     assert added["slot1_from_series_id"] == rows[1]["id"]
-    after = bracket(stage)
+    after = bracket(stage, Series)
     assert len(after) == 3
     # Seed 1 held the throne through both series, so he stands in the third
     assert after[2]["sides"] == (seeds[0], added["player2_id"])
@@ -1155,12 +1167,12 @@ def test_a_challenger_waits_while_the_chain_is_unscored(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """The new series carries its feeder and an empty front side."""
-    event, (stage,) = cup(2, StageFormat.koth)
+    event, (stage,) = cup(2, StageFormat.koth, kind=EventKind.koth)
     chain_of(client, auth_headers, event, stage)
-    opener = bracket(stage)[0]
+    opener = bracket(stage, Series)[0]
     entrant = join(event, None, "Waiting")
     assert append(client, auth_headers, event, stage, entrant).status_code == 200
-    added = bracket(stage)[1]
+    added = bracket(stage, Series)[1]
     assert (added["sequence"], added["sides"][0]) == (2, None)
     assert added["slot1"] == (opener["id"], False)
 
@@ -1180,7 +1192,7 @@ def test_a_chain_with_no_series_refuses_a_challenger(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """Two entrants open the chain before a third joins it."""
-    event, (stage,) = cup(2, StageFormat.koth)
+    event, (stage,) = cup(2, StageFormat.koth, kind=EventKind.koth)
     entrant = join(event, None, "First")
     response = append(client, auth_headers, event, stage, entrant)
     assert response.status_code == 400, response.text
@@ -1191,7 +1203,7 @@ def test_an_entrant_of_another_division_is_refused(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """A challenger grows the chain of his own division, never a neighbour's."""
-    event, (stage,) = cup(2, StageFormat.koth, divisions=2)
+    event, (stage,) = cup(2, StageFormat.koth, divisions=2, kind=EventKind.koth)
     weaker = divisions_of(event)[1]
     for band in divisions_of(event):
         open_chain(event, stage, band)
@@ -1271,54 +1283,39 @@ def team_cup(
     auth: dict[str, str],
     member: Callable[..., dict[str, str]],
     fmt: StageFormat = StageFormat.single_elimination,
-    series_per_round: int = 1,
     **fields: Any,  # noqa: ANN401
 ) -> tuple[int, int, list[int], list[list[str]]]:
-    """A 2v2 cup of four pre-made teams.
+    """A 2v2 cup of four teams made for it, T1 to T4.
 
-    Eight players, two to a team, each team rostered against the cup and
-    entered by its captain, which is the first player of its roster. The
-    rosters come back as the Discord ids the players sign in with.
+    Eight players, two to a team, each team entered whole by the cup's runner
+    with its first player as captain. The rosters come back as the Discord
+    ids the players sign in with, and the teams as cup team ids.
     """
     ids = players(8)
     with Session.begin() as session:
-        league = League(name="Team Cup League", entrant_kind=EntrantKind.team)
-        session.add(league)
-        session.flush()
         event = Season(
             name="Team Cup",
-            league_id=ident(league),
             kind=EventKind.cup,
-            series_per_round=series_per_round,
+            series_per_round=1,
+            team_size=2,
             published=True,
         )
         session.add(event)
         session.flush()
         stage = EventStage(event_id=ident(event), position=1, format=fmt, **fields)
-        teams = [
-            Team(name=f"T{number}", league_id=ident(league)) for number in range(1, 5)
-        ]
-        session.add_all([stage, *teams])
+        session.add(stage)
         session.flush()
         event_id, stage_id = ident(event), ident(stage)
-        team_ids = [ident(team) for team in teams]
-    rosters = [ids[place * 2 : place * 2 + 2] for place in range(4)]
-    for place, (team_id, roster) in enumerate(zip(team_ids, rosters, strict=True)):
-        base = f"/events/{event_id}/teams/{team_id}"
-        added = client.post(
-            f"{base}/players", json={"player_ids": roster}, headers=auth
-        )
-        assert added.status_code == 200, added.text
-        seated = client.put(
-            f"{base}/captains", json={"captain_ids": roster[:1]}, headers=auth
-        )
-        assert seated.status_code == 200, seated.text
+    team_ids: list[int] = []
+    for place in range(4):
+        captain, mate = ids[place * 2 : place * 2 + 2]
         entered = client.post(
-            f"/events/{event_id}/entrants",
-            json={"team_id": team_id},
-            headers=member(f"9{place * 2 + 1:04d}"),
+            f"/events/{event_id}/cup-teams/admin",
+            json={"name": f"T{place + 1}", "captain_id": captain, "member_ids": [mate]},
+            headers=auth,
         )
         assert entered.status_code == 201, entered.text
+        team_ids.append(entered.json()["team"]["id"])
     tags = [[f"9{place * 2 + seat:04d}" for seat in (1, 2)] for place in range(4)]
     return event_id, stage_id, team_ids, tags
 
@@ -1359,12 +1356,8 @@ def test_a_series_holds_the_roster_of_its_own_two_sides(
         session.add(third)
         session.flush()
         third_id = ident(third)
-    added = client.post(
-        f"/events/{event}/teams/{team_ids[0]}/players",
-        json={"player_ids": [third_id]},
-        headers=auth_headers,
-    )
-    assert added.status_code == 200, added.text
+        # a team cup fields its team size; a third member sizes this team's series alone
+        session.add(CupTeamMember(team_id=team_ids[0], user_id=third_id))
 
     generate(client, auth_headers, event, stage)
 
@@ -1378,10 +1371,7 @@ def test_a_series_holds_the_roster_of_its_own_two_sides(
 
 
 def test_a_roster_member_reports_a_team_series_and_a_stranger_may_not(
-    client: Client,
-    auth_headers: dict[str, str],
-    member: Callable[..., dict[str, str]],
-    replay_uploaded: Callable[..., None],
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
 ) -> None:
     """The side is the team, so either of its two players reports for it."""
     event, stage, _, rosters = team_cup(client, auth_headers, member)
@@ -1391,29 +1381,27 @@ def test_a_roster_member_reports_a_team_series_and_a_stranger_may_not(
         for row in stage_series(client, event, stage)["series"]
         if row["entrant1_id"] is not None
     )
-    replay_uploaded(first["id"], 1, 2)
-
-    # The second player of the front side is on the roster, not a named player
-    reported = client.put(
-        f"/player-series/{first['id']}",
-        headers=member("90002"),
-        data={"action": "score_updated", "player1_score": "2", "player2_score": "0"},
-    )
-
-    assert reported.status_code == 200, reported.text
+    path = f"/cup-series/{first['id']}/report"
     # A player of a team that plays the other semifinal is refused
     stranger = client.put(
-        f"/player-series/{first['id']}",
+        path,
         headers=member(rosters[2][0]),
-        json={"date_time": "2026-03-01 20:00:00"},
+        json={"player1_score": 2, "player2_score": 0},
     )
     assert stranger.status_code == 403, stranger.text
     assert stranger.json() == {"error": "not_authorized_for_this_series"}
 
-    # The upload the report needs is open to the roster and shut to the stranger
-    path = f"/player-series/{first['id']}/replays/1/upload-url"
-    assert client.post(path, headers=member("90002")).status_code == 200
-    assert client.post(path, headers=member(rosters[2][0])).status_code == 403
+    # The second player of the front side is a member, not a named player
+    reported = client.put(
+        path,
+        headers=member("90002"),
+        json={"player1_score": 2, "player2_score": 0},
+    )
+    assert reported.status_code == 200, reported.text
+    assert (reported.json()["player1_score"], reported.json()["player2_score"]) == (
+        2,
+        0,
+    )
 
 
 def test_a_corrected_team_result_moves_the_bracket(
@@ -1589,67 +1577,36 @@ def test_a_playoff_refuses_to_seed_while_the_stage_before_owes_a_result(
     assert seeded.status_code == 200, seeded.text
 
 
-def test_a_four_team_league_pairs_its_teams_into_fixtures(
-    client: Client,
-    auth_headers: dict[str, str],
-    member: Callable[..., dict[str, str]],
-    replay_uploaded: Callable[..., None],
+def test_a_four_team_league_plays_one_series_per_pair(
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
 ) -> None:
-    """Every pair of a round is one fixture holding series_per_round series.
-
-    The captain of a side reports both of them, the fixture score is summed
-    from the series as GNL sums it, and the table ranks by series points.
-    The event names no map rules, as the wizard leaves them, so a fixture
-    series that read them off the event would play the default best of 3.
-    """
+    """A round robin over a cup's teams writes one series per pair, each team a
+    side and no fixture, plays the best-of its stage names, and ranks on the
+    series the teams won."""
     event, stage, team_ids, rosters = team_cup(
-        client,
-        auth_headers,
-        member,
-        StageFormat.round_robin,
-        series_per_round=2,
-        best_of=5,
+        client, auth_headers, member, StageFormat.round_robin, best_of=5
     )
 
-    assert generate(client, auth_headers, event, stage) == {"series": 12, "rounds": 3}
+    assert generate(client, auth_headers, event, stage) == {"series": 6, "rounds": 3}
 
     rows = stage_series(client, event, stage)["series"]
-    # A series in a fixture still plays the best-of its own stage names
     assert all(row["rules"]["best_of"] == 5 for row in rows)
-    fixtures = [row["match_id"] for row in rows]
-    assert len(set(fixtures)) == 6
-    assert sorted(fixtures.count(one) for one in set(fixtures)) == [2] * 6
-    assert [row["sequence"] for row in rows] == [1, 2] * 6
-    # A team side names its entrant and no user, as it does in a bracket
     assert all(row["player1_id"] is None and row["player2_id"] is None for row in rows)
-    # Two fixtures a round, each in the round its playday names
-    played = {row["match"]["playday"] for row in rows}
-    assert played == {1, 2, 3}
-    assert all(row["match"]["team1_id"] in team_ids for row in rows)
-    assert all(row["match"]["season_id"] == event for row in rows)
+    assert all("match_id" not in row for row in rows)
+    assert len({(row["team1"]["id"], row["team2"]["id"]) for row in rows}) == 6
 
-    first = rows[0]["match"]["team1_id"]
-    captain = rosters[team_ids.index(first)][0]
-    for row in rows[:2]:
-        replay_uploaded(row["id"], 1, 2, 3)
-        reported = client.put(
-            f"/player-series/{row['id']}",
-            headers=member(captain),
-            data={
-                "action": "score_updated",
-                "player1_score": "3",
-                "player2_score": "0",
-            },
-        )
-        assert reported.status_code == 200, reported.text
+    first = rows[0]
+    captain = rosters[team_ids.index(first["team1"]["id"])][0]
+    reported = client.put(
+        f"/cup-series/{first['id']}/report",
+        headers=member(captain),
+        json={"player1_score": 3, "player2_score": 0},
+    )
+    assert reported.status_code == 200, reported.text
 
-    scored = stage_series(client, event, stage)["series"][0]
-    # A clean win of a Bo5 pays 5, so the fixture score sums its two series
-    assert (scored["match"]["team1_score"], scored["match"]["team2_score"]) == (10, 0)
     table = client.get(f"/events/{event}/stages/{stage}/standings").json()
-    assert table[0]["rows"][0]["team_id"] == first
-    assert table[0]["rows"][0]["points"] == 2
-    assert table[0]["rows"][0]["won"] == 2
+    assert table[0]["rows"][0]["team_id"] == first["team1"]["id"]
+    assert table[0]["rows"][0]["won"] == 1
 
 
 def test_a_stage_series_rates_both_sides_on_the_race_it_names(

@@ -18,6 +18,7 @@ from sqlmodel import col
 from app.core.battle_tags import fold
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.outcome import winner_of
 from app.models.base import ident
 from app.models.enums import EventKind, Race, SignupChannel
 from app.models.event_division import EventDivision
@@ -568,7 +569,7 @@ def _payloads(
 
 def _loser(row: Series) -> int | None:
     """The side a scored series sends home; a draw sends neither."""
-    winner = stage_engine.winner_of(row)
+    winner = winner_of(row)
     if winner is None:
         return None
     return row.player2_id if winner == row.player1_id else row.player1_id
@@ -609,7 +610,7 @@ def _match(
     by_user: dict[int, KothSignupPublic],
 ) -> KothMatchPublic:
     """One series of a chain as the old match shape: two sides, one map."""
-    winner = stage_engine.winner_of(row)
+    winner = winner_of(row)
     series_id = ident(row)
     return KothMatchPublic(
         id=series_id,

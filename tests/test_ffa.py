@@ -89,7 +89,7 @@ def play(
 ) -> Any:  # noqa: ANN401
     """Place the seats of one lobby, `order` naming the seats best place first."""
     return client.put(
-        f"/series/{lobby['id']}/places",
+        f"/cup-series/{lobby['id']}/places",
         json={
             "places": [
                 {"side_no": side_no, "place": place}
@@ -241,7 +241,7 @@ def test_an_organiser_moves_an_entrant_between_lobbies_before_the_round(
     swapped = [side["entrant_id"] for side in first["sides"]]
     swapped[-1] = second["sides"][-1]["entrant_id"]
     moved = client.put(
-        f"/series/{first['id']}/sides",
+        f"/cup-series/{first['id']}/sides",
         json={"entrant_ids": swapped},
         headers=auth_headers,
     )
@@ -259,14 +259,14 @@ def test_a_played_lobby_keeps_its_seats_and_a_two_sided_series_takes_none(
     lobby = lobbies(client, event, bracket, "Round 1")[0]
     assert play(client, auth_headers, lobby, by_seed(lobby, seeds)).status_code == 200
     settled = client.put(
-        f"/series/{lobby['id']}/sides",
+        f"/cup-series/{lobby['id']}/sides",
         json={"entrant_ids": [side["entrant_id"] for side in lobby["sides"]]},
         headers=auth_headers,
     )
     assert settled.status_code == 400
     assert "settled" in settled.text
     short = client.put(
-        f"/series/{lobby['id']}/places",
+        f"/cup-series/{lobby['id']}/places",
         json={"places": [{"side_no": 1, "place": 1}, {"side_no": 9, "place": 2}]},
         headers=auth_headers,
     )
@@ -281,10 +281,12 @@ def test_a_reader_cannot_place_a_lobby(
     generate(client, auth_headers, event, bracket)
     lobby = lobbies(client, event, bracket, "Round 1")[0]
     assert (
-        client.put(f"/series/{lobby['id']}/places", json={"places": []}).status_code
+        client.put(f"/cup-series/{lobby['id']}/places", json={"places": []}).status_code
         == 401
     )
     assert (
-        client.put(f"/series/{lobby['id']}/sides", json={"entrant_ids": []}).status_code
+        client.put(
+            f"/cup-series/{lobby['id']}/sides", json={"entrant_ids": []}
+        ).status_code
         == 401
     )

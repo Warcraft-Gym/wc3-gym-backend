@@ -210,12 +210,12 @@ def test_a_team_that_withdraws_forfeits_its_open_series(
     )
     assert gone.status_code == 204, gone.text
     with Session.begin() as session:
-        from app.models.series import Series
+        from app.models.cup_series import CupSeries
 
         [row] = session.scalars(
-            select(Series).where(
-                (col(Series.entrant1_id) == entrant)
-                | (col(Series.entrant2_id) == entrant)
+            select(CupSeries).where(
+                (col(CupSeries.entrant1_id) == entrant)
+                | (col(CupSeries.entrant2_id) == entrant)
             )
         ).all()
         assert row.result_kind == "forfeit"

@@ -22,10 +22,10 @@ from app.core.map_order import (
     decider_of,
     maps_by_game,
 )
+from app.models.cup_series import CupSeries
 from app.models.map import Map
 from app.models.relationships import DBEventRound
-from app.models.series import Series
-from app.services import series_games
+from app.services import cup_series
 from tests.test_event_organizers import (
     Headers,
     Member,
@@ -167,15 +167,15 @@ def test_a_cup_series_vetoes_down_to_the_decider_game_one_plays(
     enter(client, auth_headers, event["id"], players(2))
     assert draw(client, auth_headers, event).status_code == 200
     with Session.begin() as session:
-        series_id = session.scalars(select(Series)).one().id
+        series_id = session.scalars(select(CupSeries)).one().id
 
-    board = client.get(f"/player-series/{series_id}/veto", headers=auth_headers)
+    board = client.get(f"/cup-series/{series_id}/veto", headers=auth_headers)
     assert board.status_code == 200, board.text
     assert board.json()["order"] == ["Ban_A", "Ban_B"]
     assert board.json()["map_rules"] == "decider"
     for map_id in pool[:2]:
         step = client.put(
-            f"/player-series/{series_id}/veto",
+            f"/cup-series/{series_id}/veto",
             json={"action": "record", "map_id": map_id},
             headers=auth_headers,
         )
@@ -184,10 +184,8 @@ def test_a_cup_series_vetoes_down_to_the_decider_game_one_plays(
 
     # game 1 is offered on the one map the veto left
     with Session.begin() as session:
-        series = session.scalars(
-            select(Series).options(*series_games._OFFER_LOADS)
-        ).one()
-        assert series_games._offers(session, series) == {1: pool[2]}
+        series = session.scalars(select(CupSeries)).one()
+        assert cup_series._offers(session, series) == {1: pool[2]}
 
 
 def test_a_pool_smaller_than_the_longest_series_is_refused(

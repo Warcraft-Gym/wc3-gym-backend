@@ -11,21 +11,19 @@ from app.api.deps import (
     UserServiceDep,
     event_edge_cache,
     own_match,
-    require_series_runner,
+    require_admin,
 )
-from app.core.exceptions import ApiError, NotFoundError
+from app.core.exceptions import NotFoundError
 from app.core.security import is_admin
 from app.models.series import (
     ResultKindWrite,
     SeriesCreate,
     SeriesPublic,
     SeriesUpdate,
-    StageSeriesRow,
 )
 from app.models.series_cast import CastPublic, CastWrite, ClaimWrite, VodWrite
-from app.models.series_side import LobbySidesWrite, PlacesWrite
 from app.models.series_summary import SeriesSummaryPublic
-from app.services import casts, organizers, series_edit, series_summary, stage_engine
+from app.services import casts, series_edit, series_summary, stage_engine
 
 logger = logging.getLogger(__name__)
 
@@ -53,21 +51,13 @@ def update_series(
     """Update the series data of an existing series.
 
     A captain of either team of its fixture sends the time, the scores, the
-    races played, the host and the fantasy mark; an admin sends any field, and
-    so does an organizer of the event the series plays in, for that event's
-    series alone. Clearing the score reopens the bracket below it; `force`,
-    an admin's or an organizer's, allows the reopen when a later series
-    already carries a result.
+    races played, the host and the fantasy mark; an admin sends any field.
+    Clearing the score reopens the bracket below it; `force`, an admin's,
+    allows the reopen when a later series already carries a result.
     """
     admin = is_admin(claims)
     if not admin:
-        try:
-            own_match(claims, series_edit.fixture_of(series_id), matches)
-        except ApiError:
-            # a cup's series has no fixture: its organizers edit it as an admin does
-            if not organizers.runs_series(claims, series_id):
-                raise
-            admin = True
+        own_match(claims, series_edit.fixture_of(series_id), matches)
     return series_edit.edit(series_id, data, admin=admin, force=force)
 
 
@@ -81,63 +71,20 @@ def clear_series_result(
     """Take back a reported result, for whoever may report it.
 
     The scores, the races played and the games go, and the replays stay. A
-    walkover or a forfeit, and `force`, are an admin's, or an organizer's of
-    the event the series plays in.
+    walkover or a forfeit, and `force`, are an admin's.
     """
     admin = is_admin(claims)
     caller = None if admin else users.id_by_discord_id(str(claims["sub"]))
-    try:
-        return series_edit.clear_result(
-            series_id, admin=admin, user_id=caller, force=force
-        )
-    except ApiError as refused:
-        # a side clears its own result; an organizer of the event clears any
-        if admin or refused.status_code != 403:
-            raise
-        if not organizers.runs_series(claims, series_id):
-            raise
-    return series_edit.clear_result(series_id, admin=True, user_id=None, force=force)
+    return series_edit.clear_result(series_id, admin=admin, user_id=caller, force=force)
 
 
-@router.put(
-    "/series/{series_id}/result-kind", dependencies=[Depends(require_series_runner)]
-)
+@router.put("/series/{series_id}/result-kind", dependencies=[Depends(require_admin)])
 def set_result_kind(
     series_id: int, data: ResultKindWrite, service: SeriesServiceDep
 ) -> SeriesPublic:
     """Score a series no game was played for: a walkover or a forfeit."""
     stage_engine.set_result_kind(series_id, data)
     return service.get(series_id)
-
-
-@router.put("/series/{series_id}/places", dependencies=[Depends(require_series_runner)])
-def set_places(series_id: int, data: PlacesWrite) -> StageSeriesRow:
-    """Enter where every side of a free for all lobby finished.
-
-    A lobby plays one game, so the places settle it, and a round whose every
-    lobby carries places seats the lobbies of the round after it.
-    """
-    return stage_engine.set_places(series_id, data)
-
-
-@router.put("/series/{series_id}/sides")
-def set_sides(
-    series_id: int,
-    data: LobbySidesWrite,
-    claims: RequireLogin,
-    users: UserServiceDep,
-) -> StageSeriesRow:
-    """Seat a lobby again before it is played, or name a fixture side roster.
-
-    A body naming `sides` writes the roster each side of a fixture series
-    fields, which a captain of that team writes for his own side. Seating a
-    lobby again stays an admin act.
-    """
-    admin = is_admin(claims)
-    if not admin and not data.sides:
-        raise ApiError(403, {"error": "Admins only"})
-    caller = None if admin else users.id_by_discord_id(str(claims["sub"]))
-    return stage_engine.set_sides(series_id, data, admin=admin, user_id=caller)
 
 
 @router.delete("/series/{series_id}", status_code=204)

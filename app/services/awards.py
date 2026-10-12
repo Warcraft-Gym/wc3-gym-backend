@@ -13,12 +13,13 @@ from sqlmodel import col
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
+from app.models.enums import EventKind
 from app.models.event_award import EventAward, EventAwardPublic
 from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage, StandingRow
 from app.models.season import Season
 from app.models.types import utcnow
-from app.services import stage_engine
+from app.services import cup_engine, stage_engine
 
 # The places that carry a name of their own; the rest are placed by number
 TITLES = {1: "Champion", 2: "Runner-up", 3: "Third"}
@@ -44,12 +45,14 @@ def close_event(session: OrmSession, event_id: int) -> list[EventAward]:
             )
         )
     session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
+    # A cup team is no league team: its award names it through the entrant
+    cup = _is_cup(session, event_id)
     rows = [
         EventAward(
             event_id=event_id,
             entrant_id=line.entrant_id,
             user_id=line.user_id,
-            team_id=line.team_id,
+            team_id=None if cup else line.team_id,
             place=place,
             title=title_of(place),
         )
@@ -128,8 +131,10 @@ def event_places(session: OrmSession, event_id: int) -> list[tuple[int, Standing
     ).all()
     placed: dict[int | None, list[tuple[int, StandingRow]]] = {}
     seen: set[int] = set()
+    # A cup ranks on its own tables, a KOTH night on the series it played
+    tables = cup_engine.tables if _is_cup(session, event_id) else stage_engine.tables
     for index, stage in enumerate(stages):
-        for table in stage_engine._tables(session, event_id, stage):
+        for table in tables(session, event_id, stage):
             lines = placed.setdefault(table.division_id, [])
             fresh = [line for line in table.rows if line.entrant_id not in seen]
             if index == 0:
@@ -141,3 +146,8 @@ def event_places(session: OrmSession, event_id: int) -> list[tuple[int, Standing
                 ]
             seen |= {line.entrant_id for line in fresh}
     return [pair for lines in placed.values() for pair in lines]
+
+
+def _is_cup(session: OrmSession, event_id: int) -> bool:
+    event = session.get(Season, event_id)
+    return event is not None and event.kind is EventKind.cup

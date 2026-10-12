@@ -21,6 +21,14 @@ from app.api.deps import (
     require_event_runner,
 )
 from app.api.search import SearchQuery
+from app.models.cup_series import CupStagePublic
+from app.models.cup_team import (
+    CupTeamAdd,
+    CupTeamCreate,
+    MemberReplace,
+    TeamInviteCreate,
+    TeamInvitePublic,
+)
 from app.models.enums import EventKind, Race
 from app.models.event_award import EventAwardPublic
 from app.models.event_division import EventDivisionWrite
@@ -44,20 +52,15 @@ from app.models.season import (
     MemberEventRow,
     SeasonMapIds,
 )
-from app.models.series import (
-    ChallengerAdd,
-    StageSeriesPublic,
-    StageSeriesRow,
-    TemplateSeries,
+from app.models.series import ChallengerAdd, StageSeriesPublic, StageSeriesRow
+from app.services import (
+    awards,
+    cup_engine,
+    cup_teams,
+    discord_posts,
+    organizers,
+    stage_engine,
 )
-from app.models.team_invite import (
-    CupTeamAdd,
-    CupTeamCreate,
-    MemberReplace,
-    TeamInviteCreate,
-    TeamInvitePublic,
-)
-from app.services import awards, cup_teams, discord_posts, organizers, stage_engine
 from app.services.koth import night
 
 router = APIRouter(tags=["events"])
@@ -503,8 +506,8 @@ def generate_stage(
 ) -> dict[str, int]:
     """Seed the unseeded entrants, then create every series of the stage from
     the seeds, one bracket per division, and lock the seeds. A refused draw
-    writes no seed."""
-    return stage_engine.generate(event_id, stage_id, fill=service.seed_for_draw)
+    writes no seed. Only a cup's stages are drawn."""
+    return cup_engine.generate(event_id, stage_id, fill=service.seed_for_draw)
 
 
 @router.post(
@@ -513,7 +516,7 @@ def generate_stage(
 )
 def draw_next_round(
     event_id: int, stage_id: int, service: EventServiceDep
-) -> StageSeriesPublic:
+) -> CupStagePublic:
     """Draw one more round of a stage that pairs a round at a time.
 
     It answers the round it drew and the series in it. The stage refuses while
@@ -521,7 +524,7 @@ def draw_next_round(
     round it plays. The first round seeds the unseeded entrants first, and a
     refused round writes no seed.
     """
-    return stage_engine.generate_next_round(
+    return cup_engine.generate_next_round(
         event_id, stage_id, fill=service.seed_for_draw
     )
 
@@ -534,17 +537,20 @@ def undraw_stage(event_id: int, stage_id: int, confirm: bool = False) -> dict[st
     """Take the stage's draw back: every round and series of it goes, and the
     seeds open again, so the field may change and be drawn anew. A stage whose
     series hold results answers 409 until the call sends `confirm=true`."""
-    return stage_engine.undraw(event_id, stage_id, confirm)
+    return cup_engine.undraw(event_id, stage_id, confirm)
 
 
 @router.get("/events/{event_id}/stages/{stage_id}/series")
 def get_stage_series(
     event_id: int, stage_id: int, claims: OptionalLogin, response: Response
-) -> StageSeriesPublic:
-    """The rounds of the stage and every series it holds, for the run page."""
+) -> CupStagePublic | StageSeriesPublic:
+    """The rounds of the stage and every series it holds, for the run page: a
+    cup's from its own tables, a KOTH night's from the series it plays."""
     if claims is None:
         # A runner reads seeds an event may hide, so only the anonymous answer is shared.
         event_edge_cache(response, event_id)
+    if cup_engine.is_cup(event_id):
+        return cup_engine.series_of(event_id, stage_id, claims)
     return stage_engine.series_of(event_id, stage_id, claims)
 
 
@@ -559,29 +565,14 @@ def add_stage_series(
     return stage_engine.add_challenger(event_id, stage_id, data.entrant_id)
 
 
-@router.post(
-    "/events/{event_id}/stages/{stage_id}/fixtures/{fixture_id}/template",
-    dependencies=[Depends(require_event_runner)],
-)
-def set_fixture_template(
-    event_id: int, stage_id: int, fixture_id: int, template: list[TemplateSeries]
-) -> list[StageSeriesRow]:
-    """Write the ordered series one fixture holds, the first played first.
-
-    The Clan War template of the Altar of Champions is a drafted 1v1, a
-    drafted 2v2, a 4v4 on any pick, a drafted 1v1 and a 1v1 on any pick. Each
-    row names its side size and its pick rule and holds no side; a fixture
-    that already holds series refuses.
-    """
-    return stage_engine.set_fixture_template(event_id, stage_id, fixture_id, template)
-
-
 @router.get("/events/{event_id}/stages/{stage_id}/standings")
 def get_standings(
     event_id: int, stage_id: int, response: Response
 ) -> list[DivisionStandings]:
     """The table of every division of the stage, computed on the read."""
     event_edge_cache(response, event_id)
+    if cup_engine.is_cup(event_id):
+        return cup_engine.standings_of(event_id, stage_id)
     return stage_engine.standings_of(event_id, stage_id)
 
 
@@ -591,4 +582,4 @@ def get_standings(
 )
 def advance_stage(event_id: int, stage_id: int) -> dict[str, int]:
     """Seed the next stage from the top places of every division's table."""
-    return stage_engine.advance(event_id, stage_id)
+    return cup_engine.advance(event_id, stage_id)

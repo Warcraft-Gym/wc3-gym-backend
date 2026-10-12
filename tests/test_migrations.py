@@ -94,6 +94,8 @@ BEFORE_MAP_MODES = "e7b4f2a9c5d1"
 BEFORE_PLACEMENT = "f3c8a1d6e027"
 # The revision before the cup waitlist
 BEFORE_WAITLIST = "d3a7f2c9b814"
+# The revision before the cups took tables of their own
+BEFORE_CUP_TABLES = "c4e8a2f7d915"
 
 
 def comparable(
@@ -1689,3 +1691,74 @@ def test_the_waitlist_column_is_added_and_dropped(tmp_path: Path) -> None:
     assert "waitlisted_at" in columns()
     downgrade_to(url, BEFORE_WAITLIST)
     assert "waitlisted_at" not in columns()
+
+
+def test_the_cup_tables_take_the_test_cups_and_leave_every_other_series(
+    tmp_path: Path,
+) -> None:
+    """The draws and the teams of the cups made while testing go; a KOTH
+    night keeps its series and a league team stays. The downgrade gives the
+    invitations back their table on `teams`."""
+    url = fresh_database(tmp_path, "cup_tables")
+    upgrade_to(url, BEFORE_CUP_TABLES)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) "
+                "VALUES (1, 'Night', 1, 'koth'), (2, 'Cup', 1, 'cup')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_round (id, season_id, number) "
+                "VALUES (10, 1, 1), (20, 2, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO series (id, round_id, host_player_id) "
+                "VALUES (1, 10, 0), (2, 20, 0)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO teams (id, name, event_id, league_id) "
+                "VALUES (5, 'Cup Team', 2, NULL), "
+                "(6, 'League Team', NULL, (SELECT id FROM league WHERE name = 'GNL'))"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO team_season (team_id, season_id) VALUES (5, 2)")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_entrant (id, event_id, team_id, user_id) "
+                "VALUES (30, 2, 5, NULL), (31, 2, NULL, 7)"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id FROM series")).all() == [(1,)]
+        assert connection.execute(text("SELECT id FROM teams")).all() == [(6,)]
+        assert connection.execute(text("SELECT id FROM event_entrant")).all() == [(31,)]
+        assert (
+            connection.execute(text("SELECT count(*) FROM team_season")).scalar() == 0
+        )
+    tables = set(inspect(engine).get_table_names())
+    assert {"cup_series", "cup_team", "cup_team_member", "cup_team_invite"} <= tables
+    assert "team_invite" not in tables
+    # every team names its league again, and the cup column is gone
+    teams = {c["name"]: c for c in inspect(engine).get_columns("teams")}
+    assert "event_id" not in teams
+    assert teams["league_id"]["nullable"] is False
+
+    downgrade_to(url, BEFORE_CUP_TABLES)
+    tables = set(inspect(create_engine(url)).get_table_names())
+    assert "team_invite" in tables
+    assert "event_id" in {
+        c["name"] for c in inspect(create_engine(url)).get_columns("teams")
+    }
+    assert not {"cup_series", "cup_team", "cup_series_game"} & tables

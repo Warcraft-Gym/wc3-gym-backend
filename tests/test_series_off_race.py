@@ -247,6 +247,10 @@ def test_only_the_named_modules_read_the_off_race_column(
     allowed = {
         "api/routes/import_export.py",
         "models/series.py",
+        # a cup series resolves its own race, off race over the entry race
+        "models/cup_series.py",
+        "services/cup_reads.py",
+        "services/cup_series.py",
         "services/derived.py",
         # compares the stored column before and after a write, resolves no race
         "services/discord_posts.py",

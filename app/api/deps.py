@@ -380,16 +380,6 @@ def require_event_runner(
     return claims
 
 
-def require_series_runner(
-    series_id: int, request: Request, credentials: Credentials
-) -> dict[str, Any]:
-    """Admit an admin, or a member who organizes the event the series plays in."""
-    claims = require_login(request, credentials)
-    if not organizers.runs_series(claims, series_id):
-        raise ApiError(403, {"error": "Only the event's organizers"})
-    return claims
-
-
 RequireAdmin = Annotated[str, Depends(require_admin)]
 RequireOrganizer = Annotated[dict[str, Any], Depends(require_organizer)]
 RequireEventRunner = Annotated[dict[str, Any], Depends(require_event_runner)]

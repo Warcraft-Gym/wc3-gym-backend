@@ -1,5 +1,4 @@
 import logging
-from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -25,17 +24,11 @@ def update_player_series(
     user_service: UserService,
     series_service: SeriesService,
     admin: bool = False,
-    runner: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
-    """`runner` answers whether the caller organizes the series' event, who acts
-    for either side as an admin does; it is asked only when nothing else lets
-    the caller in, so a player's own report reads nothing more."""
     # Find the user by discord_id; an admin access token names no player
     users = user_service.find_by_discord_id(discord_id) if discord_id else []
     if not users and not admin:
-        if runner is None or not runner():
-            raise NotFoundError("player_not_found")
-        admin = True
+        raise NotFoundError("player_not_found")
     user_id = users[0].id if users else None
 
     # Get the series and verify ownership
@@ -57,9 +50,7 @@ def update_player_series(
     with Session() as session:
         row = session.get(Series, series_id)
         if row is None or not (admin or acts_for_side(session, row, user_id)):
-            if row is None or runner is None or not runner():
-                raise ApiError(403, {"error": "not_authorized_for_this_series"})
-            admin = True
+            raise ApiError(403, {"error": "not_authorized_for_this_series"})
         # A player or a captain who changes a reported result is named in
         # Discord; an admin's correction is not
         before = (

@@ -12,10 +12,13 @@ from httpx2 import Client, Response
 from sqlmodel import col, select
 
 from app.core.db import Session
+from app.models.cup_series import CupSeries
+from app.models.cup_team import CupTeamMember
 from app.models.enums import EventKind, LeagueKind, Race
 from app.models.league import League
+from app.models.relationships import DBTeamSeasonCaptain
 from app.models.season import Season
-from app.models.series import Series
+from app.models.team import Team
 from app.models.w3c_stats import W3CStats
 from tests.test_event_organizers import Headers, Member, grant
 from tests.test_stage_engine import players
@@ -240,9 +243,9 @@ def test_a_team_cup_draws_complete_teams_and_any_member_reports(
 
     with Session.begin() as session:
         rows = session.scalars(
-            select(Series).where(
-                col(Series.entrant1_id).is_not(None),
-                col(Series.entrant2_id).is_not(None),
+            select(CupSeries).where(
+                col(CupSeries.entrant1_id).is_not(None),
+                col(CupSeries.entrant2_id).is_not(None),
             )
         ).all()
         assert rows and all(row.side_size == 2 for row in rows)
@@ -255,14 +258,14 @@ def test_a_team_cup_draws_complete_teams_and_any_member_reports(
     )
     # the veto board lists a team side's players, so a step one of them enters is the side's own
     board = client.get(
-        f"/player-series/{series_id}/veto", headers=headers_of(member, reporter)
+        f"/cup-series/{series_id}/veto", headers=headers_of(member, reporter)
     )
     assert board.status_code == 200, board.text
     assert board.json()["player1"]["member_ids"] == sorted(
         one["user"]["id"] for one in by_entrant[entrant]["roster"]
     )
     report = client.put(
-        f"/player-series/{series_id}",
+        f"/cup-series/{series_id}/report",
         json={"player1_score": 1, "player2_score": 0},
         headers=headers_of(member, reporter),
     )
@@ -294,7 +297,7 @@ def test_a_runner_swaps_a_player_until_the_team_plays(
     assert {one["user"]["id"] for one in roster} == {late, mate}
 
 
-def test_a_cup_team_stays_out_of_its_leagues_team_lists(
+def test_a_cup_team_is_no_league_team(
     client: Client, member: Member, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     no_refresh(monkeypatch)
@@ -307,10 +310,16 @@ def test_a_cup_team_stays_out_of_its_leagues_team_lists(
     captain, mate = players(2)
     made = sign_up(client, event, headers_of(member, captain), "Blue", mate)
     assert made.status_code == 201, made.text
-    assert made.json()["team"]["league_id"] == league_id
+    # the team lives in the cup's own tables: no league, no team row, no captain seat
+    assert made.json()["team"]["league_id"] is None
     listed = client.get(f"/leagues/{league_id}/teams")
     assert listed.status_code == 200, listed.text
     assert all(team["name"] != "Blue" for team in listed.json())
+    with Session.begin() as session:
+        assert session.scalars(select(Team)).all() == []
+        assert session.scalars(select(DBTeamSeasonCaptain)).all() == []
+        [seat] = session.scalars(select(CupTeamMember)).all()
+        assert (seat.user_id, seat.captain) == (captain, True)
 
 
 def test_an_organizer_reads_the_team_ladder_pool(
