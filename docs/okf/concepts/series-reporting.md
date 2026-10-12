@@ -4,7 +4,7 @@ title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 resource: ../../../app/services/series_games.py
 tags: [series, storage]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T19:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T21:00:00Z }
 sources:
   - id: games
     resource: ../../../app/services/series_games.py
@@ -47,7 +47,7 @@ The season's `map_rules` names one rule per game: `fixed` takes the round's map 
 
 # The veto board
 
-The board is derived: the season's `pick_ban` names the order and the side of every step, or, on an event with `veto_by_best_of`, the series' own best-of and the pool size do (bans in turn until as many maps are left as the series has games, then one pick a game after the first, see [the decision](../decisions/cup-veto-by-best-of.md)), the season's pool names the maps, and a `fixed` rule takes its map off the board because it is already game 1. Only the steps taken are stored (`series_veto_step`, with `entered_by`). A veto done elsewhere is entered after the fact on the same board. The board is the one place a veto exists; there is no launcher, no ad-hoc lobby, and the Discord `/veto` command only points at the board.
+The board is derived: the season's `pick_ban` names the order and the side of every step, or, on an event with `veto_by_best_of`, the series' own best-of and the pool size do (bans in turn until as many maps are left as the series has games, then one pick a game after the first, see [the decision](../decisions/cup-veto-by-best-of.md)), the season's pool names the maps, and a `fixed` rule takes its map off the board because it is already game 1. Only the steps taken are stored (`series_veto_step`, with `entered_by`; a cup's in `cup_veto_step`, on the `/cup-series/{id}/veto` routes, see [cup series](events-module.md#cup-series)). A veto done elsewhere is entered after the fact on the same board. The board is the one place a veto exists; there is no launcher, no ad-hoc lobby, and the Discord `/veto` command only points at the board.
 
 The veto is not a required input. The report warns, strongly, when a result comes without one; it never blocks. See [the decision](../decisions/veto-warns-never-blocks.md).
 

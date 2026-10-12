@@ -2,7 +2,8 @@
 
 * [A cup vetoes by the best-of of each series](cup-veto-by-best-of.md) - A cup names the best-of of each part of its bracket, and each series derives its veto from its own best-of and the pool; game 1 plays the map the veto leaves. GNL keeps its order and its fixed map.
 * [A placement bracket plays out every place](placement-bracket.md) - Every round splits each group into its winners and its losers, so the last round decides every place; a loss limit ends a run early, a field off the power of two closes its places up, and the final is a round of its own.
-* [Cup teams live for one cup](cup-teams-live-for-one-cup.md) - A team of a team cup is made for that cup alone, signed up by its captain and confirmed by every player; it names no league and stays out of the league team lists.
+* [Cups keep their own tables](cups-own-tables.md) - A cup's series and teams live in tables of their own, beside GNL's series and team tables, and carry only what a cup uses.
+* [Cup teams live for one cup](cup-teams-live-for-one-cup.md) - A team of a team cup is made for that cup alone, signed up by its captain and confirmed by every player; it lives in the cup's own tables and no league reads it.
 * [App-managed roles, manual sync](app-managed-roles.md) - Access comes from the database, Discord roles are a mirror of season facts, and the mirror updates only when an admin presses a button.
 * [Ask when someone cannot play](availability-blocklist.md) - Availability is collected as blocks, blank meaning fully open, and a block informs pairings without ever constraining them.
 * [Clerk owns the session](clerk-auth.md) - Members sign in through Clerk with Discord as the only social connection; the guild check and the roles stay app code.

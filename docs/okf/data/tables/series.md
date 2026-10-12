@@ -4,7 +4,7 @@ title: series
 description: One series between two sides, a best-of with its scores, time, host, off races, result kind and the feeder graph a bracket runs on.
 resource: ../../../../app/models/series.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T21:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -61,7 +61,8 @@ Pointed at by [series_side](series_side.md), [series_game](series_game.md), [ser
 # Rules
 
 - Points, the resolved race per side and the rules the series plays under derive on every read. See [derived scores](../../concepts/derived-scores.md) and [series reporting](../../concepts/series-reporting.md).
-- A series that names an entrant was generated and prices on its stage; a GNL series names two players and a fixture. See [the off-race decision](../../decisions/off-race-per-series.md).
+- A series that names an entrant is a KOTH night's and prices on its stage; a GNL series names two players and a fixture. See [the off-race decision](../../decisions/off-race-per-series.md).
+- A cup writes no row here: its series live in [cup_series](cup_series.md). See [cups keep their own tables](../../decisions/cups-own-tables.md).
 - A series with no result has both scores null; a result sets both. The games behind the score are [series_game](series_game.md) rows.
 
 Event series reads include standalone series through their round. Public rows include non-null entrant ids, division, sequence and source names. `result_unavailable` is included when true and defaults to false when absent. Unknown outcomes count toward event completion but not wins or losses.

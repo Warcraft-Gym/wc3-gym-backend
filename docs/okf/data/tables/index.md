@@ -1,6 +1,6 @@
 # Tables
 
-The 57 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
+The 63 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
 
 # People and access
 
@@ -36,12 +36,18 @@ The 57 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [draft_series](draft_series.md) - One series a captain proposed inside a GNL fixture, held apart from the series table until a captain of the fixture or an admin publishes it.
 * [match_draft_mark](match_draft_mark.md) - One team's advisory Ready mark on the draft of one fixture, plus the moment that team last read the pairings.
 * [match_draft_state](match_draft_state.md) - The working largest MMR difference the captains pair inside while they draft one fixture, which stands in front of the stage setting.
+* [cup_series](cup_series.md) - One series a cup plays, drawn by the cup engine into a round of a stage, with its two sides, its result and the feeders it takes its sides from.
+* [cup_series_game](cup_series_game.md) - One game of a cup series with the side that won it and the map it was played on.
+* [cup_veto_step](cup_veto_step.md) - One taken step of a cup series' map veto, with the side, the action, the map and who entered it.
+* [cup_series_side](cup_series_side.md) - One seat of a cup's free for all lobby, with the entrant in it and the place it finished.
 * [round_availability](round_availability.md) - One player's answer to whether they can play one round of an event; no row is no answer, and clearing an answer deletes the row.
 
 # Teams and rosters
 
 * [teams](teams.md) - One league-owned team: its league, short name, long name and the public URL of its logo.
-* [team_invite](team_invite.md) - One player invited into a cup team who has not answered yet; accepting moves them into the roster, declining deletes the row.
+* [cup_team](cup_team.md) - A team made for one cup, signed up by its captain; it lives as long as its cup and no GNL read sees it.
+* [cup_team_member](cup_team_member.md) - One confirmed player of a cup team, the captain marked among them.
+* [cup_team_invite](cup_team_invite.md) - One player invited into a cup team who has not answered yet; accepting makes them a member, declining deletes the row.
 * [team_season](team_season.md) - One team fielded in one GNL season; the row exists before the team has a captain or a roster.
 * [team_season_captain](team_season_captain.md) - One captain seat: a player who captains one team in one season; the seat is what makes an account a captain.
 * [user_team_season](user_team_season.md) - One roster row: a player on one team in one season, written by the draft.
