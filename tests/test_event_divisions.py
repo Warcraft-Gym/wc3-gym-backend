@@ -305,7 +305,7 @@ def test_a_locked_stage_refuses_a_further_seed_write(
         json={"source": "mmr"},
         headers=auth_headers,
     )
-    assert refused.status_code == 400
+    assert refused.status_code == 409
     assert refused.json() == {"error": "The seeds of this stage are locked"}
     assert client.post(
         f"/events/{event}/stages/404/seeds/lock", headers=auth_headers

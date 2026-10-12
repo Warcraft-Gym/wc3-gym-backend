@@ -236,11 +236,13 @@ def post_event_card(event_id: int, data: EventDiscordPost) -> dict[str, str]:
 
 @router.get("/events/{event_id}/entrants")
 def get_entrants(
-    event_id: int, service: EventServiceDep, response: Response
+    event_id: int, service: EventServiceDep, claims: OptionalLogin, response: Response
 ) -> list[EventEntrantPublic]:
     """Every entrant of the event, with its rating on the signup race and warnings."""
-    event_edge_cache(response, event_id)
-    return service.get_entrants(event_id)
+    if claims is None:
+        # A runner reads seeds an event may hide, so only the anonymous answer is shared.
+        event_edge_cache(response, event_id)
+    return service.get_entrants(event_id, claims)
 
 
 @router.post("/events/{event_id}/entrants", status_code=201)
@@ -374,12 +376,27 @@ def lock_seeds(
     return service.lock_seeds(event_id, stage_id)
 
 
+@router.delete(
+    "/events/{event_id}/stages/{stage_id}/seeds/lock",
+    dependencies=[Depends(require_event_runner)],
+)
+def unlock_seeds(
+    event_id: int, stage_id: int, service: EventServiceDep
+) -> EventStagePublic:
+    """Unlock the seeds of the stage; a stage that holds series answers 409."""
+    return service.unlock_seeds(event_id, stage_id)
+
+
 @router.post(
     "/events/{event_id}/stages/{stage_id}/generate",
     dependencies=[Depends(require_event_runner)],
 )
-def generate_stage(event_id: int, stage_id: int) -> dict[str, int]:
-    """Create every series of the stage from the seeds, one bracket per division."""
+def generate_stage(
+    event_id: int, stage_id: int, service: EventServiceDep
+) -> dict[str, int]:
+    """Seed the unseeded entrants, then create every series of the stage from
+    the seeds, one bracket per division, and lock the seeds."""
+    service.seed_for_draw(event_id, stage_id)
     return stage_engine.generate(event_id, stage_id)
 
 
@@ -387,13 +404,16 @@ def generate_stage(event_id: int, stage_id: int) -> dict[str, int]:
     "/events/{event_id}/stages/{stage_id}/rounds",
     dependencies=[Depends(require_event_runner)],
 )
-def draw_next_round(event_id: int, stage_id: int) -> StageSeriesPublic:
+def draw_next_round(
+    event_id: int, stage_id: int, service: EventServiceDep
+) -> StageSeriesPublic:
     """Draw one more round of a stage that pairs a round at a time.
 
     It answers the round it drew and the series in it. The stage refuses while
     a series already drawn carries no result, and once it has drawn every
-    round it plays.
+    round it plays. The first round seeds the unseeded entrants first.
     """
+    service.seed_for_draw(event_id, stage_id)
     return stage_engine.generate_next_round(event_id, stage_id)
 
 
@@ -410,11 +430,13 @@ def undraw_stage(event_id: int, stage_id: int, confirm: bool = False) -> dict[st
 
 @router.get("/events/{event_id}/stages/{stage_id}/series")
 def get_stage_series(
-    event_id: int, stage_id: int, response: Response
+    event_id: int, stage_id: int, claims: OptionalLogin, response: Response
 ) -> StageSeriesPublic:
     """The rounds of the stage and every series it holds, for the run page."""
-    event_edge_cache(response, event_id)
-    return stage_engine.series_of(event_id, stage_id)
+    if claims is None:
+        # A runner reads seeds an event may hide, so only the anonymous answer is shared.
+        event_edge_cache(response, event_id)
+    return stage_engine.series_of(event_id, stage_id, claims)
 
 
 @router.post(

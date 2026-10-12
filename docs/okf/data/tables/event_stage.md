@@ -4,7 +4,7 @@ title: event_stage
 description: One format played over the entrants of an event, with the points, the tie breaks and the advance rule; standings are computed from it, never stored.
 resource: ../../../../app/models/event_stage.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-07T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T03:30:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -43,7 +43,8 @@ sources:
 | `group_size` | INTEGER | yes | How many entrants a group of this stage seats. Null means no groups. |
 | `group_advance` | INTEGER | yes | How many places of one group or one lobby play on. |
 | `auto_advance` | BOOLEAN | no | On: scoring the last series of the stage seeds the next stage by itself. |
-| `seeds_locked_at` | TIMESTAMP | yes | When an admin locked the seeds. A locked stage refuses a seed write. Null means unlocked. |
+| `seed_source` | VARCHAR | no | How the draw seeds a live entrant that has no seed yet on the first stage: `mmr`, the newest rating first and the unrated last; `random`, a shuffle; or `manual`, which refuses the draw until every entrant has a seed. `mmr` by default. |
+| `seeds_locked_at` | TIMESTAMP | yes | When the seeds were locked, by hand or by the draw. A locked stage refuses a reseed with a 409 until it is unlocked, and the unlock waits until the stage holds no series. Null means unlocked. |
 | `third_place` | BOOLEAN | no | On: a single elimination adds the series the beaten semi-finalists play. |
 | `grand_final_modifier` | VARCHAR | no | What a double elimination final holds: `one` series, a `reset`, or `skip`. |
 | `max_mmr_difference` | INTEGER | yes | The largest MMR difference a captain draft pairs inside, 1 or more. A `gnl` stage only; the write refuses it on any other format. Null on a `gnl` stage reads as 100, which is never written into the row. Answered on the stage read, and read behind the working value one fixture's draft keeps in [match_draft_state](match_draft_state.md). |

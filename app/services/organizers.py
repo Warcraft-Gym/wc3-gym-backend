@@ -17,6 +17,7 @@ from sqlmodel import col
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.security import is_admin
+from app.models.base import ident
 from app.models.enums import EventKind, LeagueKind, StageFormat
 from app.models.league import League
 from app.models.organizer import (
@@ -27,6 +28,7 @@ from app.models.organizer import (
     OrganizerRequest,
     OrganizerRequestPublic,
 )
+from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
 from app.services.series_rules import series_event
@@ -72,6 +74,12 @@ def runs(claims: dict[str, Any] | None, event_id: int) -> bool:
         return False
     with Session.begin() as session:
         return session.get(EventOrganizer, (event_id, str(claims["sub"]))) is not None
+
+
+def shows_seeds(claims: dict[str, Any] | None, event: Season) -> bool:
+    """Whether the caller reads the event's seed numbers: always, unless the
+    event hides them, and then only for a caller who runs it."""
+    return not event.hide_seeds or runs(claims, ident(event))
 
 
 def runs_series(claims: dict[str, Any] | None, series_id: int) -> bool:

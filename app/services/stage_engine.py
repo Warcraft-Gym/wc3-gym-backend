@@ -10,6 +10,7 @@ of that pair hang under, so a team league is read exactly as GNL is read.
 """
 
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
@@ -53,9 +54,10 @@ from app.models.series_side import (
 )
 from app.models.team import Team
 from app.models.team_summary import TeamSummaryPublic
+from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.services import derived, draft_series
+from app.services import derived, draft_series, organizers
 from app.services.series_rules import (
     acts_for_side,
     hold_pool,
@@ -100,7 +102,7 @@ def series_wins(session: OrmSession, row: Series) -> int:
 def generate(
     event_id: int, stage_id: int, division_id: int | None = None
 ) -> dict[str, int]:
-    """Create every series of the stage from the locked seeds, per division.
+    """Create every series of the stage from the seeds, per division, and lock them.
 
     Each bracket column is one round under the stage, and the divisions share
     those rounds: a bracket aligns on its final, a table on its first round. A
@@ -219,6 +221,7 @@ def generate(
             _fill_below(session, row)
         for row in walkovers:
             on_scored(session, row)
+        stage.seeds_locked_at = stage.seeds_locked_at or utcnow()
         return {"series": len(made), "rounds": len(rounds) - len(held)}
 
 
@@ -285,7 +288,7 @@ def generate_next_round(
     not met, which keeps a pair inside its score group while one is free
     there, and an odd field gives the bye to the lowest entrant without one,
     as a walkover series holding a single side. The first call on an empty
-    stage pairs round 1 from the seeds.
+    stage pairs round 1 from the seeds and locks them.
     """
     with Session.begin() as session:
         stage = _stage(session, event_id, stage_id)
@@ -298,6 +301,7 @@ def generate_next_round(
         fields = _fields(_entrants(session, event_id))
         if not drawn:
             _hold_minimum(session, stage, fields)
+            stage.seeds_locked_at = stage.seeds_locked_at or utcnow()
         if division_id is not None:
             fields = {division_id: fields.get(division_id, [])}
         sizes = _side_sizes(
@@ -353,11 +357,13 @@ def generate_next_round(
                 row.sequence = sequence
                 made.append(row)
         session.flush()
-        rows = [StageSeriesRow.from_series(row) for row in _stage_rows(session, made)]
+        read = _stage_rows(session, made)
+        rows = [StageSeriesRow.from_series(row) for row in read]
         events = derived.fill_series(session, rows)
         _fill_teams(session, rows)
         derived.fill_mmrs(session, rows, events)
         _fill_sides(session, rows)
+        _fill_seeds(rows, read)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in drew.values()],
             series=rows,
@@ -769,8 +775,13 @@ def standings_of(event_id: int, stage_id: int) -> list[DivisionStandings]:
         return _tables(session, event_id, _stage(session, event_id, stage_id))
 
 
-def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
-    """The rounds of the stage and every series it holds, in drawing order."""
+def series_of(
+    event_id: int, stage_id: int, claims: dict[str, Any] | None = None
+) -> StageSeriesPublic:
+    """The rounds of the stage and every series it holds, in drawing order.
+
+    The seed of each side reads null when the event hides its seeds from the caller.
+    """
     with Session.begin() as session:
         stage = _stage(session, event_id, stage_id)
         rounds = session.scalars(
@@ -786,10 +797,8 @@ def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
             .options(*Series._list_eager_options())
             .where(col(Series.round_id).in_(numbers))
         ).all()
-        rows = [
-            StageSeriesRow.from_series(row)
-            for row in sorted(held, key=lambda row: _drawn(numbers, row))
-        ]
+        ordered = sorted(held, key=lambda row: _drawn(numbers, row))
+        rows = [StageSeriesRow.from_series(row) for row in ordered]
         events = derived.fill_series(session, rows)
         _fill_teams(session, rows)
         derived.fill_mmrs(session, rows, events)
@@ -797,6 +806,9 @@ def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
         _fill_sources(
             rows, {ident(row): row.name or f"Round {row.number}" for row in rounds}
         )
+        event = session.get(Season, event_id)
+        if event is not None and organizers.shows_seeds(claims, event):
+            _fill_seeds(rows, ordered)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
         )
@@ -1019,6 +1031,13 @@ def _fill_sides(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
         )
     for row in rows:
         row.sides = found.get(row.id, [])
+
+
+def _fill_seeds(rows: Sequence[StageSeriesRow], held: Sequence[Series]) -> None:
+    """Copy the seed of each side from the entrants the series read loaded."""
+    for row, series in zip(rows, held, strict=True):
+        row.entrant1_seed = series.entrant1.seed if series.entrant1 else None
+        row.entrant2_seed = series.entrant2.seed if series.entrant2 else None
 
 
 def _fill_sources(rows: Sequence[StageSeriesRow], names: Mapping[int, str]) -> None:

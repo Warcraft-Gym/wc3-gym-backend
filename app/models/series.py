@@ -454,6 +454,9 @@ class StageSeriesRow(SeriesPublic):
     # Where a fed side comes from, such as "Loser of UB R1 M3"; the stage series read fills it
     slot1_source: str | None = None
     slot2_source: str | None = None
+    # The seed of each side; the stage series read fills it, null when the event hides seeds
+    entrant1_seed: int | None = None
+    entrant2_seed: int | None = None
 
     @classmethod
     def from_series(cls, series: Series, event_id: int | None = None) -> Self:

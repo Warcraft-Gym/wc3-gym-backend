@@ -214,6 +214,10 @@ class Season(SeasonBase, DBModel, table=True):
     veto_by_best_of: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
+    # On: seed numbers read only for the event's admins and organizers
+    hide_seeds: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
     entrant_cap: int | None = None
     # The fewest entrants the event is played with; the draw refuses below it
     entrant_min: int | None = None
@@ -637,6 +641,8 @@ class EventPublic(SQLModel):
     eligibility_required: bool = False
     bnet_required: bool = False
     veto_by_best_of: bool = False
+    # On: seed numbers read only for the event's admins and organizers
+    hide_seeds: bool = False
     entrant_cap: int | None = None
     entrant_min: int | None = None
     checkin_days: int | None = None
@@ -717,6 +723,8 @@ class EventCreate(SQLModel):
     eligibility_required: bool = False
     bnet_required: bool = False
     veto_by_best_of: bool = False
+    # On: seed numbers read only for the event's admins and organizers
+    hide_seeds: bool = False
     entrant_cap: int | None = None
     entrant_min: int | None = Field(default=None, ge=2)
     # How many series one fixture holds, and a fixture pairs two team
@@ -767,6 +775,7 @@ class EventUpdate(SQLModel):
     eligibility_required: bool | None = None
     bnet_required: bool | None = None
     veto_by_best_of: bool | None = None
+    hide_seeds: bool | None = None
     entrant_cap: int | None = None
     entrant_min: int | None = Field(default=None, ge=2)
     series_per_round: int | None = None

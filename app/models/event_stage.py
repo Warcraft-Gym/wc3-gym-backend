@@ -87,7 +87,11 @@ class EventStage(DBModel, table=True):
     auto_advance: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
-    # When an admin locked the seeds; a locked stage refuses a seed write
+    # How the draw seeds an unseeded entrant: mmr, random or manual
+    seed_source: str = Field(
+        default="mmr", max_length=20, sa_column_kwargs={"server_default": "mmr"}
+    )
+    # A locked stage refuses a reseed until it is unlocked; the draw locks it
     seeds_locked_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
@@ -126,6 +130,7 @@ class EventStagePublic(SQLModel):
     group_size: int | None = None
     group_advance: int | None = None
     auto_advance: bool = False
+    seed_source: str = "mmr"
     seeds_locked_at: Annotated[datetime | None, AwareUTC] = None
     third_place: bool = False
     grand_final_modifier: str = "one"
@@ -166,6 +171,8 @@ class EventStageWrite(SQLModel):
     advance_count: int | None = None
     group_size: int | None = Field(default=None, ge=2)
     auto_advance: bool = False
+    # How the draw seeds an entrant that has no seed yet
+    seed_source: Literal["mmr", "random", "manual"] = "mmr"
     third_place: bool = False
     grand_final_modifier: Literal["one", "reset", "skip"] = "one"
     # The largest MMR difference a captain draft pairs inside; a gnl stage only

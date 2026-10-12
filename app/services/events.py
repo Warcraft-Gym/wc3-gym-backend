@@ -18,6 +18,7 @@ from sqlalchemy import (
     case,
     delete,
     distinct,
+    exists,
     func,
     or_,
     select,
@@ -710,16 +711,28 @@ class EventService:
             ]
 
     # ============ Entrants ============
-    def get_entrants(self, event_id: int) -> list[EventEntrantPublic]:
-        """Every entrant of the event, seeded ones first, with their warnings."""
+    def get_entrants(
+        self, event_id: int, claims: dict[str, Any] | None = None
+    ) -> list[EventEntrantPublic]:
+        """Every entrant of the event, seeded ones first, with their warnings.
+
+        An event that hides its seeds answers a caller who does not run it no
+        seed numbers, and the list in signup order.
+        """
         with Session.begin() as session:
             event = _event(session, event_id)
+            shown = organizers.shows_seeds(claims, event)
+            order = (
+                (col(EventEntrant.seed).nulls_last(), col(EventEntrant.id))
+                if shown
+                else (col(EventEntrant.id),)
+            )
             rows = session.scalars(
                 select(EventEntrant)
                 .where(col(EventEntrant.event_id) == event_id)
-                .order_by(col(EventEntrant.seed).nulls_last(), col(EventEntrant.id))
+                .order_by(*order)
             ).all()
-            return _entrant_publics(session, event, rows)
+            return _entrant_publics(session, event, rows, shown)
 
     def add_entrant(
         self, event_id: int, data: EntrantSignup, claims: dict[str, Any] | None
@@ -744,7 +757,8 @@ class EventService:
                     user_id=ident(_signup_user(session, event, data, claims)),
                 )
             entrant_id = ident(row)
-            public = _entrant_publics(session, event, [row])[0]
+            shown = organizers.shows_seeds(claims, event)
+            public = _entrant_publics(session, event, [row], shown)[0]
         return _after_signup(event_id, entrant_id) or public
 
     def add_entrant_as_admin(
@@ -823,7 +837,8 @@ class EventService:
                     raise ApiError(403, {"error": "Check in your own signup"})
             row.checked_in_at = utcnow()
             session.flush()
-            return _entrant_publics(session, event, [row])[0]
+            shown = organizers.shows_seeds(claims, event)
+            return _entrant_publics(session, event, [row], shown)[0]
 
     def replace_entrant(
         self, event_id: int, entrant_id: int, data: EntrantAdd
@@ -904,6 +919,15 @@ class EventService:
                         f"Division not found by id: {data.division_id}"
                     )
             moved = data.division_id != row.division_id
+            if moved and session.scalar(
+                select(
+                    exists().where(
+                        col(EventStage.event_id) == event_id,
+                        col(EventStage.seeds_locked_at).is_not(None),
+                    )
+                )
+            ):
+                raise ApiError(409, {"error": "The seeds of this event are locked"})
             row.division_id = data.division_id
             row.manual_placement = data.manual_placement
             # A row moved into a division stands at the end of its line
@@ -992,12 +1016,14 @@ class EventService:
 
         An entrant the order leaves out loses its seed, which is what seeding
         from the stage before writes: only the places that came through play.
+        An entrant placed by hand keeps its seed and the others take the free
+        numbers, except from the stage before, whose standings decide alone.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
             stage = _stage(session, event_id, stage_id)
             if stage.seeds_locked_at is not None:
-                raise BadRequestError("The seeds of this stage are locked")
+                raise ApiError(409, {"error": "The seeds of this stage are locked"})
             rows = _live_entrants(session, event_id)
             mmrs = _mmrs(session, rows)
             order = (
@@ -1005,13 +1031,31 @@ class EventService:
                 if data.source is SeedSource.previous_stage
                 else _seed_order(rows, mmrs, data)
             )
+            pinned = (
+                {}
+                if data.source is SeedSource.previous_stage
+                else {
+                    ident(row): row.seed
+                    for row in rows
+                    if row.manual_placement and row.seed is not None
+                }
+            )
+            held: dict[int | None, set[int | None]] = {}
+            for row in rows:
+                if ident(row) in pinned:
+                    held.setdefault(row.division_id, set()).add(row.seed)
             taken: dict[int | None, int] = {}
             for row in order:
-                taken[row.division_id] = taken.get(row.division_id, 0) + 1
-                row.seed = taken[row.division_id]
+                if ident(row) in pinned:
+                    continue
+                number = taken.get(row.division_id, 0) + 1
+                while number in held.get(row.division_id, set()):
+                    number += 1
+                taken[row.division_id] = number
+                row.seed = number
                 row.seed_source = data.source.value
                 row.mmr_at_seed = mmrs[ident(row)]
-            seeded = {ident(row) for row in order}
+            seeded = {ident(row) for row in order} | set(pinned)
             for row in rows:
                 if ident(row) not in seeded:
                     row.seed = None
@@ -1026,6 +1070,68 @@ class EventService:
             stage.seeds_locked_at = utcnow()
             session.flush()
             return EventStagePublic.model_validate(stage)
+
+    def unlock_seeds(self, event_id: int, stage_id: int) -> EventStagePublic:
+        """Open the seeds of the stage again; a stage that holds series refuses."""
+        with Session.begin() as session:
+            stage = _stage(session, event_id, stage_id)
+            drawn = session.scalar(
+                select(col(Series.id))
+                .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+                .where(col(DBEventRound.stage_id) == stage_id)
+                .limit(1)
+            )
+            if drawn is not None:
+                raise ApiError(
+                    409, {"error": "The stage holds series; take its draw back first"}
+                )
+            stage.seeds_locked_at = None
+            session.flush()
+            return EventStagePublic.model_validate(stage)
+
+    def seed_for_draw(self, event_id: int, stage_id: int) -> None:
+        """Seed every live entrant without a seed by the stage's seed source.
+
+        mmr puts the newest rating first and the unrated last, random shuffles,
+        and manual refuses until every entrant has a seed. Each takes the
+        numbers after the last seed of its division. Only the first stage
+        fills, before its first round: a later one plays what `advance` seeded.
+        """
+        with Session.begin() as session:
+            stage = _stage(session, event_id, stage_id)
+            # The engine draws neither, and a KOTH line orders by seed
+            if stage.format in (StageFormat.gnl, StageFormat.koth):
+                return
+            drawn = session.scalar(
+                select(col(DBEventRound.id))
+                .where(col(DBEventRound.stage_id) == stage_id)
+                .limit(1)
+            )
+            if drawn is not None or stage_engine.previous_stage(
+                session, event_id, stage
+            ):
+                return
+            rows = _live_entrants(session, event_id)
+            unseeded = [row for row in rows if row.seed is None]
+            if not unseeded:
+                return
+            source = SeedSource(stage.seed_source)
+            if source is SeedSource.manual:
+                raise ApiError(409, {"error": "Seed every entrant first"})
+            mmrs = _mmrs(session, unseeded)
+            order = _by_mmr(unseeded, mmrs)
+            if source is SeedSource.random:
+                random.shuffle(order)
+            last: dict[int | None, int] = {}
+            for row in rows:
+                if row.seed is not None:
+                    last[row.division_id] = max(last.get(row.division_id, 0), row.seed)
+            for row in order:
+                last[row.division_id] = last.get(row.division_id, 0) + 1
+                row.seed = last[row.division_id]
+                row.seed_source = source.value
+                row.mmr_at_seed = mmrs[ident(row)]
+            session.flush()
 
 
 def _nested(events: list[EventPublic]) -> list[EventPublic]:
@@ -1739,12 +1845,16 @@ def _warnings(
 
 
 def _entrant_publics(
-    session: OrmSession, event: Season, rows: Sequence[EventEntrant]
+    session: OrmSession,
+    event: Season,
+    rows: Sequence[EventEntrant],
+    shown: bool = True,
 ) -> list[EventEntrantPublic]:
     """The entrant payloads of one event, with the players and teams behind them.
 
     Three reads fill every row: the players with their W3C stats, the teams,
-    and the rosters the rating of a team entrant is the mean of.
+    and the rosters the rating of a team entrant is the mean of. `shown` off
+    answers every seed null.
     """
     team_ids = {row.team_id for row in rows if row.team_id}
     season = w3c_season(session)
@@ -1754,7 +1864,9 @@ def _entrant_publics(
         for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
     }
     means = _team_mmrs(session, rows, season)
-    return [_entrant_public(event, row, users, teams, means, season) for row in rows]
+    return [
+        _entrant_public(event, row, users, teams, means, season, shown) for row in rows
+    ]
 
 
 def _users_for(
@@ -2027,6 +2139,7 @@ def _entrant_public(
     teams: dict[int | None, Team],
     means: dict[int, int | None],
     season: int,
+    shown: bool = True,
 ) -> EventEntrantPublic:
     """One entrant payload: the identity, the rating it is seeded on, the warnings."""
     user = users.get(row.user_id)
@@ -2049,7 +2162,7 @@ def _entrant_public(
         mmr=mmr,
         mmr_synced_at=user.w3c_synced_at if user else None,
         warnings=_warnings(event, user, mmr, games),
-        seed=row.seed,
+        seed=row.seed if shown else None,
         seed_source=row.seed_source,
         mmr_at_seed=row.mmr_at_seed,
         division_id=row.division_id,

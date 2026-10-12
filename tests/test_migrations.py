@@ -84,6 +84,8 @@ BEFORE_EVENT_CASCADE = "55ae9f9d1db6"
 BEFORE_ORGANIZERS = "a6d3e9b14c27"
 # The revision before the best-of per bracket part and the veto by best-of
 BEFORE_CUP_BEST_OF = "a8d3e1f6c924"
+# The revision before the stage seed source and the hidden seeds switch
+BEFORE_SEED_CONTROLS = "c7e2b9d4a613"
 
 
 def comparable(
@@ -1604,3 +1606,21 @@ def test_the_best_of_plan_and_the_veto_switch_are_added_and_dropped(
     downgrade_to(url, BEFORE_CUP_BEST_OF)
     assert "best_of_by_round" not in columns("event_stage")
     assert "veto_by_best_of" not in columns("event")
+
+
+def test_the_stage_seed_source_and_the_hide_switch_are_added_and_dropped(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "seed_controls")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns(table: str) -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns(table)}
+
+    assert "seed_source" in columns("event_stage")
+    assert "hide_seeds" in columns("event")
+
+    downgrade_to(url, BEFORE_SEED_CONTROLS)
+    assert "seed_source" not in columns("event_stage")
+    assert "hide_seeds" not in columns("event")
