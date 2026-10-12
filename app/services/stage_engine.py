@@ -23,7 +23,7 @@ from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.scoring import wins_of
 from app.models.base import ident
 from app.models.discord_post import DiscordPost
-from app.models.enums import StageFormat
+from app.models.enums import SchedulingMode, StageFormat
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import (
@@ -120,107 +120,102 @@ def generate(
     seeds the unseeded entrants first, in the same transaction as the draw.
     """
     with Session.begin() as session:
-        stage = _stage(session, event_id, stage_id)
-        if stage.format is StageFormat.gnl:
-            raise BadRequestError(
-                "A GNL stage is drafted by its admin and its captains, not generated"
-            )
-        if stage.format is StageFormat.koth:
-            raise BadRequestError(
-                "A KOTH stage is paired by its admin during the event, not generated"
-            )
-        drawn = _series_of(session, stage_id)
-        if division_id is None and drawn:
-            raise BadRequestError("This stage already holds series")
-        if any(row.division_id == division_id for row in drawn):
-            raise BadRequestError("This division already holds series")
-        if division_id is not None and stage.format in BRACKETS:
-            raise BadRequestError("A bracket stage draws every division together")
-        if fill is not None:
-            fill(session, stage)
-        fields = _fields(_entrants(session, event_id))
-        _hold_minimum(session, stage, fields)
-        event = session.get(Season, event_id)
-        if event is not None:
-            hold_pool(session, event)
-            # a team cup draws complete teams only
-            from app.services.cup_teams import incomplete
+        return _generate(session, event_id, stage_id, division_id, fill)
 
-            short = incomplete(session, event)
-            if short:
-                raise BadRequestError(
-                    "Every team needs all its players before the draw: "
-                    + ", ".join(short)
-                )
-        if division_id is not None:
-            fields = {division_id: fields.get(division_id, [])}
-        for field in fields.values():
-            if len(field) < 2:
-                raise BadRequestError("A division needs two entrants to generate")
-        sizes = _side_sizes(
-            session, [entrant for field in fields.values() for entrant in field]
+
+def _generate(
+    session: OrmSession,
+    event_id: int,
+    stage_id: int,
+    division_id: int | None = None,
+    fill: SeedFill | None = None,
+) -> dict[str, int]:
+    """The draw of `generate`, inside the caller's transaction, so a result
+    that ends a stage can draw the one after it."""
+    stage = _stage(session, event_id, stage_id)
+    if stage.format is StageFormat.gnl:
+        raise BadRequestError(
+            "A GNL stage is drafted by its admin and its captains, not generated"
         )
-        # The largest roster stands in while a bracket pair is not drawn yet
-        size = max(sizes.values(), default=1)
-        draws = _draws(session, stage, list(fields.items()))
-        if any(len(field) < 2 for _, field in draws):
-            raise BadRequestError("A group needs two entrants; the group size is small")
-        plans = [_plan(stage, len(field)) for _, field in draws]
-        depth = max(len(plan.rounds) for plan in plans)
-        # A bracket part the stage names plays its own best-of; null follows the stage
-        best_of_by_part = parse_plan(stage.best_of_by_round)
-        held = {row.number: row for row in _rounds_of(session, stage_id)}
-        first = min(held) if held else _next_number(session, event_id)
-        rounds: dict[int, DBEventRound] = {
-            number - first: row for number, row in held.items()
-        }
-        per_fixture = _series_per_fixture(session, event_id)
-        made: list[Series] = []
-        # The groups of a division write into one run of sequences per round
-        counts: dict[tuple[int | None, int], int] = {}
-        for (division, field), plan in zip(draws, plans, strict=True):
-            shift = depth - len(plan.rounds) if stage.format in BRACKETS else 0
-            # A round robin over a field of teams pairs them into fixtures
-            pairs = stage.format is StageFormat.round_robin and all(
-                entrant.team_id for entrant in field
+    if stage.format is StageFormat.koth:
+        raise BadRequestError(
+            "A KOTH stage is paired by its admin during the event, not generated"
+        )
+    drawn = _series_of(session, stage_id)
+    if division_id is None and drawn:
+        raise BadRequestError("This stage already holds series")
+    if any(row.division_id == division_id for row in drawn):
+        raise BadRequestError("This division already holds series")
+    if division_id is not None and stage.format in BRACKETS:
+        raise BadRequestError("A bracket stage draws every division together")
+    if fill is not None:
+        fill(session, stage)
+    fields = _fields(_entrants(session, event_id))
+    _hold_minimum(session, stage, fields)
+    event = session.get(Season, event_id)
+    if event is not None:
+        hold_pool(session, event)
+        # a team cup draws complete teams only
+        from app.services.cup_teams import incomplete
+
+        short = incomplete(session, event)
+        if short:
+            raise BadRequestError(
+                "Every team needs all its players before the draw: " + ", ".join(short)
             )
-            rows: list[Series] = []
-            for planned in plan.series:
-                place = planned.round + shift
-                round_row = rounds.get(place)
-                if round_row is None:
-                    role = plan.role(planned.round)
-                    round_row = DBEventRound(
-                        stage_id=stage_id,
-                        season_id=event_id,
-                        number=first + place,
-                        name=plan.rounds[planned.round],
-                        best_of=best_of_by_part.get(role) if role else None,
-                    )
-                    session.add(round_row)
-                    session.flush()
-                    rounds[place] = round_row
-                teams = _team_pair(field, planned) if pairs else None
-                if teams is None:
-                    counts[division, place] = counts.get((division, place), 0) + 1
-                    rows.append(
-                        _row(
-                            session,
-                            stage,
-                            round_row,
-                            division,
-                            field,
-                            rows,
-                            planned,
-                            size,
-                            sizes,
-                        )
-                    )
-                    rows[-1].sequence = counts[division, place]
-                    continue
-                fixture = _fixture(session, event_id, round_row, division, teams)
-                for sequence in range(1, per_fixture + 1):
-                    row = _row(
+    if division_id is not None:
+        fields = {division_id: fields.get(division_id, [])}
+    for field in fields.values():
+        if len(field) < 2:
+            raise BadRequestError("A division needs two entrants to generate")
+    sizes = _side_sizes(
+        session, [entrant for field in fields.values() for entrant in field]
+    )
+    # The largest roster stands in while a bracket pair is not drawn yet
+    size = max(sizes.values(), default=1)
+    draws = _draws(session, stage, list(fields.items()))
+    if any(len(field) < 2 for _, field in draws):
+        raise BadRequestError("A group needs two entrants; the group size is small")
+    plans = [_plan(stage, len(field)) for _, field in draws]
+    depth = max(len(plan.rounds) for plan in plans)
+    # A bracket part the stage names plays its own best-of; null follows the stage
+    best_of_by_part = parse_plan(stage.best_of_by_round)
+    held = {row.number: row for row in _rounds_of(session, stage_id)}
+    first = min(held) if held else _next_number(session, event_id)
+    rounds: dict[int, DBEventRound] = {
+        number - first: row for number, row in held.items()
+    }
+    per_fixture = _series_per_fixture(session, event_id)
+    made: list[Series] = []
+    # The groups of a division write into one run of sequences per round
+    counts: dict[tuple[int | None, int], int] = {}
+    for (division, field), plan in zip(draws, plans, strict=True):
+        shift = depth - len(plan.rounds) if stage.format in BRACKETS else 0
+        # A round robin over a field of teams pairs them into fixtures
+        pairs = stage.format is StageFormat.round_robin and all(
+            entrant.team_id for entrant in field
+        )
+        rows: list[Series] = []
+        for planned in plan.series:
+            place = planned.round + shift
+            round_row = rounds.get(place)
+            if round_row is None:
+                role = plan.role(planned.round)
+                round_row = DBEventRound(
+                    stage_id=stage_id,
+                    season_id=event_id,
+                    number=first + place,
+                    name=plan.rounds[planned.round],
+                    best_of=best_of_by_part.get(role) if role else None,
+                )
+                session.add(round_row)
+                session.flush()
+                rounds[place] = round_row
+            teams = _team_pair(field, planned) if pairs else None
+            if teams is None:
+                counts[division, place] = counts.get((division, place), 0) + 1
+                rows.append(
+                    _row(
                         session,
                         stage,
                         round_row,
@@ -231,19 +226,35 @@ def generate(
                         size,
                         sizes,
                     )
-                    row.match_id = ident(fixture)
-                    row.sequence = sequence
-                    rows.append(row)
-            made += rows
-        session.flush()
-        # Padded walkovers fill every slot below before any series below settles
-        walkovers = [row for row in made if scored(row)]
-        for row in walkovers:
-            _fill_below(session, row)
-        for row in walkovers:
-            on_scored(session, row)
-        stage.seeds_locked_at = stage.seeds_locked_at or utcnow()
-        return {"series": len(made), "rounds": len(rounds) - len(held)}
+                )
+                rows[-1].sequence = counts[division, place]
+                continue
+            fixture = _fixture(session, event_id, round_row, division, teams)
+            for sequence in range(1, per_fixture + 1):
+                row = _row(
+                    session,
+                    stage,
+                    round_row,
+                    division,
+                    field,
+                    rows,
+                    planned,
+                    size,
+                    sizes,
+                )
+                row.match_id = ident(fixture)
+                row.sequence = sequence
+                rows.append(row)
+        made += rows
+    session.flush()
+    # Padded walkovers fill every slot below before any series below settles
+    walkovers = [row for row in made if scored(row)]
+    for row in walkovers:
+        _fill_below(session, row)
+    for row in walkovers:
+        on_scored(session, row)
+    stage.seeds_locked_at = stage.seeds_locked_at or utcnow()
+    return {"series": len(made), "rounds": len(rounds) - len(held)}
 
 
 def undraw(event_id: int, stage_id: int, confirm: bool = False) -> dict[str, int]:
@@ -316,74 +327,7 @@ def generate_next_round(
     unseeded entrants first, in the same transaction as the draw.
     """
     with Session.begin() as session:
-        stage = _stage(session, event_id, stage_id)
-        if not _draws_by_round(stage):
-            raise BadRequestError(
-                "This stage draws every round at once, not one by one"
-            )
-        drawn = _series_of(session, stage_id)
-        held = list(_rounds_of(session, stage_id))
-        if fill is not None:
-            fill(session, stage)
-        fields = _fields(_entrants(session, event_id))
-        if not drawn:
-            _hold_minimum(session, stage, fields)
-            stage.seeds_locked_at = stage.seeds_locked_at or utcnow()
-        if division_id is not None:
-            fields = {division_id: fields.get(division_id, [])}
-        sizes = _side_sizes(
-            session, [entrant for field in fields.values() for entrant in field]
-        )
-        # The largest roster stands in while a bracket pair is not drawn yet
-        size = max(sizes.values(), default=1)
-        made: list[Series] = []
-        drew: dict[int, DBEventRound] = {}
-        for division, field in fields.items():
-            played = [row for row in drawn if row.division_id == division]
-            if len(field) < 2:
-                raise BadRequestError("A division needs two entrants to draw a round")
-            if any(not scored(row) for row in played):
-                raise BadRequestError(
-                    "Every series of the round before needs a result first"
-                )
-            place = len({row.round_id for row in played})
-            if stage.swiss_rounds is not None and place >= stage.swiss_rounds:
-                raise BadRequestError(
-                    f"This stage plays {stage.swiss_rounds} rounds and has drawn them"
-                )
-            order = [line.entrant_id for line in _table(session, stage, field, played)]
-            pairs = brackets.swiss_pairs(
-                order, [(row.entrant1_id, row.entrant2_id) for row in played]
-            )
-            if pairs is None:
-                raise BadRequestError("This division has played every pairing it has")
-            round_row = held[place] if place < len(held) else None
-            if round_row is None:
-                round_row = DBEventRound(
-                    stage_id=stage_id,
-                    season_id=event_id,
-                    number=_next_number(session, event_id),
-                    name=f"Round {place + 1}",
-                )
-                session.add(round_row)
-                session.flush()
-                held.append(round_row)
-            drew[place] = round_row
-            entrants = {ident(entrant): entrant for entrant in field}
-            for sequence, (top, bottom) in enumerate(pairs, start=1):
-                sides = [entrants[top]] + ([] if bottom is None else [entrants[bottom]])
-                planned = brackets.PlannedSeries(
-                    0,
-                    0,
-                    brackets.Slot(seed=1),
-                    brackets.Slot() if bottom is None else brackets.Slot(seed=2),
-                )
-                row = _row(
-                    session, stage, round_row, division, sides, [], planned, size, sizes
-                )
-                row.sequence = sequence
-                made.append(row)
-        session.flush()
+        made, drew = _draw_round(session, event_id, stage_id, division_id, fill)
         read = _stage_rows(session, made)
         rows = [StageSeriesRow.from_series(row) for row in read]
         events = derived.fill_series(session, rows)
@@ -395,6 +339,84 @@ def generate_next_round(
             rounds=[EventRoundPublic.from_row(row) for row in drew.values()],
             series=rows,
         )
+
+
+def _draw_round(
+    session: OrmSession,
+    event_id: int,
+    stage_id: int,
+    division_id: int | None = None,
+    fill: SeedFill | None = None,
+) -> tuple[list[Series], dict[int, DBEventRound]]:
+    """The draw of `generate_next_round`, inside the caller's transaction, so
+    the last result of a round can draw the next one. Answers the series it
+    wrote and the round rows it drew them into."""
+    stage = _stage(session, event_id, stage_id)
+    if not _draws_by_round(stage):
+        raise BadRequestError("This stage draws every round at once, not one by one")
+    drawn = _series_of(session, stage_id)
+    held = list(_rounds_of(session, stage_id))
+    if fill is not None:
+        fill(session, stage)
+    fields = _fields(_entrants(session, event_id))
+    if not drawn:
+        _hold_minimum(session, stage, fields)
+        stage.seeds_locked_at = stage.seeds_locked_at or utcnow()
+    if division_id is not None:
+        fields = {division_id: fields.get(division_id, [])}
+    sizes = _side_sizes(
+        session, [entrant for field in fields.values() for entrant in field]
+    )
+    # The largest roster stands in while a bracket pair is not drawn yet
+    size = max(sizes.values(), default=1)
+    made: list[Series] = []
+    drew: dict[int, DBEventRound] = {}
+    for division, field in fields.items():
+        played = [row for row in drawn if row.division_id == division]
+        if len(field) < 2:
+            raise BadRequestError("A division needs two entrants to draw a round")
+        if any(not scored(row) for row in played):
+            raise BadRequestError(
+                "Every series of the round before needs a result first"
+            )
+        place = len({row.round_id for row in played})
+        limit = _round_limit(stage, len(field))
+        if limit is not None and place >= limit:
+            raise BadRequestError(f"This stage plays {limit} rounds and has drawn them")
+        order = [line.entrant_id for line in _table(session, stage, field, played)]
+        pairs = brackets.swiss_pairs(
+            order, [(row.entrant1_id, row.entrant2_id) for row in played]
+        )
+        if pairs is None:
+            raise BadRequestError("This division has played every pairing it has")
+        round_row = held[place] if place < len(held) else None
+        if round_row is None:
+            round_row = DBEventRound(
+                stage_id=stage_id,
+                season_id=event_id,
+                number=_next_number(session, event_id),
+                name=f"Round {place + 1}",
+            )
+            session.add(round_row)
+            session.flush()
+            held.append(round_row)
+        drew[place] = round_row
+        entrants = {ident(entrant): entrant for entrant in field}
+        for sequence, (top, bottom) in enumerate(pairs, start=1):
+            sides = [entrants[top]] + ([] if bottom is None else [entrants[bottom]])
+            planned = brackets.PlannedSeries(
+                0,
+                0,
+                brackets.Slot(seed=1),
+                brackets.Slot() if bottom is None else brackets.Slot(seed=2),
+            )
+            row = _row(
+                session, stage, round_row, division, sides, [], planned, size, sizes
+            )
+            row.sequence = sequence
+            made.append(row)
+    session.flush()
+    return made, drew
 
 
 def append_to_chain(
@@ -541,6 +563,8 @@ def after_score(
 ) -> None:
     """Follow a score change into the bracket and move the crown behind it."""
     game_one(session, row)
+    # game_one has read the round and the stage, so the check reads nothing more
+    _hold_swiss_round(session, row)
     _follow_score(session, row, was_scored, was_slot, force)
     # Only a save that changes who won moves the crown
     if not was_scored or was_slot != won_slot(row):
@@ -1477,6 +1501,7 @@ def _forfeit(session: OrmSession, row: Series, gone: set[int]) -> int:
     else:
         _award(session, row, to_first=2 in gone, kind="forfeit")
     on_scored(session, row)
+    _auto_advance(session, row)
     return 1
 
 
@@ -2256,15 +2281,82 @@ def _names(session: OrmSession, field: Sequence[EventEntrant]) -> dict[int, str 
 
 
 def _auto_advance(session: OrmSession, row: Series) -> None:
-    """A stage that carries its places forward does it on the last result."""
+    """A stage that carries its places forward does it on the last result.
+
+    A stage played straight away plays on by itself: the last result of a
+    Swiss round draws the next round while the stage has rounds left, and a
+    stage that ends seeds the one after it and draws it at once. A Swiss stage
+    with rounds left never carries its places forward.
+    """
     stage = _stage_of(session, row)
-    if stage is None or not stage.auto_advance:
+    swiss = stage is not None and stage.format is StageFormat.swiss
+    if stage is None or not (swiss or stage.auto_advance):
         return
-    if _next_stage(session, stage.event_id, stage) is None:
+    played = _series_of(session, stage.id)
+    if any(not scored(other) for other in played):
         return
-    if any(not scored(other) for other in _series_of(session, stage.id)):
+    cup = _plays_on_by_itself(stage)
+    if swiss and _rounds_left(session, stage, played):
+        if cup:
+            _draw_round(session, stage.event_id, ident(stage))
+        return
+    if not stage.auto_advance:
+        return
+    following = _next_stage(session, stage.event_id, stage)
+    if following is None:
         return
     _advance(session, stage.event_id, stage)
+    if cup and not _draws_by_round(following) and not _series_of(session, following.id):
+        _generate(session, stage.event_id, ident(following))
+
+
+def _plays_on_by_itself(stage: EventStage) -> bool:
+    """Whether the stage plays on by itself: every series of it is played
+    straight away, as a cup's evening is, so its rounds and the stage after it
+    draw themselves. The stage decides, never the kind of its event."""
+    return stage.scheduling_mode is SchedulingMode.immediate
+
+
+def _round_limit(stage: EventStage, field: int) -> int | None:
+    """The rounds a Swiss stage plays over a field of this size: the rounds it
+    names, cut to the rounds the field holds without a pairing twice."""
+    if stage.swiss_rounds is None:
+        return None
+    most = field if field % 2 else field - 1
+    return max(1, min(stage.swiss_rounds, most))
+
+
+def _rounds_left(
+    session: OrmSession, stage: EventStage, played: Sequence[Series]
+) -> bool:
+    """Whether a Swiss stage still has a round to draw for its field."""
+    fields = _fields(_entrants(session, stage.event_id))
+    drawn = len({row.round_id for row in played})
+    return any(
+        (limit := _round_limit(stage, len(field))) is not None and drawn < limit
+        for field in fields.values()
+    )
+
+
+def _hold_swiss_round(session: OrmSession, row: Series) -> None:
+    """Refuse a result change in a Swiss round once a later round is drawn:
+    that round's pairings were made from the table this result is part of.
+    A series that names no entrant, a GNL one, is never in a cup's Swiss stage,
+    so it reads nothing here."""
+    if row.entrant1_id is None and row.entrant2_id is None:
+        return
+    stage = _stage_of(session, row)
+    if stage is None or stage.format is not StageFormat.swiss:
+        return
+    if not _plays_on_by_itself(stage):
+        return
+    rounds = list(_rounds_of(session, ident(stage)))
+    numbers = {ident(round_row): round_row.number for round_row in rounds}
+    mine = numbers.get(row.round_id)
+    if mine is not None and any(number > mine for number in numbers.values()):
+        raise BadRequestError(
+            "The next round is drawn from this result, so it stays as it is"
+        )
 
 
 def _advance(session: OrmSession, event_id: int, stage: EventStage) -> int:

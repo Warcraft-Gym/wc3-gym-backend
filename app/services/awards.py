@@ -15,7 +15,7 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.event_award import EventAward, EventAwardPublic
 from app.models.event_history import KothHistoryEvent
-from app.models.event_stage import EventStage
+from app.models.event_stage import EventStage, StandingRow
 from app.models.season import Season
 from app.models.types import utcnow
 from app.services import stage_engine
@@ -30,10 +30,12 @@ def title_of(place: int) -> str:
 
 
 def close_event(session: OrmSession, event_id: int) -> list[EventAward]:
-    """Write one award per placed entrant of the last stage, division by division.
+    """Write one award per placed entrant, division by division.
 
-    The last stage is the one the event ends on, so its table holds the places
-    the event pays. The old rows go first, which makes a second close a rewrite.
+    The last stage is the one the event ends on, so its table holds the first
+    places; an entrant a playoff left out takes the next place in the order of
+    the stage before it. The old rows go first, which makes a second close a
+    rewrite.
     """
     if session.get(KothHistoryEvent, event_id) is not None:
         return list(
@@ -42,20 +44,16 @@ def close_event(session: OrmSession, event_id: int) -> list[EventAward]:
             )
         )
     session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
-    stage = _last_stage(session, event_id)
-    if stage is None:
-        return []
     rows = [
         EventAward(
             event_id=event_id,
             entrant_id=line.entrant_id,
             user_id=line.user_id,
             team_id=line.team_id,
-            place=line.position,
-            title=title_of(line.position),
+            place=place,
+            title=title_of(place),
         )
-        for table in stage_engine._tables(session, event_id, stage)
-        for line in table.rows
+        for place, line in event_places(session, event_id)
     ]
     session.add_all(rows)
     session.flush()
@@ -115,10 +113,31 @@ def cancel(event_id: int) -> None:
         session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
 
 
-def _last_stage(session: OrmSession, event_id: int) -> EventStage | None:
-    """The stage the event ends on; none when it holds no stage."""
-    return session.scalars(
+def event_places(session: OrmSession, event_id: int) -> list[tuple[int, StandingRow]]:
+    """Every placed entrant of the event with its place, best first.
+
+    The stages are read from the last one back: the last stage places its own
+    entrants as its table stands, a shared place staying shared, and each
+    stage before it places the entrants no later stage played, after all of
+    those, in its own order. Divisions place apart, each from place one.
+    """
+    stages = session.scalars(
         select(EventStage)
         .where(col(EventStage.event_id) == event_id)
         .order_by(col(EventStage.position).desc())
-    ).first()
+    ).all()
+    placed: dict[int | None, list[tuple[int, StandingRow]]] = {}
+    seen: set[int] = set()
+    for index, stage in enumerate(stages):
+        for table in stage_engine._tables(session, event_id, stage):
+            lines = placed.setdefault(table.division_id, [])
+            fresh = [line for line in table.rows if line.entrant_id not in seen]
+            if index == 0:
+                lines += [(line.position, line) for line in fresh]
+            else:
+                lines += [
+                    (len(lines) + number, line)
+                    for number, line in enumerate(fresh, start=1)
+                ]
+            seen |= {line.entrant_id for line in fresh}
+    return [pair for lines in placed.values() for pair in lines]
