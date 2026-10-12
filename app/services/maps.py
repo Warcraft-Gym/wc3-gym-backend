@@ -8,6 +8,7 @@ from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
 from app.models.map import LadderMapRow, Map, MapCreate, MapPublic, MapUpdate
+from app.models.types import map_modes
 from app.services import blob, ladder_maps
 
 
@@ -94,7 +95,9 @@ class MapService:
             maps = Map.get_all(session, limit=limit, offset=offset)
             return [MapPublic.model_validate(map) for map in maps]
 
-    def ladder_import_preview(self) -> list[LadderMapRow]:
+    def ladder_import_preview(
+        self, mode: int = ladder_maps.SOLO_MODE
+    ) -> list[LadderMapRow]:
         """Every 1v1 ladder map, and whether the app already holds it, then
         every map the app holds off the ladder whose picture warcraft3.info has."""
         with Session.begin() as session:
@@ -108,7 +111,7 @@ class MapService:
                 if map.name and not map.image
             ]
         by_base = ladder_maps.map_index()
-        rows = ladder_maps.ladder_rows(by_base)
+        rows = ladder_maps.ladder_rows(by_base, mode)
         on_ladder = set()
         for row in rows:
             map_id = known(row.w3c_name)
@@ -139,7 +142,12 @@ class MapService:
                 )
         return rows
 
-    def import_ladder_maps(self, names: list[str]) -> list[int]:
+    def import_ladder_maps(
+        self,
+        names: list[str],
+        mode: int = ladder_maps.SOLO_MODE,
+        ladder_only: bool = False,
+    ) -> list[int]:
         """The ids of these ladder maps, in the order named; the w3champions name is the truth.
 
         A map the app knows under an older name or spelling of the same lineage
@@ -150,16 +158,22 @@ class MapService:
 
         The picture is kept as the url warcraft3.info publishes it at, never copied into our own
         store: those bytes are already served from a CDN and cost us nothing where they are.
+
+        `mode` names the ladder the names are read against, 1v1 unless named;
+        `ladder_only` leaves every name off that ladder alone, as an organizer's
+        import does: it brings a cup the ladder maps and touches no other map.
         """
         by_base = ladder_maps.map_index()
         wanted = {
             row.w3c_name: row
-            for row in ladder_maps.ladder_rows(by_base)
+            for row in ladder_maps.ladder_rows(by_base, mode)
             if row.w3c_name in set(names)
         }
+        tag = ladder_maps.MODE_NAMES.get(mode)
         with Session.begin() as session:
             maps = Map.get_all(session)
             known = _known(maps)
+            modes = {ident(map): map.modes for map in maps}
             # a map that already has a picture, uploaded or published, is left alone
             pictured = set(
                 session.scalars(select(col(Map.id)).where(col(Map.image).is_not(None)))
@@ -172,7 +186,7 @@ class MapService:
                 row = wanted.get(name)
                 map_id = known(name)
                 if not row:
-                    if map_id is None or map_id in pictured:
+                    if ladder_only or map_id is None or map_id in pictured:
                         continue
                     found = ladder_maps.lookup(name, by_base)
                     if found.image_url:
@@ -184,12 +198,35 @@ class MapService:
                     taken.add(shortname.lower())
                     map = Map.add(
                         session,
-                        {"name": name, "shortname": shortname, "image": row.image_url},
+                        {
+                            "name": name,
+                            "shortname": shortname,
+                            "image": row.image_url,
+                            "modes": map_modes([tag] if tag else None),
+                        },
                     )
                     map_id = ident(map)
                 elif row.image_url and map_id not in pictured:
-                    Map.update(session, map_id, name=name, image=row.image_url)
+                    Map.update(
+                        session,
+                        map_id,
+                        name=name,
+                        image=row.image_url,
+                        modes=_tagged(modes.get(map_id), tag),
+                    )
                 else:
-                    Map.update(session, map_id, name=name)
+                    Map.update(
+                        session,
+                        map_id,
+                        name=name,
+                        modes=_tagged(modes.get(map_id), tag),
+                    )
                 map_ids.append(map_id)
         return map_ids
+
+
+def _tagged(current: str | None, tag: str | None) -> str | None:
+    """The modes of a map with the ladder it was imported from added."""
+    if not tag:
+        return current
+    return map_modes([*(current or "").split(","), tag])

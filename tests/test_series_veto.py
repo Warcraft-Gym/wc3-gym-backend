@@ -98,6 +98,7 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
             "team_id": None,
             "team_name": None,
             "team_icon_url": None,
+            "member_ids": [],
         },
         "player2": {
             "id": seeded["player_ids"][3],
@@ -105,6 +106,7 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
             "team_id": None,
             "team_name": None,
             "team_icon_url": None,
+            "member_ids": [],
         },
     }
 
@@ -497,8 +499,11 @@ def test_a_team_side_names_its_team_and_carries_no_user_id(
 ) -> None:
     """A fixture side fields a team, so the board names the team, its logo and
     its id in its own fields, and leaves the user id empty to compare against."""
+    from sqlmodel import col, select
+
     from app.core.db import Session
     from app.models.team import Team
+    from app.models.user_team_season import DBUserTeamSeason
     from tests.test_stage_engine import generate, stage_series, team_cup
 
     event, stage, team_ids, tags = team_cup(client, auth_headers, member)
@@ -510,6 +515,14 @@ def test_a_team_side_names_its_team_and_carries_no_user_id(
     )
     with Session.begin() as session:
         Team.update(session, series["team1"]["id"], icon_url="teams/1.png")
+        members = sorted(
+            session.scalars(
+                select(col(DBUserTeamSeason.user_id)).where(
+                    col(DBUserTeamSeason.team_id) == series["team1"]["id"],
+                    col(DBUserTeamSeason.season_id) == event,
+                )
+            ).all()
+        )
 
     board = read(client, series["id"], member(tags[0][0]))
 
@@ -519,5 +532,7 @@ def test_a_team_side_names_its_team_and_carries_no_user_id(
         "team_id": series["team1"]["id"],
         "team_name": series["team1"]["name"],
         "team_icon_url": "teams/1.png",
+        "member_ids": members,
     }
+    assert members
     assert board["player1"]["team_id"] in team_ids

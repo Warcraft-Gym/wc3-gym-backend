@@ -4,7 +4,7 @@ title: users
 description: One person, made by the first way in that meets them and found by any battle tag they hold or by Discord id, with the profile fields the forms write and three sync stamps.
 resource: ../../../../app/models/user.py
 tags: [auth, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-08T14:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-24T10:21:07Z }
 sources:
   - id: model
@@ -40,6 +40,7 @@ sources:
 | `avatar_url` | VARCHAR | yes | The Discord avatar the login last read. Written by the login, never by a form. |
 | `race` | VARCHAR | no | Main race: `RANDOM`, `HU`, `OC`, `NE`, `UD`. A form default only; the signup race on the season row decides scoring. |
 | `w3c_synced_at` | TIMESTAMP | yes | When the W3Champions stats sync last read this player. Null means never. |
+| `w3c_history_through` | INTEGER | yes | The newest past W3Champions season whose stats the app holds in full for this player, so the lifetime games of a race read the stored rows. Set the first time an event that counts races by their games reads the player's past seasons. Null means not read yet. |
 | `ladder_synced_at` | TIMESTAMP | yes | When the ladder match sync last read this player. Null means never. |
 | `banned_at` | TIMESTAMP | yes | When an admin banned the player. Null means not banned. An entrant row warns on it and never refuses. |
 

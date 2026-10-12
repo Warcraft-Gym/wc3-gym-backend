@@ -9,7 +9,8 @@ names the role of each round it writes, and the round row keeps the best-of.
 
 # Single elimination counts back from the final; double elimination names the
 # finals of both ladders, the round before each, and the grand final, whose
-# reset plays like it
+# reset plays like it; a placement bracket names its final and the last round
+# that decides every other place
 ROLES = (
     "quarterfinal",
     "semifinal",
@@ -19,6 +20,7 @@ ROLES = (
     "lower_semifinal",
     "lower_final",
     "grand_final",
+    "last_round",
 )
 
 

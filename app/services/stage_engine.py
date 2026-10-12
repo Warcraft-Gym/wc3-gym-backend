@@ -66,7 +66,11 @@ from app.services.series_rules import (
 )
 
 # The formats whose last round is the final, so every division ends together
-BRACKETS = (StageFormat.single_elimination, StageFormat.double_elimination)
+BRACKETS = (
+    StageFormat.single_elimination,
+    StageFormat.double_elimination,
+    StageFormat.placement,
+)
 # The formats that draw one round at a time, from the table as it stands
 BY_ROUND = (StageFormat.swiss,)
 # Seeds the unseeded entrants inside the draw's transaction, so a refusal writes none
@@ -139,6 +143,15 @@ def generate(
         event = session.get(Season, event_id)
         if event is not None:
             hold_pool(session, event)
+            # a team cup draws complete teams only
+            from app.services.cup_teams import incomplete
+
+            short = incomplete(session, event)
+            if short:
+                raise BadRequestError(
+                    "Every team needs all its players before the draw: "
+                    + ", ".join(short)
+                )
         if division_id is not None:
             fields = {division_id: fields.get(division_id, [])}
         for field in fields.values():
@@ -813,6 +826,17 @@ def series_of(
         ).all()
         ordered = sorted(held, key=lambda row: _drawn(numbers, row))
         rows = [StageSeriesRow.from_series(row) for row in ordered]
+        if stage.format is StageFormat.placement:
+            by_division: dict[int | None, list[Series]] = {}
+            for row in held:
+                by_division.setdefault(row.division_id, []).append(row)
+            groups: dict[int, tuple[int, int]] = {}
+            for division_rows in by_division.values():
+                groups |= placement_places(stage, division_rows)[0]
+            for public in rows:
+                public.place_from, public.place_to = groups.get(
+                    public.id or 0, (None, None)
+                )
         events = derived.fill_series(session, rows)
         _fill_teams(session, rows)
         derived.fill_mmrs(session, rows, events)
@@ -1636,6 +1660,8 @@ def _plan(stage: EventStage, size: int) -> brackets.Plan:
             return brackets.double_elimination_plan(
                 size, grand_final=stage.grand_final_modifier
             )
+        case StageFormat.placement:
+            return brackets.placement_plan(size, stage.placement_lives)
         case StageFormat.round_robin:
             return brackets.round_robin_plan(size, stage.series_per_entrant_per_round)
         case StageFormat.koth:
@@ -1837,6 +1863,8 @@ def _table(
         ),
         _ranking(stage),
     )
+    if stage.format is StageFormat.placement:
+        return _placement_table(session, stage, entrants, table, results, series)
     if stage.format in BRACKETS:
         reached = _reached(session, stage, order, series)
         table = sorted(table, key=lambda line: reached[line.entrant], reverse=True)
@@ -1953,6 +1981,82 @@ def _reached(
         if winner in won:
             won[winner] += 1
     return {entrant: (depth[entrant], won[entrant]) for entrant in order}
+
+
+def placement_places(
+    stage: EventStage, rows: Sequence[Series]
+) -> tuple[dict[int, tuple[int, int]], dict[int, tuple[int, int]]]:
+    """The places of one placement bracket: the group of each series, by
+    series id, and the places of each entrant, by entrant id.
+
+    The plan follows from the field and the stage's lives, so it is drawn
+    again over the series in the order the draw wrote them. An entrant whose
+    run has ended holds the places of the group it ended in; one still
+    playing holds the group of the latest series it stands in.
+    """
+    ordered = sorted(rows, key=ident)
+    field = {
+        side
+        for row in ordered
+        for side in (row.entrant1_id, row.entrant2_id)
+        if side is not None
+    }
+    if len(field) < 2:
+        return {}, {}
+    plan = brackets.placement_plan(len(field), stage.placement_lives)
+    if len(plan.series) != len(ordered):
+        return {}, {}
+    groups = {
+        ident(row): places for row, places in zip(ordered, plan.places, strict=True)
+    }
+    held: dict[int, tuple[int, int]] = {}
+    for row in ordered:
+        for side in (row.entrant1_id, row.entrant2_id):
+            if side is not None:
+                held[side] = groups[ident(row)]
+    for group in plan.finish:
+        for slot in group.slots:
+            if slot.feeder is None or not scored(ordered[slot.feeder]):
+                continue
+            entrant = entrant_of(ordered[slot.feeder], slot.takes_loser)
+            if entrant is not None:
+                held[entrant] = (group.first, group.last)
+    return groups, held
+
+
+def _placement_table(
+    session: OrmSession,
+    stage: EventStage,
+    entrants: dict[int, EventEntrant],
+    table: Sequence[brackets.Standing[int]],
+    results: Sequence[tuple[int, int | None, int, int]],
+    series: Sequence[Series],
+) -> list[StandingRow]:
+    """A placement bracket's table: every entrant at the first place its run
+    holds, so a group that stopped shares one place, and the points order the
+    entrants inside it."""
+    _, held = placement_places(stage, series)
+    after = len(entrants) + 1
+    lines = sorted(
+        enumerate(table),
+        key=lambda pair: (held.get(pair[1].entrant, (after,))[0], pair[0]),
+    )
+    counted = _counted(list(entrants), results)
+    names = _names(session, list(entrants.values()))
+    return [
+        StandingRow(
+            position=held[line.entrant][0] if held else place,
+            entrant_id=line.entrant,
+            user_id=entrants[line.entrant].user_id,
+            team_id=entrants[line.entrant].team_id,
+            name=names.get(line.entrant),
+            points=line.points,
+            game_diff=line.game_diff,
+            **counted[line.entrant],
+        )
+        for place, (_, line) in enumerate(lines, start=1)
+        if not held or line.entrant in held
+    ]
 
 
 def _third_place(

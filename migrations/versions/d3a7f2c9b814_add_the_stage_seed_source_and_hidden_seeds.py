@@ -4,7 +4,7 @@ A stage names how the draw seeds an entrant that has no seed yet; an event
 may hide its seed numbers from every reader who does not run it.
 
 Revision ID: d3a7f2c9b814
-Revises: c7e2b9d4a613
+Revises: b7d4e1a9c362
 Create Date: 2026-10-12 03:30:00.000000
 
 """
@@ -17,7 +17,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "d3a7f2c9b814"
-down_revision: str | Sequence[str] | None = "c7e2b9d4a613"
+down_revision: str | Sequence[str] | None = "b7d4e1a9c362"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

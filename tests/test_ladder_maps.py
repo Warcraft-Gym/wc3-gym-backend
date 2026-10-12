@@ -10,6 +10,7 @@ or spelling of the same lineage is renamed in place, keeping its id and
 short name; a missing picture is filled.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -341,6 +342,44 @@ def test_the_global_preview_says_which_maps_the_app_knows(
     assert season["Echo Isles v2"]["status"] == "known"
 
 
+def test_an_organizer_imports_the_ladder_maps_and_nothing_else(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    sources: list[str],
+) -> None:
+    """A cup's organizer brings in the ladder maps the app lacks, and a name off
+    the ladder is left alone."""
+    from tests.test_event_organizers import grant
+
+    grant(client, auth_headers, "77")
+    headers = member("77")
+
+    resp = client.post(
+        "/maps/ladder-import",
+        json={"names": ["Turtle Rock v2", "Concealed Hill"]},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [row["name"] for row in resp.json()] == ["Turtle Rock v2"]
+    # the map is tagged with the ladder it came from
+    assert resp.json()[0]["modes"] == "1v1"
+    listed = {
+        row["w3c_name"]: row
+        for row in client.get("/maps/ladder-import", headers=headers).json()
+    }
+    assert listed["Turtle Rock v2"]["map_id"] is not None
+    # a member who organizes nothing imports nothing
+    assert (
+        client.post(
+            "/maps/ladder-import", json={"names": []}, headers=member("78")
+        ).status_code
+        == 403
+    )
+
+
 def test_the_global_import_renames_and_pictures_without_touching_a_pool(
     client: Client,
     seeded: dict[str, Any],
@@ -433,3 +472,19 @@ def test_a_map_off_the_ladder_lists_with_the_picture_warcraft3_info_has(
         for row in client.get("/maps/ladder-import", headers=auth_headers).json()
     }
     assert "War Hail" not in listed
+
+
+def test_a_map_names_the_modes_it_is_played_as(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The modes read back each once, in their own order; an unknown one is refused."""
+    map_id = seeded["map_id"]
+    resp = client.put(
+        f"/maps/{map_id}",
+        json={"modes": ["ffa", "2v2", "1v1", "2v2"]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["modes"] == "1v1,2v2,ffa"
+    refused = client.put(f"/maps/{map_id}", json={"modes": "7v7"}, headers=auth_headers)
+    assert refused.status_code == 422

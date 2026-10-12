@@ -197,6 +197,9 @@ class Season(SeasonBase, DBModel, table=True):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = None
+    # The lifetime games a race needs before its rating counts; null reads the
+    # race of the signup alone, as a GNL season does
+    race_games_min: int | None = None
     mmr_min: int | None = None
     mmr_max: int | None = None
     # On: a signup outside the bounds is refused, not only warned, and the player
@@ -218,6 +221,8 @@ class Season(SeasonBase, DBModel, table=True):
     hide_seeds: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
+    # How many players a team of a team cup fields, 2 to 4; null is a 1v1 event
+    team_size: int | None = None
     entrant_cap: int | None = None
     # The fewest entrants the event is played with; the draw refuses below it
     entrant_min: int | None = None
@@ -636,6 +641,7 @@ class EventPublic(SQLModel):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = None
+    race_games_min: int | None = None
     mmr_min: int | None = None
     mmr_max: int | None = None
     eligibility_required: bool = False
@@ -643,6 +649,7 @@ class EventPublic(SQLModel):
     veto_by_best_of: bool = False
     # On: seed numbers read only for the event's admins and organizers
     hide_seeds: bool = False
+    team_size: int | None = None
     entrant_cap: int | None = None
     entrant_min: int | None = None
     checkin_days: int | None = None
@@ -718,6 +725,7 @@ class EventCreate(SQLModel):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = Field(default=None, ge=1)
+    race_games_min: int | None = Field(default=None, ge=1)
     mmr_min: int | None = None
     mmr_max: int | None = None
     eligibility_required: bool = False
@@ -725,6 +733,7 @@ class EventCreate(SQLModel):
     veto_by_best_of: bool = False
     # On: seed numbers read only for the event's admins and organizers
     hide_seeds: bool = False
+    team_size: int | None = Field(default=None, ge=2, le=4)
     entrant_cap: int | None = None
     entrant_min: int | None = Field(default=None, ge=2)
     # How many series one fixture holds, and a fixture pairs two team
@@ -770,12 +779,14 @@ class EventUpdate(SQLModel):
     map_rules: Annotated[str | None, MapRules] = None
     min_games: int | None = None
     min_games_seasons: int | None = Field(default=None, ge=1)
+    race_games_min: int | None = Field(default=None, ge=1)
     mmr_min: int | None = None
     mmr_max: int | None = None
     eligibility_required: bool | None = None
     bnet_required: bool | None = None
     veto_by_best_of: bool | None = None
     hide_seeds: bool | None = None
+    team_size: int | None = Field(default=None, ge=2, le=4)
     entrant_cap: int | None = None
     entrant_min: int | None = Field(default=None, ge=2)
     series_per_round: int | None = None

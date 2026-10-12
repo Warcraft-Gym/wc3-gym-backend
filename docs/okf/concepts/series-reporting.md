@@ -4,7 +4,7 @@ title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 resource: ../../../app/services/series_games.py
 tags: [series, storage]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-07T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-11T19:00:00Z }
 sources:
   - id: games
     resource: ../../../app/services/series_games.py
@@ -51,7 +51,7 @@ The board is derived: the season's `pick_ban` names the order and the side of ev
 
 The veto is not a required input. The report warns, strongly, when a result comes without one; it never blocks. See [the decision](../decisions/veto-warns-never-blocks.md).
 
-Each side of the board answer is a player or a team: `id` is the user's and null for a team side, whose `name` is the team's, beside `team_id`, `team_name` and `team_icon_url`. `viewer_side` names the side the caller acts for, null for an admin, who edits either side.
+Each side of the board answer is a player or a team: `id` is the user's and null for a team side, whose `name` is the team's, beside `team_id`, `team_name`, `team_icon_url` and `member_ids`, the players the team fields in the event, so a step one of them entered reads as the side's own; a player side's `member_ids` is empty. `viewer_side` names the side the caller acts for, null for an admin, who edits either side.
 
 # Off race
 

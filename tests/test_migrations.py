@@ -85,7 +85,13 @@ BEFORE_ORGANIZERS = "a6d3e9b14c27"
 # The revision before the best-of per bracket part and the veto by best-of
 BEFORE_CUP_BEST_OF = "a8d3e1f6c924"
 # The revision before the stage seed source and the hidden seeds switch
-BEFORE_SEED_CONTROLS = "c7e2b9d4a613"
+BEFORE_SEED_CONTROLS = "b7d4e1a9c362"
+# The revision before a race counts by its lifetime games
+BEFORE_RACE_GAMES = "c7e2b9d4a613"
+# The revision before a map names the modes it is played as
+BEFORE_MAP_MODES = "e7b4f2a9c5d1"
+# The revision before the placement bracket
+BEFORE_PLACEMENT = "f3c8a1d6e027"
 
 
 def comparable(
@@ -1606,6 +1612,50 @@ def test_the_best_of_plan_and_the_veto_switch_are_added_and_dropped(
     downgrade_to(url, BEFORE_CUP_BEST_OF)
     assert "best_of_by_round" not in columns("event_stage")
     assert "veto_by_best_of" not in columns("event")
+
+
+def test_the_race_games_floor_and_the_history_stamp_are_added_and_dropped(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "race_games")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns(table: str) -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns(table)}
+
+    assert "race_games_min" in columns("event")
+    assert "w3c_history_through" in columns("users")
+
+    downgrade_to(url, BEFORE_RACE_GAMES)
+    assert "race_games_min" not in columns("event")
+    assert "w3c_history_through" not in columns("users")
+
+
+def test_the_map_modes_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "map_modes")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("maps")}
+
+    assert "modes" in columns()
+    downgrade_to(url, BEFORE_MAP_MODES)
+    assert "modes" not in columns()
+
+
+def test_the_placement_lives_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "placement")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("event_stage")}
+
+    assert "placement_lives" in columns()
+    downgrade_to(url, BEFORE_PLACEMENT)
+    assert "placement_lives" not in columns()
 
 
 def test_the_stage_seed_source_and_the_hide_switch_are_added_and_dropped(

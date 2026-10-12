@@ -457,6 +457,9 @@ class StageSeriesRow(SeriesPublic):
     # The seed of each side; the stage series read fills it, null when the event hides seeds
     entrant1_seed: int | None = None
     entrant2_seed: int | None = None
+    # The places a placement bracket series' group plays for; null on every other format
+    place_from: int | None = None
+    place_to: int | None = None
 
     @classmethod
     def from_series(cls, series: Series, event_id: int | None = None) -> Self:

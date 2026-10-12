@@ -450,7 +450,9 @@ def no_refresh(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str]]:
 
     asked: list[tuple[int, str]] = []
     monkeypatch.setattr(
-        events, "refresh_rating", lambda user_id, tag: asked.append((user_id, tag))
+        events,
+        "refresh_rating",
+        lambda user_id, tag, *rest: asked.append((user_id, tag)),
     )
     return asked
 
@@ -617,3 +619,87 @@ def test_the_bounds_must_hold_together(
         headers=auth_headers,
     )
     assert switched.status_code == 400
+
+
+def test_a_cup_rates_a_player_on_the_races_they_have_really_played(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rating from a handful of games on another race never stands for the
+    player: the best rating among the races with enough lifetime games does."""
+    no_refresh(monkeypatch)
+    player = seeded["player_ids"][0]
+    headers = member("1")
+    # three games of Undead at 1300, a career of Night Elf at 800
+    rate(player, 1300, games=3, race=Race.UD)
+    rate(player, 800, games=15, race=Race.NE)
+    with Session.begin() as session:
+        session.add(
+            W3CStats(user_id=player, race=Race.NE, wc3_season=15, games=30, mmr=900)
+        )
+
+    capped = eligible_cup(name="Capped", mmr_max=1000, race_games_min=20)
+    taken = sign_up(client, capped, headers)
+    assert taken.status_code == 201, taken.text
+    floor = eligible_cup(name="Floor", mmr_min=1000, race_games_min=20)
+    refused = sign_up(client, floor, headers)
+    assert refused.status_code == 400
+    assert "rated 800 on Night Elf" in refused.json()["error"]
+
+
+def test_a_cup_refuses_a_player_with_no_race_over_its_games(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    no_refresh(monkeypatch)
+    rate(seeded["player_ids"][0], 1500, games=5)
+    refused = sign_up(client, eligible_cup(race_games_min=20), member("1"))
+    assert refused.status_code == 400
+    assert "No race of P1#1111 has 20 games" in refused.json()["error"]
+
+
+def test_a_players_past_seasons_are_read_once_and_kept(
+    seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seasons before the window are read once; the stamp spares the next ask."""
+    from app.models.user import User, UserReduced
+    from app.models.w3c_stats import W3CStatsCreate
+    from app.services.settings import SettingsService
+    from app.services.users import UserService
+    from app.services.w3c import W3CService
+
+    asked: list[int | None] = []
+
+    def stats(
+        self: W3CService, tag: str, season_override: int | None = None
+    ) -> list[W3CStatsCreate]:
+        asked.append(season_override)
+        return [
+            W3CStatsCreate(
+                wc3_season=season_override or 0, race=Race.NE, games=10, mmr=900
+            )
+        ]
+
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 22)
+    monkeypatch.setattr(
+        W3CService, "participated_seasons", lambda self, tag: [15, 18, 21, 22]
+    )
+    monkeypatch.setattr(W3CService, "get_player_stats", stats)
+    player = seeded["player_ids"][0]
+    service = UserService(settings_app_service=SettingsService())
+
+    service.backfill_w3c_history(UserReduced(id=player, battleTag="P1#1111"))
+    # the window is 22 and 21, so the history reaches 20
+    assert asked == [15, 18]
+    with Session.begin() as session:
+        user = session.get(User, player)
+        assert user is not None
+        assert user.w3c_history_through == 20
+
+    asked.clear()
+    service.backfill_w3c_history(UserReduced(id=player, battleTag="P1#1111"))
+    assert asked == []

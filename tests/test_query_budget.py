@@ -1540,7 +1540,8 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"accept": True},
             w.member(),
         ),
-        115,
+        # the merge behind an accepted prompt walks team_invite and historical_participant too
+        118,
     ),
     "PUT /users/me/tags/{tag_id}/active": (
         lambda w: ("PUT", f"/users/me/tags/{w.tag()}/active", None, w.member()),
@@ -1566,7 +1567,8 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"into_user_id": w.p3},
             w.admin,
         ),
-        80,
+        # the merge walks every table that holds a user id, team_invite and historical_participant among them
+        82,
     ),
     "PUT /users/{user_id}": (
         lambda w: ("PUT", f"/users/{w.p1}", {"country": "NL"}, w.admin),

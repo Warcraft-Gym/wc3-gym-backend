@@ -154,6 +154,25 @@ def _best_of_plan[T](value: T) -> T | str | None:
     return value
 
 
+# The modes a map is played as, in the order a list reads them
+MAP_MODES = ("1v1", "2v2", "3v3", "4v4", "5v5", "6v6", "8v8", "ffa")
+
+
+def map_modes(value: object) -> str | None:
+    """The modes a map is played as, each once, in the order MAP_MODES names
+    them, as "1v1,2v2"; a list reads the same, and none is null."""
+    if value is None or value == "":
+        return None
+    tokens = value if isinstance(value, list) else str(value).split(",")
+    found = {str(token).strip().lower() for token in tokens if str(token).strip()}
+    unknown = sorted(found - set(MAP_MODES))
+    if unknown:
+        raise ValueError(
+            f"'{unknown[0]}' is not a map mode. Valid modes are {', '.join(MAP_MODES)}."
+        )
+    return ",".join(mode for mode in MAP_MODES if mode in found) or None
+
+
 def _place_points[T](value: T) -> T | None:
     """What each place of a free for all lobby pays, best place first."""
     if value == "" or value is None:
@@ -239,6 +258,8 @@ TwitchChannel = BeforeValidator(_twitch_channel)
 YouTubeChannel = BeforeValidator(_youtube_channel)
 # Input. The map rules of a season, which take the four rule names and nothing else.
 MapRules = BeforeValidator(_map_rules)
+# Input. The modes a map is played as, as "1v1,2v2" or a list of them.
+MapModes = BeforeValidator(map_modes)
 # Input. The best-of of each bracket part, as "semifinal:3,final:5".
 BestOfPlan = BeforeValidator(_best_of_plan)
 # Input. What each place of an FFA lobby pays, best place first, as "4,3,2,1".

@@ -50,7 +50,14 @@ from app.models.series import (
     StageSeriesRow,
     TemplateSeries,
 )
-from app.services import awards, discord_posts, organizers, stage_engine
+from app.models.team_invite import (
+    CupTeamAdd,
+    CupTeamCreate,
+    MemberReplace,
+    TeamInviteCreate,
+    TeamInvitePublic,
+)
+from app.services import awards, cup_teams, discord_posts, organizers, stage_engine
 from app.services.koth import night
 
 router = APIRouter(tags=["events"])
@@ -278,6 +285,83 @@ def replace_entrant(
     """Put another player in the place, the seed and the series of one who has
     not played yet, so a drawn bracket takes a late change without a redraw."""
     return service.replace_entrant(event_id, entrant_id, data)
+
+
+@router.post("/events/{event_id}/cup-teams", status_code=201)
+def sign_up_team(
+    event_id: int, data: CupTeamCreate, claims: RequireLogin
+) -> EventEntrantPublic:
+    """Sign a team up for a team cup: the caller captains it and invites the rest."""
+    return cup_teams.sign_up(event_id, data, claims)
+
+
+@router.post(
+    "/events/{event_id}/cup-teams/admin",
+    status_code=201,
+    dependencies=[Depends(require_event_runner)],
+)
+def add_team(event_id: int, data: CupTeamAdd) -> EventEntrantPublic:
+    """Enter a whole team by hand, every player confirmed."""
+    return cup_teams.add_by_hand(event_id, data)
+
+
+@router.post("/events/{event_id}/cup-teams/{team_id}/accept", status_code=204)
+def accept_invite(event_id: int, team_id: int, claims: RequireLogin) -> None:
+    """Join the team that invited the caller."""
+    cup_teams.accept(event_id, team_id, claims)
+
+
+@router.post("/events/{event_id}/cup-teams/{team_id}/decline", status_code=204)
+def decline_invite(event_id: int, team_id: int, claims: RequireLogin) -> None:
+    """Say no to the team that invited the caller."""
+    cup_teams.decline(event_id, team_id, claims)
+
+
+@router.post("/events/{event_id}/cup-teams/{team_id}/invites", status_code=204)
+def invite_player(
+    event_id: int, team_id: int, data: TeamInviteCreate, claims: RequireLogin
+) -> None:
+    """The captain invites one more player into a free place of the team."""
+    cup_teams.invite(event_id, team_id, data.user_id, claims)
+
+
+@router.delete(
+    "/events/{event_id}/cup-teams/{team_id}/invites/{user_id}", status_code=204
+)
+def take_back_invite(
+    event_id: int, team_id: int, user_id: int, claims: RequireLogin
+) -> None:
+    """The captain takes back an invite still unanswered."""
+    cup_teams.take_back(event_id, team_id, user_id, claims)
+
+
+@router.delete("/events/{event_id}/cup-teams/{team_id}/members/me", status_code=204)
+def leave_team(event_id: int, team_id: int, claims: RequireLogin) -> None:
+    """A player who is not the captain leaves the team before it plays."""
+    cup_teams.leave(event_id, team_id, claims)
+
+
+@router.delete("/events/{event_id}/cup-teams/{team_id}", status_code=204)
+def withdraw_team(event_id: int, team_id: int, claims: RequireLogin) -> None:
+    """The captain withdraws the team, and its open invites go with it."""
+    cup_teams.withdraw(event_id, team_id, claims)
+
+
+@router.post(
+    "/events/{event_id}/cup-teams/{team_id}/members/{user_id}/replace",
+    dependencies=[Depends(require_event_runner)],
+)
+def replace_team_member(
+    event_id: int, team_id: int, user_id: int, data: MemberReplace
+) -> EventEntrantPublic:
+    """Put another player in a team's place of one who leaves it, before it plays."""
+    return cup_teams.replace_member(event_id, team_id, user_id, data.user_id)
+
+
+@router.get("/me/team-invites")
+def get_my_team_invites(claims: RequireLogin) -> list[TeamInvitePublic]:
+    """The team invitations the caller has not answered yet, newest first."""
+    return cup_teams.invites_for(claims)
 
 
 @router.delete("/events/{event_id}/entrants/me", status_code=204)
