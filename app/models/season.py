@@ -599,7 +599,7 @@ AvailabilityHint = Literal["answered_yes", "answered_no", "blocked_by_blocks", "
 
 # The one action a member's event row offers; app/services/events.py computes it
 MemberAction = Literal[
-    "sign_up", "withdraw", "check_in", "checked_in", "view", "closed"
+    "sign_up", "withdraw", "check_in", "checked_in", "view", "closed", "waitlisted"
 ]
 
 

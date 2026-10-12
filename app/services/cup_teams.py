@@ -67,7 +67,13 @@ def sign_up(
         for player in players:
             _hold(session, event, player)
         row = _write_team(
-            session, event, data.name, captain, confirmed=[], invited=others
+            session,
+            event,
+            data.name,
+            captain,
+            confirmed=[],
+            invited=others,
+            may_wait=True,
         )
         return event_service._entrant_publics(session, event, [row])[0]
 
@@ -298,6 +304,7 @@ def incomplete(session: OrmSession, event: Season) -> list[str]:
         .where(
             col(EventEntrant.event_id) == ident(event),
             col(EventEntrant.withdrawn_at).is_(None),
+            col(EventEntrant.waitlisted_at).is_(None),
         )
     ).all()
     return [name for team_id, name in teams if counts.get(team_id, 0) < event.team_size]
@@ -382,11 +389,15 @@ def _write_team(
     captain: User,
     confirmed: list[int],
     invited: list[int],
+    may_wait: bool = False,
 ) -> EventEntrant:
-    """The cup team, its roster, its captain, its invites and its entrant."""
+    """The cup team, its roster, its captain, its invites and its entrant.
+    A captain's signup to a cup that is drawn or full waits on its waitlist."""
     if event.entrant_kind is not EntrantKind.team:
         event.entrant_kind = EntrantKind.team
-    event_service._room_for_one_more(session, event)
+    waits = may_wait and event_service._waits(session, event)
+    if not waits:
+        event_service._room_for_one_more(session, event)
     team = Team(name=name.strip(), event_id=ident(event), league_id=event.league_id)
     session.add(team)
     session.flush()
@@ -403,7 +414,11 @@ def _write_team(
         )
     for user_id in invited:
         session.add(TeamInvite(team_id=team_id, user_id=user_id, event_id=ident(event)))
-    row = EventEntrant(event_id=ident(event), team_id=team_id)
+    row = EventEntrant(
+        event_id=ident(event),
+        team_id=team_id,
+        waitlisted_at=utcnow() if waits else None,
+    )
     session.add(row)
     session.flush()
     return row

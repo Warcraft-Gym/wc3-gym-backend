@@ -1610,6 +1610,19 @@ def _next_stage(
     ).first()
 
 
+def stage_drawn(session: OrmSession, stage_id: int) -> bool:
+    """Whether the stage holds a series, in one short read."""
+    return (
+        session.scalar(
+            select(col(Series.id))
+            .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+            .where(col(DBEventRound.stage_id) == stage_id)
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def _series_of(session: OrmSession, stage_id: int | None) -> Sequence[Series]:
     """Every series the stage holds, in play order, through its rounds."""
     return session.scalars(
@@ -1661,7 +1674,8 @@ def _hold_minimum(
 def _entrants(
     session: OrmSession, event_id: int
 ) -> dict[int | None, list[EventEntrant]]:
-    """Every entrant of every division in seed order; one field without divisions."""
+    """Every entrant of every division in seed order; one field without divisions.
+    An entrant on a cup's waitlist stands in no field until it is let in."""
     divisions = session.scalars(
         select(EventDivision)
         .where(col(EventDivision.event_id) == event_id)
@@ -1672,6 +1686,7 @@ def _entrants(
         .where(
             col(EventEntrant.event_id) == event_id,
             col(EventEntrant.withdrawn_at).is_(None),
+            col(EventEntrant.waitlisted_at).is_(None),
         )
         .order_by(
             col(EventEntrant.seed).is_(None),

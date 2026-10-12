@@ -131,8 +131,9 @@ def test_a_captain_enters_the_team_and_another_member_may_not(
 def test_the_signup_refuses_when_it_is_closed_full_or_already_taken(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
-    """No waiting list is built: a full event refuses and says so."""
-    event = add_event(kind=EventKind.cup, entrant_cap=1)
+    """A sign-up list keeps no waiting list: a full one refuses and says so.
+    A full cup takes the signup onto its waitlist instead."""
+    event = add_event(kind=EventKind.signup, entrant_cap=1)
     assert sign_up(client, event, member("1")).status_code == 201
 
     full = sign_up(client, event, member("2"))
@@ -140,6 +141,14 @@ def test_the_signup_refuses_when_it_is_closed_full_or_already_taken(
     assert full.json() == {"error": "The event is full at 1 entrants"}
     twice = sign_up(client, event, member("1"))
     assert twice.json() == {"error": "This entrant is already signed up"}
+
+    cup = add_event(kind=EventKind.cup, entrant_cap=1, name="Full Cup")
+    assert sign_up(client, cup, member("1")).status_code == 201
+    waits = sign_up(client, cup, member("2"))
+    assert waits.status_code == 201, waits.text
+    assert waits.json()["waitlisted_at"] is not None
+    again = sign_up(client, cup, member("2"))
+    assert again.json() == {"error": "This entrant is on the waitlist already"}
 
     set_fields(event, signups_open=False)
     closed = sign_up(client, event, member("3"))

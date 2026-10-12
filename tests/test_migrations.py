@@ -92,6 +92,8 @@ BEFORE_RACE_GAMES = "c7e2b9d4a613"
 BEFORE_MAP_MODES = "e7b4f2a9c5d1"
 # The revision before the placement bracket
 BEFORE_PLACEMENT = "f3c8a1d6e027"
+# The revision before the cup waitlist
+BEFORE_WAITLIST = "d3a7f2c9b814"
 
 
 def comparable(
@@ -1674,3 +1676,16 @@ def test_the_stage_seed_source_and_the_hide_switch_are_added_and_dropped(
     downgrade_to(url, BEFORE_SEED_CONTROLS)
     assert "seed_source" not in columns("event_stage")
     assert "hide_seeds" not in columns("event")
+
+
+def test_the_waitlist_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "waitlist")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("event_entrant")}
+
+    assert "waitlisted_at" in columns()
+    downgrade_to(url, BEFORE_WAITLIST)
+    assert "waitlisted_at" not in columns()

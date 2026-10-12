@@ -4,7 +4,7 @@ title: event_entrant
 description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
 resource: ../../../../app/models/event_entrant.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T03:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T17:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -42,6 +42,7 @@ sources:
 | `channel` | VARCHAR | no | Where the signup came from: `web`, `bot` or `twitch`. |
 | `checked_in_at` | TIMESTAMP | yes | When the entrant checked in. Null while not checked in. |
 | `withdrawn_at` | TIMESTAMP | yes | When the entrant withdrew. Null means live. A return signup clears it and reuses the row. |
+| `waitlisted_at` | TIMESTAMP | yes | When a cup put the signup on its waitlist, because the cup was drawn or full. A waiting entrant takes no seat in the cap, the draw, the seeds or check-in; a runner's admit, hand-add or swap clears it. Null means the entrant is in. |
 | `created_at` | TIMESTAMP | no | When the row was written. Set by the app. No route reads it. |
 
 # Keys and joins

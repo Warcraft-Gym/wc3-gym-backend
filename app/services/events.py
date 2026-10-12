@@ -758,6 +758,7 @@ class EventService:
                     event,
                     data,
                     user_id=ident(_signup_user(session, event, data, claims)),
+                    may_wait=event.kind is EventKind.cup,
                 )
             entrant_id = ident(row)
             shown = organizers.shows_seeds(claims, event)
@@ -818,6 +819,26 @@ class EventService:
             else:
                 _withdraw_rows(session, event, rows)
 
+    def admit_entrant(self, event_id: int, entrant_id: int) -> EventEntrantPublic:
+        """A runner lets one entrant in off the waitlist, past the cap if need be.
+
+        Once the cup is drawn its field is set: a waiting player comes in by
+        taking the place of one who has not played, through the replace write.
+        """
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            row = _entrant(session, event_id, entrant_id)
+            if row.waitlisted_at is None or row.withdrawn_at is not None:
+                raise BadRequestError("This entrant is not on the waitlist")
+            if _first_stage_drawn(session, event_id):
+                raise BadRequestError(
+                    "The cup is drawn: swap them in for a player who has not "
+                    "played, or undo the draw first"
+                )
+            row.waitlisted_at = None
+            session.flush()
+            return _entrant_publics(session, event, [row])[0]
+
     def withdraw_entrant(self, event_id: int, entrant_id: int) -> None:
         """A runner withdraws one entrant and keeps the row; on a drawn cup it
         forfeits what it still owes, as the entrant's own withdraw does."""
@@ -857,6 +878,10 @@ class EventService:
                 )
                 if user is None or (row.user_id != user.id and not member):
                     raise ApiError(403, {"error": "Check in your own signup"})
+            if row.waitlisted_at is not None:
+                raise BadRequestError(
+                    "A signup on the waitlist checks in once it is let in"
+                )
             row.checked_in_at = utcnow()
             session.flush()
             shown = organizers.shows_seeds(claims, event)
@@ -1244,13 +1269,15 @@ def _divisions(session: OrmSession, event_id: int) -> list[EventDivision]:
 
 
 def _live_entrants(session: OrmSession, event_id: int) -> list[EventEntrant]:
-    """Every entrant of the event that has not withdrawn, in signup order."""
+    """Every entrant of the event that has not withdrawn and waits on no
+    waitlist, in signup order."""
     return list(
         session.scalars(
             select(EventEntrant)
             .where(
                 col(EventEntrant.event_id) == event_id,
                 col(EventEntrant.withdrawn_at).is_(None),
+                col(EventEntrant.waitlisted_at).is_(None),
             )
             .order_by(col(EventEntrant.id))
         )
@@ -1347,6 +1374,7 @@ def _joined_events(
                 rel(EventEntrant.event_id),
                 rel(EventEntrant.race),
                 rel(EventEntrant.checked_in_at),
+                rel(EventEntrant.waitlisted_at),
                 raiseload=True,
             )
         )
@@ -1658,7 +1686,14 @@ def _member_row(
         checkin_open=is_open,
         next_round=EventRoundPublic.from_row(round_) if round_ else None,
         availability_hint=hint,
-        action=_member_action(phase, event, joined, checked_in_at, is_open),
+        action=_member_action(
+            phase,
+            event,
+            joined,
+            checked_in_at,
+            is_open,
+            waiting=entrant is not None and entrant.waitlisted_at is not None,
+        ),
         captain_fixture=fixture,
         captain_matches=fixtures,
     )
@@ -1670,11 +1705,21 @@ def _member_action(
     joined: bool,
     checked_in_at: datetime | None,
     checkin_open_now: bool,
+    waiting: bool = False,
 ) -> MemberAction:
     """The one action the member home offers, so every page agrees on it."""
-    # A KOTH night runs while it takes signups, so its first series closes no door
-    koth_door = event.kind is EventKind.koth and event.signups_open and not joined
-    if phase == "finished" or (phase == "running" and not koth_door):
+    # A KOTH night runs while it takes signups, so its first series closes no
+    # door; nor does a cup's, whose late signups wait on its waitlist
+    open_door = (
+        event.kind in (EventKind.koth, EventKind.cup)
+        and event.signups_open
+        and not joined
+    )
+    if phase == "finished":
+        return "view"
+    if waiting:
+        return "waitlisted"
+    if phase == "running" and not open_door:
         return "view"
     if joined:
         if checked_in_at is not None:
@@ -1750,6 +1795,7 @@ def _public(
     live = (
         col(EventEntrant.event_id) == event.id,
         col(EventEntrant.withdrawn_at).is_(None),
+        col(EventEntrant.waitlisted_at).is_(None),
     )
     by_division = {
         division_id: total
@@ -2382,6 +2428,7 @@ def _entrant_public(
         manual_placement=row.manual_placement,
         checked_in_at=row.checked_in_at,
         withdrawn_at=row.withdrawn_at,
+        waitlisted_at=row.waitlisted_at,
         qualified_from_event_id=row.qualified_from_event_id,
     )
 
@@ -2586,12 +2633,15 @@ def _enter(
     data: EntrantSignup,
     user_id: int | None = None,
     team_id: int | None = None,
+    may_wait: bool = False,
 ) -> EventEntrant:
     """Write the entrant row, or reopen the one that withdrew.
 
     An event whose teams are drafted takes no direct entrant: its field is
-    drafted from the players who signed up to it. A full event refuses too:
-    no waiting list is kept.
+    drafted from the players who signed up to it. A full event refuses, unless
+    the signup `may_wait`: a cup puts a signup on its waitlist once it is
+    drawn or full. A row on the waitlist is let in by a write that may not
+    wait, a runner's hand-add or swap, which reuses it.
     """
     if event.entrant_kind is EntrantKind.drafted_teams:
         raise BadRequestError(
@@ -2619,12 +2669,21 @@ def _enter(
         # One row per race, so the second race of a player is a row of its own
         statement = statement.where(col(EventEntrant.race) == race)
     existing = session.scalars(statement).first()
-    if existing is not None and existing.withdrawn_at is None:
-        raise BadRequestError("This entrant is already signed up")
-    _room_for_one_more(session, event)
+    live = existing is not None and existing.withdrawn_at is None
+    waiting = live and existing is not None and existing.waitlisted_at is not None
+    if live and (not waiting or may_wait):
+        raise BadRequestError(
+            "This entrant is on the waitlist already"
+            if waiting
+            else "This entrant is already signed up"
+        )
+    waits = may_wait and _waits(session, event)
+    if not waits and not waiting:
+        _room_for_one_more(session, event)
     if existing is not None:
         # The unique key is one row per entrant, so a return signup reopens it
         existing.withdrawn_at = None
+        existing.waitlisted_at = utcnow() if waits else None
         # A player who left and comes back stands at the end of the line again
         existing.seed = None
         existing.race = race
@@ -2639,20 +2698,45 @@ def _enter(
         race=race,
         note=data.note,
         channel=data.channel,
+        waitlisted_at=utcnow() if waits else None,
     )
     session.add(row)
     session.flush()
     return row
 
 
+def _first_stage_drawn(session: OrmSession, event_id: int) -> bool:
+    """Whether the event's first stage holds its series: its field is set."""
+    first = session.scalar(
+        select(col(EventStage.id))
+        .where(col(EventStage.event_id) == event_id)
+        .order_by(col(EventStage.position))
+        .limit(1)
+    )
+    return first is not None and bool(stage_engine.stage_drawn(session, first))
+
+
+def _waits(session: OrmSession, event: Season) -> bool:
+    """Whether a new signup to this event goes on its waitlist: its first
+    stage is drawn, or it holds as many entrants as it takes."""
+    return _first_stage_drawn(session, ident(event)) or _full(session, event)
+
+
 def _room_for_one_more(session: OrmSession, event: Season) -> None:
-    """Refuse the signup that would pass the entrant cap; nothing waits in line.
+    """Refuse the signup that would pass the entrant cap."""
+    if _full(session, event):
+        raise BadRequestError(f"The event is full at {event.entrant_cap} entrants")
+
+
+def _full(session: OrmSession, event: Season) -> bool:
+    """Whether the event holds as many entrants as its cap; no cap is never full.
 
     The cap counts entrants, not rows, so the second race of a player on an
-    event that takes one entry per race takes no second seat.
+    event that takes one entry per race takes no second seat, and an entrant
+    on the waitlist takes none either.
     """
     if event.entrant_cap is None:
-        return
+        return False
     taken = session.scalar(
         select(
             func.count(
@@ -2665,7 +2749,7 @@ def _room_for_one_more(session: OrmSession, event: Season) -> None:
         .where(
             col(EventEntrant.event_id) == event.id,
             col(EventEntrant.withdrawn_at).is_(None),
+            col(EventEntrant.waitlisted_at).is_(None),
         )
     )
-    if taken is not None and taken >= event.entrant_cap:
-        raise BadRequestError(f"The event is full at {event.entrant_cap} entrants")
+    return taken is not None and taken >= event.entrant_cap

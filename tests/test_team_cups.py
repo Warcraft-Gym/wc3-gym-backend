@@ -143,8 +143,10 @@ def test_a_player_plays_for_one_team_of_a_cup_and_a_team_fields_its_size(
     taken = sign_up(client, event, headers_of(member, third), "Red", second)
     assert taken.status_code == 400
     assert "already plays for a team" in taken.text
+    # a full cup takes the next team onto its waitlist
     full = sign_up(client, event, headers_of(member, third), "Red", fourth)
-    assert full.status_code == 400
+    assert full.status_code == 201, full.text
+    assert full.json()["waitlisted_at"] is not None
 
 
 def test_a_removed_team_frees_the_players_it_invited(

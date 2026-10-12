@@ -376,6 +376,18 @@ def withdraw(
 
 
 @router.post(
+    "/events/{event_id}/entrants/{entrant_id}/admit",
+    dependencies=[Depends(require_event_runner)],
+)
+def admit_entrant(
+    event_id: int, entrant_id: int, service: EventServiceDep
+) -> EventEntrantPublic:
+    """A runner lets one entrant in off the waitlist before the draw, past the
+    cap if need be; after the draw a waiting player takes a place by a swap."""
+    return service.admit_entrant(event_id, entrant_id)
+
+
+@router.post(
     "/events/{event_id}/entrants/{entrant_id}/withdraw",
     status_code=204,
     dependencies=[Depends(require_event_runner)],

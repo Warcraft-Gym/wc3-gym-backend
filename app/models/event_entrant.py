@@ -95,6 +95,11 @@ class EventEntrant(DBModel, table=True):
     withdrawn_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
+    # When a cup put the signup on its waitlist: it was drawn or full. A waiting
+    # entrant takes no place in the field until a runner lets it in
+    waitlisted_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
     created_at: datetime = Field(
         default_factory=utcnow,
         sa_type=UTCDateTime,
@@ -170,6 +175,7 @@ class EventEntrantPublic(SQLModel):
     manual_placement: bool = False
     checked_in_at: Annotated[datetime | None, AwareUTC] = None
     withdrawn_at: Annotated[datetime | None, AwareUTC] = None
+    waitlisted_at: Annotated[datetime | None, AwareUTC] = None
     qualified_from_event_id: int | None = None
     # A cup team: the confirmed players, and the players invited who have not answered
     roster: list[TeamMemberPublic] = []
