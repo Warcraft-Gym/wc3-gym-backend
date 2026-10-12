@@ -451,6 +451,9 @@ class StageSeriesRow(SeriesPublic):
     slot1_takes_loser: bool = False
     slot2_from_series_id: int | None = None
     slot2_takes_loser: bool = False
+    # Where a fed side comes from, such as "Loser of UB R1 M3"; the stage series read fills it
+    slot1_source: str | None = None
+    slot2_source: str | None = None
 
     @classmethod
     def from_series(cls, series: Series, event_id: int | None = None) -> Self:

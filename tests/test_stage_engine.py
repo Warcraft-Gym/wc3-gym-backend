@@ -332,7 +332,7 @@ def test_a_lower_series_fed_by_two_byes_is_a_walkover_nobody_wins(
 ) -> None:
     """Five entrants pad to eight, so seeds 2 and 3 both drop nobody down: the
     lower series of their two byes settles empty, and the series below it is a
-    walkover for whoever the upper bracket sends down to it."""
+    walkover for whoever the crossed drop sends down to it."""
     event, (stage,) = cup(5, StageFormat.double_elimination)
     generate(client, auth_headers, event, stage)
     seeds = players_of(event)
@@ -343,16 +343,23 @@ def test_a_lower_series_fed_by_two_byes_is_a_walkover_nobody_wins(
     assert empty["sides"] == (None, None)
     below = next(row for row in rows if row["slot1"] == (empty["id"], False))
     assert below["round"] == "Lower bracket round 2"
-    # The series below waits on the loser of 2 against 3
+    # The series below waits on the loser of seed 1 against the 4 v 5 winner
     assert below["score"] == (None, None)
-    upper = [row for row in rows if row["round"] == "Upper bracket round 2"][1]
+    top, other = [row for row in rows if row["round"] == "Upper bracket round 2"]
+    assert below["slot2"] == (top["id"], True)
     # Seeds 2 and 3 both came through a bye, and they still play each other
-    assert upper["sides"] == (seeds[1], seeds[2])
-    assert upper["score"] == (None, None)
-    assert score(client, auth_headers, upper["id"], 2, 0).status_code == 200
+    assert other["sides"] == (seeds[1], seeds[2])
+    assert other["score"] == (None, None)
+    opener = next(
+        row
+        for row in rows
+        if row["round"] == "Upper bracket round 1" and row["sides"] == tuple(seeds[3:])
+    )
+    assert score(client, auth_headers, opener["id"], 2, 0).status_code == 200
+    assert score(client, auth_headers, top["id"], 2, 0).status_code == 200
     settled = next(row for row in bracket(stage) if row["id"] == below["id"])
     assert settled["result_kind"] == "walkover"
-    assert settled["sides"] == (None, seeds[2])
+    assert settled["sides"] == (None, seeds[3])
     assert settled["score"] == (0, 2)
 
 
@@ -969,12 +976,45 @@ def test_the_run_page_reads_the_rounds_and_the_series_of_a_stage(
     assert final["slot1_from_series_id"] == semis[0]["id"]
     assert final["slot2_from_series_id"] == semis[1]["id"]
     assert (final["slot1_takes_loser"], final["slot2_takes_loser"]) == (False, False)
+    assert (final["slot1_source"], final["slot2_source"]) == (
+        "Winner of Semifinals M1",
+        "Winner of Semifinals M2",
+    )
     seeds = players_of(event)
     assert semis[0]["player1"]["id"] == seeds[0]
     assert [row["division_id"] for row in rows] == [None, None, None]
     assert [row["result_kind"] for row in rows] == ["played"] * 3
     assert [row["side_size"] for row in rows] == [1, 1, 1]
     assert [row["pick_rule"] for row in rows] == [None, None, None]
+
+
+def test_a_waiting_side_names_the_series_it_comes_from(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Each fed side reads the round and the place of its feeder, so an empty
+    box can say who it waits for; the crossed drop shows in the lower bracket."""
+    event, (stage,) = cup(8, StageFormat.double_elimination)
+    generate(client, auth_headers, event, stage)
+    body = stage_series(client, event, stage)
+    called = {row["id"]: row["name"] for row in body["rounds"]}
+    held: dict[str, list[tuple[str | None, str | None]]] = {}
+    for row in sorted(body["series"], key=lambda row: row["sequence"]):
+        held.setdefault(called[row["round_id"]], []).append(
+            (row["slot1_source"], row["slot2_source"])
+        )
+    assert held["Upper bracket round 1"] == [(None, None)] * 4
+    assert held["Lower bracket round 1"][1] == (
+        "Loser of UB R1 M3",
+        "Loser of UB R1 M4",
+    )
+    assert held["Lower bracket round 2"] == [
+        ("Winner of LB R1 M1", "Loser of UB R2 M2"),
+        ("Winner of LB R1 M2", "Loser of UB R2 M1"),
+    ]
+    assert held["Lower bracket final"] == [
+        ("Winner of LB R3 M1", "Loser of UB final M1")
+    ]
+    assert held["Grand final"] == [("Winner of UB final M1", "Winner of LB final M1")]
 
 
 def test_a_gnl_stage_answers_its_series_with_a_round_and_no_feeders(

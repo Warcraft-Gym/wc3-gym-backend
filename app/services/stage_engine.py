@@ -794,6 +794,9 @@ def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
         _fill_teams(session, rows)
         derived.fill_mmrs(session, rows, events)
         _fill_sides(session, rows)
+        _fill_sources(
+            rows, {ident(row): row.name or f"Round {row.number}" for row in rounds}
+        )
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
         )
@@ -1016,6 +1019,29 @@ def _fill_sides(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
         )
     for row in rows:
         row.sides = found.get(row.id, [])
+
+
+def _fill_sources(rows: Sequence[StageSeriesRow], names: Mapping[int, str]) -> None:
+    """Name the series each fed side comes from, such as "Loser of UB R1 M3"."""
+    by_id = {row.id: row for row in rows}
+
+    def source(feeder_id: int | None, takes_loser: bool) -> str | None:
+        """The label of one side, or None when no series of the read feeds it."""
+        feeder = by_id.get(feeder_id or 0)
+        if feeder is None:
+            return None
+        name = (
+            names.get(feeder.round_id or 0, "")
+            .replace("Upper bracket", "UB")
+            .replace("Lower bracket", "LB")
+            .replace(" round ", " R")
+        )
+        label = f"{'Loser' if takes_loser else 'Winner'} of {name}"
+        return label if feeder.sequence is None else f"{label} M{feeder.sequence}"
+
+    for row in rows:
+        row.slot1_source = source(row.slot1_from_series_id, row.slot1_takes_loser)
+        row.slot2_source = source(row.slot2_from_series_id, row.slot2_takes_loser)
 
 
 def _fill_lobbies(session: OrmSession, row: Series) -> None:

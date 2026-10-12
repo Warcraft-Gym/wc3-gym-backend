@@ -2,6 +2,7 @@
 
 ## 2026-10-12
 
+* **Update**: a double elimination bracket drops each upper round's losers into the lower bracket reversed, and every second drop round also shifts its halves, so a dropped player does not meet a recent opponent at once. `GET /events/{id}/stages/{stage_id}/series` names where each fed side comes from in `slot1_source` and `slot2_source`, such as `Loser of UB R1 M3`. [Events module](concepts/events-module.md#managing-an-event) steps 8 and 9 state it.
 * **Update**: `GET /events/{id}/organizers` reads for the event's runners only, because its rows carry Discord ids; a guest gets a 401 and a member who does not run the event a 403. [event_organizer](data/tables/event_organizer.md) and [roles and permissions](concepts/roles-and-permissions.md#organizers) state it.
 * **Update**: `DELETE /events/{id}/stages/{stage_id}/series` answers 409 on a stage whose series hold results until the call sends `confirm=true`. [Events module](concepts/events-module.md#managing-an-event) step 8 states it.
 * **Add**: `GET /me/organized-events` lists the events an organizer runs, drafts included, in the rows and the order of `GET /events`: each row carries `archived`, newest start first. [Roles and permissions](concepts/roles-and-permissions.md#organizers) states it.

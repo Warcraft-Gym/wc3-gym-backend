@@ -350,8 +350,7 @@ def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
         """The loser slot of every series a column holds."""
         return [Slot(feeder=slot.feeder, takes_loser=True) for slot in of]
 
-    # The lower bracket: a minor round pairs its own winners, a major round
-    # takes them against the losers the upper bracket has just sent down
+    # Losers drop in reversed, and halves shifted every second time, to delay rematches
     lower = column("Lower bracket round 1", _pairs(losers(upper[0])))
     number = 2
     for step in range(1, depth):
@@ -360,7 +359,10 @@ def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
             if step == depth - 1
             else f"Lower bracket round {number}"
         )
-        lower = column(name, list(zip(lower, losers(upper[step]), strict=True)))
+        dropped = losers(upper[step])[::-1]
+        if step % 2 == 0:
+            dropped = dropped[len(dropped) // 2 :] + dropped[: len(dropped) // 2]
+        lower = column(name, list(zip(lower, dropped, strict=True)))
         number += 1
         if step < depth - 1:
             lower = column(f"Lower bracket round {number}", _pairs(lower))

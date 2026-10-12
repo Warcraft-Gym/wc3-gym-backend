@@ -2,7 +2,11 @@
 
 from itertools import combinations
 
+import pytest
+
 from app.core.brackets import (
+    Plan,
+    Slot,
     Standing,
     bracket_order,
     double_elimination_plan,
@@ -90,3 +94,77 @@ def test_two_entrants_double_elimination_reach_a_grand_final() -> None:
     plan = double_elimination_plan(2)
     assert "Grand final" in plan.rounds
     assert {row.round for row in plan.series} == set(range(len(plan.rounds)))
+
+
+def drops(plan: Plan) -> dict[str, list[int]]:
+    """Each lower round's dropped losers, in slot order, as their 1-based place
+    within the upper round they lost in."""
+    place = {}
+    for number in range(len(plan.rounds)):
+        held = [row.index for row in plan.series if row.round == number]
+        place.update({index: spot for spot, index in enumerate(held, 1)})
+    found: dict[str, list[int]] = {}
+    for row in plan.series:
+        name = plan.rounds[row.round]
+        for slot in (row.slot1, row.slot2):
+            feeder = None if slot.feeder is None else plan.series[slot.feeder]
+            if (
+                name.startswith("Lower bracket")
+                and slot.takes_loser
+                and feeder is not None
+                and plan.rounds[feeder.round].startswith("Upper bracket")
+            ):
+                found.setdefault(name, []).append(place[feeder.index])
+    return found
+
+
+def test_losers_drop_into_the_lower_bracket_in_crossed_order() -> None:
+    """Each drop round is reversed, and every second one also has its halves
+    shifted, the alternating pattern of a standard double elimination."""
+    assert drops(double_elimination_plan(8)) == {
+        "Lower bracket round 1": [1, 2, 3, 4],
+        "Lower bracket round 2": [2, 1],
+        "Lower bracket final": [1],
+    }
+    assert drops(double_elimination_plan(16)) == {
+        "Lower bracket round 1": list(range(1, 9)),
+        "Lower bracket round 2": [4, 3, 2, 1],
+        "Lower bracket round 4": [1, 2],
+        "Lower bracket final": [1],
+    }
+    assert drops(double_elimination_plan(32)) == {
+        "Lower bracket round 1": list(range(1, 17)),
+        "Lower bracket round 2": [8, 7, 6, 5, 4, 3, 2, 1],
+        "Lower bracket round 4": [2, 1, 4, 3],
+        "Lower bracket round 6": [2, 1],
+        "Lower bracket final": [1],
+    }
+
+
+@pytest.mark.parametrize("field", [8, 16, 32])
+def test_no_upsets_meet_no_pair_twice_before_the_lower_final(field: int) -> None:
+    """With the lower seed winning every series, the one repeat before the
+    grand final is forced: seed 3 lost to seed 2 in the upper bracket and
+    always meets the upper final loser, seed 2, in the lower final."""
+    plan = double_elimination_plan(field)
+    results: list[tuple[int, int]] = []
+    met: set[frozenset[int]] = set()
+    repeats = []
+
+    def side(slot: Slot) -> int:
+        """The seed that plays a side: its own, or a feeder's winner or loser."""
+        if slot.seed is not None:
+            return slot.seed
+        assert slot.feeder is not None
+        winner, loser = results[slot.feeder]
+        return loser if slot.takes_loser else winner
+
+    for row in plan.series:
+        top, bottom = side(row.slot1), side(row.slot2)
+        name = plan.rounds[row.round]
+        pair = frozenset((top, bottom))
+        if pair in met and not name.startswith("Grand final"):
+            repeats.append((name, set(pair)))
+        met.add(pair)
+        results.append((min(top, bottom), max(top, bottom)))
+    assert repeats == [("Lower bracket final", {2, 3})]
