@@ -69,9 +69,12 @@ def walkover(client: Client, headers: Headers, series_id: int | None) -> None:
     assert response.status_code == 200, response.text
 
 
-def undraw(client: Client, headers: Headers, event: dict[str, Any]) -> Any:  # noqa: ANN401
+def undraw(
+    client: Client, headers: Headers, event: dict[str, Any], *, confirm: bool = False
+) -> Any:  # noqa: ANN401
     return client.delete(
         f"/events/{event['id']}/stages/{event['stages'][0]['id']}/series",
+        params={"confirm": "true"} if confirm else None,
         headers=headers,
     )
 
@@ -92,7 +95,13 @@ def test_the_draw_is_taken_back_with_every_series_and_drawn_anew(
     walkover(client, auth_headers, drawn[0].id)
     veto_step(drawn[1].id)
 
-    taken = undraw(client, auth_headers, event)
+    # A played result stays until the caller confirms its loss
+    kept = undraw(client, auth_headers, event)
+    assert kept.status_code == 409, kept.text
+    assert kept.json()["error"].startswith("1 series of this stage hold results")
+    assert len(series_of(event["id"])) == len(drawn)
+
+    taken = undraw(client, auth_headers, event, confirm=True)
     assert taken.status_code == 200, taken.text
     assert taken.json() == {"series": len(drawn), "results": 1}
     assert series_of(event["id"]) == []

@@ -220,13 +220,14 @@ def generate(
         return {"series": len(made), "rounds": len(rounds) - len(held)}
 
 
-def undraw(event_id: int, stage_id: int) -> dict[str, int]:
+def undraw(event_id: int, stage_id: int, confirm: bool = False) -> dict[str, int]:
     """Take a stage's draw back: its rounds go, and every series with them.
 
     The rounds' keys take the series, and the series' keys take their games,
     vetoes, sides, replays and casts, so the stage stands as it did before the
     draw, with its entrants, and its seeds open again. A finished event keeps
-    its draw, and a later stage that is drawn already is taken back first.
+    its draw, and a later stage that is drawn already is taken back first. A
+    stage whose series hold results keeps them unless the caller confirms.
     """
     with Session.begin() as session:
         stage = _stage(session, event_id, stage_id)
@@ -248,6 +249,14 @@ def undraw(event_id: int, stage_id: int) -> dict[str, int]:
         results = sum(
             1 for row in rows if scored(row) and row.entrant1_id and row.entrant2_id
         )
+        if results and not confirm:
+            raise ApiError(
+                409,
+                {
+                    "error": f"{results} series of this stage hold results; "
+                    "confirm to delete them"
+                },
+            )
         # A card about a series that is gone would never find its subject again
         from app.services.discord_posts import SERIES_KINDS
 

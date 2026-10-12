@@ -401,10 +401,11 @@ def draw_next_round(event_id: int, stage_id: int) -> StageSeriesPublic:
     "/events/{event_id}/stages/{stage_id}/series",
     dependencies=[Depends(require_event_runner)],
 )
-def undraw_stage(event_id: int, stage_id: int) -> dict[str, int]:
-    """Take the stage's draw back: every round and series of it goes, results
-    included, and the seeds open again, so the field may change and be drawn anew."""
-    return stage_engine.undraw(event_id, stage_id)
+def undraw_stage(event_id: int, stage_id: int, confirm: bool = False) -> dict[str, int]:
+    """Take the stage's draw back: every round and series of it goes, and the
+    seeds open again, so the field may change and be drawn anew. A stage whose
+    series hold results answers 409 until the call sends `confirm=true`."""
+    return stage_engine.undraw(event_id, stage_id, confirm)
 
 
 @router.get("/events/{event_id}/stages/{stage_id}/series")

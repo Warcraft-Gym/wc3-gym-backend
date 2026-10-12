@@ -94,10 +94,16 @@ def test_an_organizer_creates_a_cup_and_runs_it_to_the_end(
     assert client.get("/me", headers=headers).json()["organizer"] is True
 
     event = create(client, headers, league_id=custom_league())
-    assert [
-        row["discord_id"]
-        for row in client.get(f"/events/{event['id']}/organizers").json()
-    ] == ["50"]
+    listed = client.get(f"/events/{event['id']}/organizers", headers=headers)
+    assert [row["discord_id"] for row in listed.json()] == ["50"]
+    # The rows carry Discord ids, so a caller who does not run the event reads none
+    assert client.get(f"/events/{event['id']}/organizers").status_code == 401
+    assert (
+        client.get(
+            f"/events/{event['id']}/organizers", headers=member("51")
+        ).status_code
+        == 403
+    )
 
     enter(client, headers, event["id"], players(4))
     assert draw(client, headers, event).status_code == 200

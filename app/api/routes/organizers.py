@@ -90,9 +90,14 @@ def get_my_organized_events(
     return service.by_ids(organizers.organized_event_ids(str(claims["sub"])))
 
 
-@router.get("/events/{event_id}/organizers", tags=["events"])
+@router.get(
+    "/events/{event_id}/organizers",
+    tags=["events"],
+    dependencies=[Depends(require_event_runner)],
+)
 def get_event_organizers(event_id: int) -> list[EventOrganizerPublic]:
-    """Who runs the event, in the order they were added."""
+    """Who runs the event, in the order they were added. The rows carry
+    Discord ids, so only the event's runners read them."""
     return organizers.event_organizers(event_id)
 
 
