@@ -311,11 +311,12 @@ def elimination_plan(field: int, *, third_place: bool = False) -> Plan:
 def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
     """Every series of a double elimination bracket, upper then lower then final.
 
-    The field is padded to a power of two, and a padded pair is a walkover the
-    engine settles. `grand_final` is 'one', 'reset' for the second series the
-    lower bracket winner earns, or 'skip' for no final series at all.
+    The field is padded to a power of two of at least four, and a padded pair
+    is a walkover the engine settles. `grand_final` is 'one', 'reset' for the
+    second series the lower bracket winner earns, or 'skip' for no final series.
     """
-    size = _power_of_two(field)
+    # Two entrants pad to four, so the loser drops down and a grand final exists
+    size = max(_power_of_two(field), 4)
     seeds = [Slot(seed=seed) if seed <= field else None for seed in bracket_order(size)]
     rounds: list[str] = []
     series: list[PlannedSeries] = []

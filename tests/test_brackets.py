@@ -5,6 +5,7 @@ from itertools import combinations
 from app.core.brackets import (
     Standing,
     bracket_order,
+    double_elimination_plan,
     round_robin,
     single_elimination,
     standings,
@@ -81,3 +82,11 @@ def test_equal_points_and_difference_rank_by_head_to_head() -> None:
 
 def test_a_full_tie_keeps_seed_order() -> None:
     assert [row.entrant for row in standings("xyz", [])] == ["x", "y", "z"]
+
+
+def test_two_entrants_double_elimination_reach_a_grand_final() -> None:
+    """Two entrants pad to four, so the loser drops to a lower bracket and
+    every round holds a series."""
+    plan = double_elimination_plan(2)
+    assert "Grand final" in plan.rounds
+    assert {row.round for row in plan.series} == set(range(len(plan.rounds)))

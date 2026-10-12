@@ -288,6 +288,74 @@ def test_a_padded_double_elimination_settles_its_byes(
     assert settled["score"] in ((2, 0), (0, 2))
 
 
+@pytest.mark.parametrize("field", range(2, 33))
+def test_double_elimination_ends_in_a_grand_final_at_every_field_size(
+    client: Client, auth_headers: dict[str, str], field: int
+) -> None:
+    """Each open series is played in order and the higher seed wins it; the
+    byes settle on their own, so seed one takes the grand final."""
+    event, (stage,) = cup(field, StageFormat.double_elimination)
+    generate(client, auth_headers, event, stage)
+    seeds = players_of(event)
+    rows = bracket(stage)
+    for _ in range(len(rows)):
+        ready = [
+            row
+            for row in rows
+            if row["score"] == (None, None) and None not in row["sides"]
+        ]
+        if not ready:
+            break
+        first, second = ready[0]["sides"]
+        result = (2, 0) if seeds.index(first) < seeds.index(second) else (0, 2)
+        response = score(client, auth_headers, ready[0]["id"], *result)
+        assert response.status_code == 200, response.text
+        rows = bracket(stage)
+    assert all(row["score"] != (None, None) for row in rows)
+    assert "Grand final reset" not in names(rows)
+    final = next(row for row in rows if row["round"] == "Grand final")
+    first_games, second_games = final["score"]
+    assert final["sides"][0 if first_games > second_games else 1] == seeds[0]
+    # Every entrant but the champion goes out on a second loss to a real side
+    losses = dict.fromkeys(seeds, 0)
+    for row in rows:
+        first, second = row["sides"]
+        if first is not None and second is not None:
+            first_games, second_games = row["score"]
+            losses[second if first_games > second_games else first] += 1
+    assert losses == {seed: 2 if seed != seeds[0] else 0 for seed in seeds}
+    assert phase(client, event) == "finished"
+
+
+def test_a_lower_series_fed_by_two_byes_is_a_walkover_nobody_wins(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Five entrants pad to eight, so seeds 2 and 3 both drop nobody down: the
+    lower series of their two byes settles empty, and the series below it is a
+    walkover for whoever the upper bracket sends down to it."""
+    event, (stage,) = cup(5, StageFormat.double_elimination)
+    generate(client, auth_headers, event, stage)
+    seeds = players_of(event)
+    rows = bracket(stage)
+    empty = [row for row in rows if row["round"] == "Lower bracket round 1"][1]
+    assert empty["result_kind"] == "walkover"
+    assert empty["score"] == (0, 0)
+    assert empty["sides"] == (None, None)
+    below = next(row for row in rows if row["slot1"] == (empty["id"], False))
+    assert below["round"] == "Lower bracket round 2"
+    # The series below waits on the loser of 2 against 3
+    assert below["score"] == (None, None)
+    upper = [row for row in rows if row["round"] == "Upper bracket round 2"][1]
+    # Seeds 2 and 3 both came through a bye, and they still play each other
+    assert upper["sides"] == (seeds[1], seeds[2])
+    assert upper["score"] == (None, None)
+    assert score(client, auth_headers, upper["id"], 2, 0).status_code == 200
+    settled = next(row for row in bracket(stage) if row["id"] == below["id"])
+    assert settled["result_kind"] == "walkover"
+    assert settled["sides"] == (None, seeds[2])
+    assert settled["score"] == (0, 2)
+
+
 def test_five_entrants_round_robin_meet_every_pair_once(
     client: Client, auth_headers: dict[str, str]
 ) -> None:

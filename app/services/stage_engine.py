@@ -213,10 +213,12 @@ def generate(
                     rows.append(row)
             made += rows
         session.flush()
-        # A padded pair was written as a walkover; its winner moves on now
-        for row in made:
-            if scored(row):
-                on_scored(session, row)
+        # Padded walkovers fill every slot below before any series below settles
+        walkovers = [row for row in made if scored(row)]
+        for row in walkovers:
+            _fill_below(session, row)
+        for row in walkovers:
+            on_scored(session, row)
         return {"series": len(made), "rounds": len(rounds) - len(held)}
 
 
@@ -439,7 +441,18 @@ def add_challenger(event_id: int, stage_id: int, entrant_id: int) -> StageSeries
 
 def on_scored(session: OrmSession, row: Series) -> None:
     """Fill every slot that feeds from this series, and follow the chain down."""
-    for other in _downstream(session, ident(row)):
+    for other in _fill_below(session, row):
+        _settle(session, other)
+
+
+def _fill_below(session: OrmSession, row: Series) -> Sequence[Series]:
+    """Fill every open slot that feeds from this series; answer the series below.
+
+    Every slot below is filled before any series below settles, so a settle
+    never reads a slot this series still has to fill as empty.
+    """
+    below = _downstream(session, ident(row))
+    for other in below:
         filled = False
         if other.slot1_from_series_id == row.id and _open(other, 1):
             other.entrant1_id = entrant_of(row, other.slot1_takes_loser)
@@ -451,8 +464,8 @@ def on_scored(session: OrmSession, row: Series) -> None:
             filled = filled or not _open(other, 2)
         if filled and other.host_player_id == 0:
             other.host_player_id = other.player1_id or 0
-        session.flush()
-        _settle(session, other)
+    session.flush()
+    return below
 
 
 def _open(row: Series, slot: int) -> bool:
@@ -1287,7 +1300,8 @@ def _side(row: Series, takes_loser: bool) -> int | None:
 
 
 def _settle(session: OrmSession, row: Series) -> None:
-    """A series nobody plays is a walkover: a bye, or a reset the final settled."""
+    """A series nobody plays is a walkover: a bye, a double bye, or a reset the
+    final settled."""
     if scored(row):
         return
     final = _reset_final(session, row)
@@ -1299,9 +1313,15 @@ def _settle(session: OrmSession, row: Series) -> None:
         return
     first, first_known = _resolved(session, row, 1)
     second, second_known = _resolved(session, row, 2)
-    if not (first_known and second_known) or (first is None) == (second is None):
+    if not (first_known and second_known) or (first is not None and second is not None):
         return
-    _award(session, row, first is not None, "walkover")
+    if first is None and second is None:
+        # Two empty sides: a walkover nobody wins; the series below gets an empty side
+        row.player1_score = row.player2_score = 0
+        row.result_kind = "walkover"
+        session.flush()
+    else:
+        _award(session, row, first is not None, "walkover")
     on_scored(session, row)
 
 
