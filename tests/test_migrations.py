@@ -100,6 +100,8 @@ BEFORE_CUP_TABLES = "c4e8a2f7d915"
 BEFORE_CUP_SETTINGS = "a8e3c5f1d276"
 # The revision before a cup could be played over rounds
 BEFORE_CUP_ROUNDS = "c7d2e9a4f183"
+# The revision before a cup could repeat on a rule
+BEFORE_CUP_RECURRENCE = "d3b8f1a6c925"
 
 
 def comparable(
@@ -1848,3 +1850,29 @@ def test_the_cup_rounds_come_and_go(tmp_path: Path) -> None:
     assert "points_by_place" not in {
         c["name"] for c in inspect(create_engine(url)).get_columns("cup_settings")
     }
+
+
+def test_the_recurring_cups_come_and_go(tmp_path: Path) -> None:
+    """The rule and occurrence tables arrive empty, and the downgrade takes
+    them away while the cups stay."""
+    url = fresh_database(tmp_path, "cup_recurrence")
+    upgrade_to(url, BEFORE_CUP_RECURRENCE)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) "
+                "VALUES (1, 'Cup', 1, 'cup')"
+            )
+        )
+
+    upgrade_to(url, "head")
+    assert {"cup_recurrence", "cup_occurrence"} <= set(
+        inspect(engine).get_table_names()
+    )
+
+    downgrade_to(url, BEFORE_CUP_RECURRENCE)
+    tables = set(inspect(create_engine(url)).get_table_names())
+    assert not {"cup_recurrence", "cup_occurrence"} & tables
+    with create_engine(url).connect() as connection:
+        assert connection.execute(text("SELECT id FROM event")).all() == [(1,)]

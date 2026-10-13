@@ -1,6 +1,6 @@
 # Tables
 
-The 68 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
+The 70 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
 
 # People and access
 
@@ -50,6 +50,8 @@ The 68 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [cup_leg](cup_leg.md) - One round of a cup played over several rounds, a competition of its own on its own date, with its own copy of the cup's stages.
 * [cup_leg_stage](cup_leg_stage.md) - Which round of a cup one of its stages is played in, so a round's draw, neighbours and places stay inside that round.
 * [cup_leg_checkin](cup_leg_checkin.md) - One player checked in for one round of a cup; the round's draw takes these players alone.
+* [cup_recurrence](cup_recurrence.md) - The rule a cup repeats on, a weekday every week or the nth of the month at a local start time, from which a runner makes each next cup.
+* [cup_occurrence](cup_occurrence.md) - One cup made from a recurring rule, on one of the rule's days.
 * [cup_team](cup_team.md) - A team made for one cup, signed up by its captain; it lives as long as its cup and no GNL read sees it.
 * [cup_team_member](cup_team_member.md) - One confirmed player of a cup team, the captain marked among them.
 * [cup_team_invite](cup_team_invite.md) - One player invited into a cup team who has not answered yet; accepting makes them a member, declining deletes the row.

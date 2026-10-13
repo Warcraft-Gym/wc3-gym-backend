@@ -107,6 +107,7 @@ from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services import (
     cup_divisions,
     cup_engine,
+    cup_recurrence,
     cup_rounds,
     organizers,
     stage_engine,
@@ -1885,6 +1886,7 @@ def _public(
     public.uses_divisions = cup_divisions.uses_divisions(session, event)
     if cup_divisions.is_cup(event):
         public.cup_legs = cup_rounds.legs_of(session, ident(event)) or None
+        public.cup_recurrence = cup_recurrence.ref_of(session, ident(event))
     public.stages = [
         EventStagePublic.model_validate(row)
         for row in session.scalars(

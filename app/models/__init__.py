@@ -24,6 +24,7 @@ from app.models import (
     base,
     clerk_account,
     cup_overall,
+    cup_recurrence,
     cup_rounds,
     cup_series,
     cup_settings,

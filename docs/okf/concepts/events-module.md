@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, cups on tables and an engine of their own, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-13T16:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-13T20:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -127,6 +127,15 @@ A cup is played on one evening, or over several rounds, each a competition of it
 - A runner finishes a round once every series of it holds a result (`POST /events/{id}/legs/{leg_id}/finish`). Its places, read by `awards.event_places` over the round's stages alone, pay points from `cup_settings.points_by_place`, and every entrant's seed is cleared, so the next round seeds afresh. `DELETE` on the same path takes the finish back while the cup is open.
 - `GET /events/{id}/overall` answers the overall table: each entrant's points from every finished round, a missed round paying 0, the points per round, and the best single place. Points rank first, then the best single place, then more of that place; entrants still level share their position. It is edge cached as the event is, and reads a fixed number of statements, each round's places one more.
 - Closing a cup with rounds pays its awards from the overall table, one per entrant who played a finished round, the position its place.
+
+# Recurring cups
+
+A cup can repeat on a rule (`app/services/cup_recurrence.py`): a weekday, every week or the nth of the month (1 to 4, or the last), at a local start time in a time zone, with an optional last day ([cup_recurrence](../data/tables/cup_recurrence.md)). Each occurrence is a cup of its own with its own players, draw and awards ([cup_occurrence](../data/tables/cup_occurrence.md)).
+
+- A runner of a cup that has a start sets the rule up with `POST /events/{id}/recurrence`; the cup becomes the first occurrence.
+- `GET /cup-recurrences/{id}` answers the rule, its cups in day order and its next eight days from today, each with the cup made on it.
+- A runner of the latest cup makes the cup of a coming day with `POST /cup-recurrences/{id}/occurrences`: a copy of the latest cup named after the rule and the day, its start on that day at the rule's time, its rounds moved by the same days, and the latest cup's organizers with the caller. No job makes a cup by itself.
+- Stopping the rule (`DELETE /cup-recurrences/{id}`) keeps every cup it made.
 
 # Awards
 

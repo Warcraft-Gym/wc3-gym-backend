@@ -24,6 +24,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
+from app.models.cup_recurrence import CupRecurrenceRef
 from app.models.cup_rounds import CupLegPublic, CupLegWrite
 from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy
 from app.models.event_division import EventDivisionPublic
@@ -715,6 +716,8 @@ class EventPublic(SQLModel):
     uses_divisions: bool | None = None
     # A cup played over rounds: its rounds in order; null on any other event and on a list read
     cup_legs: list[CupLegPublic] | None = None
+    # A cup made from a recurring rule: the rule; null otherwise and on a list read
+    cup_recurrence: CupRecurrenceRef | None = None
 
 
 class EventCreate(SQLModel):

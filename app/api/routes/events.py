@@ -22,6 +22,13 @@ from app.api.deps import (
 )
 from app.api.search import SearchQuery
 from app.models.cup_overall import CupOverallPublic
+from app.models.cup_recurrence import (
+    CupOccurrenceCreate,
+    CupRecurrencePublic,
+    CupRecurrenceRow,
+    CupRecurrenceUpdate,
+    CupRecurrenceWrite,
+)
 from app.models.cup_rounds import CupLegCheckinWrite, CupLegPublic
 from app.models.cup_series import CupStagePublic
 from app.models.cup_settings import CupPinWrite
@@ -59,6 +66,7 @@ from app.models.series import ChallengerAdd, StageSeriesPublic, StageSeriesRow
 from app.services import (
     awards,
     cup_engine,
+    cup_recurrence,
     cup_rounds,
     cup_teams,
     discord_posts,
@@ -510,6 +518,56 @@ def get_overall(event_id: int, response: Response) -> CupOverallPublic:
     """A cup's overall table: the points each finished round paid, added up."""
     event_edge_cache(response, event_id)
     return cup_rounds.overall(event_id)
+
+
+@router.post("/events/{event_id}/recurrence", status_code=201)
+def repeat_cup(
+    event_id: int, data: CupRecurrenceWrite, claims: RequireEventRunner
+) -> CupRecurrencePublic:
+    """Set up a rule that repeats the cup; the cup becomes its first occurrence."""
+    return cup_recurrence.create(event_id, data, claims)
+
+
+@router.get("/cup-recurrences")
+def list_cup_recurrences(response: Response) -> list[CupRecurrenceRow]:
+    """Every recurring cup, newest first, with its next day and its latest cup."""
+    edge_cache(response, "running")
+    return cup_recurrence.listing()
+
+
+@router.get("/cup-recurrences/{recurrence_id}")
+def get_cup_recurrence(
+    recurrence_id: int, claims: OptionalLogin, response: Response
+) -> CupRecurrencePublic:
+    """A recurring cup: its rule, the cups made from it and its next eight days."""
+    if claims is None:
+        # a runner creates from this page, so only the anonymous answer is shared
+        edge_cache(response, "running")
+    return cup_recurrence.get(recurrence_id)
+
+
+@router.put("/cup-recurrences/{recurrence_id}")
+def update_cup_recurrence(
+    recurrence_id: int, data: CupRecurrenceUpdate, claims: RequireLogin
+) -> CupRecurrencePublic:
+    """Rename the rule, move its start time or set its last day; a runner of
+    its latest cup alone."""
+    return cup_recurrence.update(recurrence_id, data, claims)
+
+
+@router.delete("/cup-recurrences/{recurrence_id}", status_code=204)
+def delete_cup_recurrence(recurrence_id: int, claims: RequireLogin) -> None:
+    """Stop repeating; every cup made from the rule stays."""
+    cup_recurrence.delete(recurrence_id, claims)
+
+
+@router.post("/cup-recurrences/{recurrence_id}/occurrences", status_code=201)
+def create_cup_occurrence(
+    recurrence_id: int, data: CupOccurrenceCreate, claims: RequireLogin
+) -> EventPublic:
+    """Make the rule's cup on one of its coming days, a copy of the latest cup
+    with its organizers; a runner of that cup alone."""
+    return cup_recurrence.create_occurrence(recurrence_id, data.on, claims)
 
 
 @router.put(
