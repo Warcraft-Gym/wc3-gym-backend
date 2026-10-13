@@ -23,6 +23,8 @@ from app.models import (
     admin_grant,
     base,
     clerk_account,
+    cup_overall,
+    cup_rounds,
     cup_series,
     cup_settings,
     cup_team,

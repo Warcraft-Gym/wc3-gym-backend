@@ -13,7 +13,7 @@ of the team acts for it.
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -24,6 +24,7 @@ from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.outcome import entrant_of, scored, side_user, stands_on_side, won_slot
 from app.core.scoring import wins_of
 from app.models.base import ident
+from app.models.cup_rounds import CupLegCheckin, CupLegStage
 from app.models.cup_series import (
     CupSeries,
     CupSeriesPublic,
@@ -113,7 +114,7 @@ def _generate(
     if fill is not None:
         fill(session, stage)
     _hold_placed(session, event_id)
-    fields = _fields(_entrants(session, event_id))
+    fields = _fields(_entrants(session, event_id, stage))
     _hold_minimum(session, stage, fields)
     cup_reads.hold_pool(session, event)
     # a team cup draws complete teams only
@@ -214,6 +215,9 @@ def undraw(event_id: int, stage_id: int, confirm: bool = False) -> dict[str, int
             raise BadRequestError(
                 "The event is finished; reopen it before the draw is undone"
             )
+        from app.services import cup_rounds
+
+        cup_rounds.hold_unfinished(session, stage)
         rows = list(_series_of(session, stage_id))
         if not rows:
             raise BadRequestError("This stage holds no draw to undo")
@@ -285,7 +289,7 @@ def _draw_round(
         fill(session, stage)
     if not drawn:
         _hold_placed(session, event_id)
-    fields = _fields(_entrants(session, event_id))
+    fields = _fields(_entrants(session, event_id, stage))
     if not drawn:
         _hold_minimum(session, stage, fields)
         stage.seeds_locked_at = stage.seeds_locked_at or utcnow()
@@ -1098,12 +1102,14 @@ def _stage_of(session: OrmSession, row: CupSeries) -> EventStage | None:
 def previous_stage(
     session: OrmSession, event_id: int, stage: EventStage
 ) -> EventStage | None:
-    """The stage before this one: the table `previous_stage` seeding reads."""
+    """The stage before this one: the table `previous_stage` seeding reads.
+    A round of a cup is a competition of its own, so its first stage has none."""
     return session.scalars(
         select(EventStage)
         .where(
             col(EventStage.event_id) == event_id,
             col(EventStage.position) < stage.position,
+            *_same_leg(session, stage),
         )
         .order_by(col(EventStage.position).desc())
     ).first()
@@ -1143,14 +1149,34 @@ def advancing(session: OrmSession, event_id: int, stage: EventStage) -> list[lis
 def _next_stage(
     session: OrmSession, event_id: int, stage: EventStage
 ) -> EventStage | None:
+    """The stage after this one; the last stage of a round has none."""
     return session.scalars(
         select(EventStage)
         .where(
             col(EventStage.event_id) == event_id,
             col(EventStage.position) > stage.position,
+            *_same_leg(session, stage),
         )
         .order_by(col(EventStage.position))
     ).first()
+
+
+def _leg_of(session: OrmSession, stage_id: int) -> int | None:
+    """The round of a cup the stage is played in; null for a cup of one evening."""
+    row = session.get(CupLegStage, stage_id)
+    return row.leg_id if row is not None else None
+
+
+def _same_leg(session: OrmSession, stage: EventStage) -> list[ColumnElement[bool]]:
+    """The filter that keeps a stage's neighbours inside its own round."""
+    leg = _leg_of(session, ident(stage))
+    if leg is None:
+        return []
+    return [
+        col(EventStage.id).in_(
+            select(col(CupLegStage.stage_id)).where(col(CupLegStage.leg_id) == leg)
+        )
+    ]
 
 
 def stage_drawn(session: OrmSession, stage_id: int) -> bool:
@@ -1239,21 +1265,34 @@ def _hold_minimum(
 
 
 def _entrants(
-    session: OrmSession, event_id: int
+    session: OrmSession, event_id: int, stage: EventStage | None = None
 ) -> dict[int | None, list[EventEntrant]]:
     """Every entrant of every division in seed order; one field without divisions.
-    An entrant on a cup's waitlist stands in no field until it is let in."""
+    An entrant on a cup's waitlist stands in no field until it is let in, and a
+    stage of a round plays the entrants checked in for that round alone."""
     divisions = session.scalars(
         select(EventDivision)
         .where(col(EventDivision.event_id) == event_id)
         .order_by(col(EventDivision.position))
     ).all()
+    leg = _leg_of(session, ident(stage)) if stage is not None else None
     entrants = session.scalars(
         select(EventEntrant)
         .where(
             col(EventEntrant.event_id) == event_id,
             col(EventEntrant.withdrawn_at).is_(None),
             col(EventEntrant.waitlisted_at).is_(None),
+            *(
+                [
+                    col(EventEntrant.id).in_(
+                        select(col(CupLegCheckin.entrant_id)).where(
+                            col(CupLegCheckin.leg_id) == leg
+                        )
+                    )
+                ]
+                if leg is not None
+                else []
+            ),
         )
         .order_by(
             col(EventEntrant.seed).is_(None),
@@ -1379,7 +1418,7 @@ def tables(
             select(EventDivision).where(col(EventDivision.event_id) == event_id)
         )
     }
-    everyone = _entrants(session, event_id)
+    everyone = _entrants(session, event_id, stage)
     seeds = _fields(everyone)
     seats = _seats_of(session, [ident(row) for rows in played.values() for row in rows])
     tables: list[DivisionStandings] = []
@@ -1800,7 +1839,7 @@ def _rounds_left(
     session: OrmSession, stage: EventStage, played: Sequence[CupSeries]
 ) -> bool:
     """Whether a Swiss stage still has a round to draw for its field."""
-    fields = _fields(_entrants(session, stage.event_id))
+    fields = _fields(_entrants(session, stage.event_id, stage))
     drawn = len({row.round_id for row in played})
     return any(
         (limit := _round_limit(stage, len(field))) is not None and drawn < limit

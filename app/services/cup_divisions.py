@@ -43,9 +43,16 @@ def uses_divisions(session: OrmSession, event: Season) -> bool | None:
     return row is not None and row.uses_divisions
 
 
-def write_settings(session: OrmSession, event: Season, divisions: bool) -> None:
-    """The settings row of a new cup."""
-    session.add(CupSettings(event_id=ident(event), uses_divisions=divisions))
+def write_settings(
+    session: OrmSession, event: Season, divisions: bool, points: str | None = None
+) -> None:
+    """The settings row of a new cup: its divisions, and the points table of a
+    cup played over rounds."""
+    session.add(
+        CupSettings(
+            event_id=ident(event), uses_divisions=divisions, points_by_place=points
+        )
+    )
 
 
 def set_uses_divisions(session: OrmSession, event: Season, divisions: bool) -> None:

@@ -6,6 +6,8 @@ a KOTH crown without replaying the stage. The write is the whole list, so
 closing an event twice rewrites its places and never doubles them.
 """
 
+from collections.abc import Collection
+
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
@@ -45,6 +47,24 @@ def close_event(session: OrmSession, event_id: int) -> list[EventAward]:
             )
         )
     session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
+    # A cup played over rounds pays the places of its overall table
+    from app.services import cup_rounds
+
+    if cup_rounds.has_legs(session, event_id):
+        rows = [
+            EventAward(
+                event_id=event_id,
+                entrant_id=row.entrant_id,
+                user_id=row.user.id if row.user else None,
+                place=row.position,
+                title=title_of(row.position),
+            )
+            for row in cup_rounds.overall_rows(session, event_id)
+            if row.legs
+        ]
+        session.add_all(rows)
+        session.flush()
+        return rows
     # A cup team is no league team: its award names it through the entrant
     cup = _is_cup(session, event_id)
     rows = [
@@ -116,17 +136,24 @@ def cancel(event_id: int) -> None:
         session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
 
 
-def event_places(session: OrmSession, event_id: int) -> list[tuple[int, StandingRow]]:
+def event_places(
+    session: OrmSession, event_id: int, stage_ids: Collection[int] | None = None
+) -> list[tuple[int, StandingRow]]:
     """Every placed entrant of the event with its place, best first.
 
     The stages are read from the last one back: the last stage places its own
     entrants as its table stands, a shared place staying shared, and each
     stage before it places the entrants no later stage played, after all of
     those, in its own order. Divisions place apart, each from place one.
+    `stage_ids` names the stages to read, which is how one round of a cup is
+    placed on its own; left out, every stage of the event is read.
     """
     stages = session.scalars(
         select(EventStage)
-        .where(col(EventStage.event_id) == event_id)
+        .where(
+            col(EventStage.event_id) == event_id,
+            *([col(EventStage.id).in_(stage_ids)] if stage_ids is not None else []),
+        )
         .order_by(col(EventStage.position).desc())
     ).all()
     placed: dict[int | None, list[tuple[int, StandingRow]]] = {}

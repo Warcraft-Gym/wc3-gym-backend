@@ -24,6 +24,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
+from app.models.cup_rounds import CupLegPublic, CupLegWrite
 from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy
 from app.models.event_division import EventDivisionPublic
 from app.models.event_stage import EventStagePublic, EventStageWrite
@@ -712,6 +713,8 @@ class EventPublic(SQLModel):
     children: list["EventPublic"] = []
     # A cup's choice to split into divisions; null on any other kind and on a list read
     uses_divisions: bool | None = None
+    # A cup played over rounds: its rounds in order; null on any other event and on a list read
+    cup_legs: list[CupLegPublic] | None = None
 
 
 class EventCreate(SQLModel):
@@ -762,6 +765,10 @@ class EventCreate(SQLModel):
     entrant_min: int | None = Field(default=None, ge=2)
     # A cup's choice to split its players into divisions; read on a cup alone
     uses_divisions: bool = False
+    # A cup played over rounds: one entry per round, each a copy of `stages`,
+    # and the points each place of a round pays; read on a cup alone
+    legs: list[CupLegWrite] = []
+    points_by_place: list[int] | None = None
     # How many series one fixture holds, and a fixture pairs two team
     # entrants, so it reads only on a team event.
     series_per_round: int = 1

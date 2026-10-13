@@ -104,7 +104,13 @@ from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
-from app.services import cup_divisions, cup_engine, organizers, stage_engine
+from app.services import (
+    cup_divisions,
+    cup_engine,
+    cup_rounds,
+    organizers,
+    stage_engine,
+)
 from app.services.battle_tags import active_row, attach_tag, person_by_tag
 from app.services.series_rules import hold_pool
 from app.services.users import summary_loads
@@ -477,7 +483,14 @@ class EventService:
         """
         with Session.begin() as session:
             fields = data.model_dump(
-                exclude={"stages", "round_count", "map_ids", "uses_divisions"}
+                exclude={
+                    "stages",
+                    "round_count",
+                    "map_ids",
+                    "uses_divisions",
+                    "legs",
+                    "points_by_place",
+                }
             )
             _hold_bounds(fields)
             if fields.get("entrant_kind") is None:
@@ -492,10 +505,22 @@ class EventService:
                 if "stages" in data.model_fields_set
                 else [_default_stage(event)]
             )
-            _write_stages(session, event, stages)
+            cup = cup_divisions.is_cup(event)
+            if cup and data.legs:
+                # every round of the cup plays its own copy of the stages, and
+                # checks its players in per round rather than once for the cup
+                cup_rounds.write_legs(session, event, data.legs, stages)
+                event.checkin_enabled = False
+            else:
+                _write_stages(session, event, stages)
             _write_pool(session, ident(event), data.map_ids)
-            if cup_divisions.is_cup(event):
-                cup_divisions.write_settings(session, event, data.uses_divisions)
+            if cup:
+                cup_divisions.write_settings(
+                    session,
+                    event,
+                    data.uses_divisions,
+                    cup_rounds.points_text(data.points_by_place) if data.legs else None,
+                )
             hold_pool(session, event)
             return _answer(session, ident(event))
 
@@ -559,6 +584,10 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id)
+            if cup_divisions.is_cup(event) and cup_rounds.has_legs(session, event_id):
+                cup_rounds.set_leg_stages(session, event_id, stages)
+                hold_pool(session, event)
+                return _answer(session, event_id)
             rows = list(stages)
             current = list(
                 session.scalars(
@@ -1146,7 +1175,9 @@ class EventService:
             stage = _stage(session, event_id, stage_id)
             if stage.seeds_locked_at is not None:
                 raise ApiError(409, {"error": "The seeds of this stage are locked"})
-            rows = _live_entrants(session, event_id)
+            rows = cup_rounds.leg_field(
+                session, stage, _live_entrants(session, event_id)
+            )
             if data.division_id is not None:
                 rows = [row for row in rows if row.division_id == data.division_id]
             mmrs = _mmrs(session, rows)
@@ -1230,7 +1261,10 @@ class EventService:
             session, stage.event_id, stage
         ):
             return
-        rows = _live_entrants(session, stage.event_id)
+        # a stage of a cup's round seeds the players checked in for that round
+        rows = cup_rounds.leg_field(
+            session, stage, _live_entrants(session, stage.event_id)
+        )
         unseeded = [row for row in rows if row.seed is None]
         if not unseeded:
             return
@@ -1849,6 +1883,8 @@ def _public(
         return public
     public.checkin_open = event.checkin_enabled and checkin_open(event, event.rounds)
     public.uses_divisions = cup_divisions.uses_divisions(session, event)
+    if cup_divisions.is_cup(event):
+        public.cup_legs = cup_rounds.legs_of(session, ident(event)) or None
     public.stages = [
         EventStagePublic.model_validate(row)
         for row in session.scalars(
@@ -2828,7 +2864,11 @@ def _first_stage_drawn(session: OrmSession, event_id: int) -> bool:
 def _waits(session: OrmSession, event: Season) -> bool:
     """Whether a new signup to this event goes on its waitlist: its first
     stage is drawn, or it holds as many entrants as it takes."""
-    return _first_stage_drawn(session, ident(event)) or _full(session, event)
+    # a cup played over rounds takes a player for its later rounds after the first is drawn
+    drawn = _first_stage_drawn(session, ident(event)) and not cup_rounds.has_legs(
+        session, ident(event)
+    )
+    return drawn or _full(session, event)
 
 
 def _room_for_one_more(session: OrmSession, event: Season) -> None:

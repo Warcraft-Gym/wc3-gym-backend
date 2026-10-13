@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+* **Add**: a cup can be played over several rounds, each a competition of its own on its own date with its own copy of the cup's stages ([cup_leg](data/tables/cup_leg.md), [cup_leg_stage](data/tables/cup_leg_stage.md)). Players check in per round ([cup_leg_checkin](data/tables/cup_leg_checkin.md)) with `POST` and `DELETE /events/{id}/legs/{leg_id}/checkins`, and a round draws them alone. A runner finishes a round with `POST /events/{id}/legs/{leg_id}/finish`; its places pay points from `cup_settings.points_by_place`, and `GET /events/{id}/overall` adds them up. Closing the cup pays from that table. The [events module](concepts/events-module.md#cup-rounds) states it.
 * **Add**: a cup chooses at creation whether it splits its players into divisions ([cup_settings](data/tables/cup_settings.md)). A cup without them refuses every division write; a cup with them refuses its draw while a player stands in no division, and its divisions once drawn. A cup's two pins, division and seed, live apart in [cup_entrant_pin](data/tables/cup_entrant_pin.md), set with `PUT /events/{id}/entrants/{entrant_id}/pins`. A seed write may name one division. Hidden seeds hide their source and MMR too. The [events module](concepts/events-module.md#entrants-seeds-divisions) states it.
 
 ## 2026-10-12

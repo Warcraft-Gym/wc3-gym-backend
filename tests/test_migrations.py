@@ -98,6 +98,8 @@ BEFORE_WAITLIST = "d3a7f2c9b814"
 BEFORE_CUP_TABLES = "c4e8a2f7d915"
 # The revision before a cup held its settings and its pins apart
 BEFORE_CUP_SETTINGS = "a8e3c5f1d276"
+# The revision before a cup could be played over rounds
+BEFORE_CUP_ROUNDS = "c7d2e9a4f183"
 
 
 def comparable(
@@ -1812,3 +1814,37 @@ def test_a_cup_takes_its_settings_and_its_pins_and_gives_them_back(
         ).all() == [(10, True), (11, False), (12, True)]
     tables = set(inspect(create_engine(url)).get_table_names())
     assert not {"cup_settings", "cup_entrant_pin"} & tables
+
+
+def test_the_cup_rounds_come_and_go(tmp_path: Path) -> None:
+    """The rounds tables and the points table arrive empty, a cup's settings
+    stay, and the downgrade takes them away again."""
+    url = fresh_database(tmp_path, "cup_rounds")
+    upgrade_to(url, BEFORE_CUP_ROUNDS)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) "
+                "VALUES (1, 'Cup', 1, 'cup')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO cup_settings (event_id, uses_divisions) VALUES (1, 0)")
+        )
+
+    upgrade_to(url, "head")
+
+    tables = set(inspect(engine).get_table_names())
+    assert {"cup_leg", "cup_leg_stage", "cup_leg_checkin"} <= tables
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT event_id, points_by_place FROM cup_settings")
+        ).all() == [(1, None)]
+
+    downgrade_to(url, BEFORE_CUP_ROUNDS)
+    tables = set(inspect(create_engine(url)).get_table_names())
+    assert not {"cup_leg", "cup_leg_stage", "cup_leg_checkin"} & tables
+    assert "points_by_place" not in {
+        c["name"] for c in inspect(create_engine(url)).get_columns("cup_settings")
+    }

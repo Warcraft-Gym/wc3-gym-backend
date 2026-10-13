@@ -1,6 +1,6 @@
 # Tables
 
-The 65 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
+The 68 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
 
 # People and access
 
@@ -45,8 +45,11 @@ The 65 tables, one concept each. A concept's `# Schema` lists every column; `tes
 # Teams and rosters
 
 * [teams](teams.md) - One league-owned team: its league, short name, long name and the public URL of its logo.
-* [cup_settings](cup_settings.md) - A cup's own settings beside its event row; today its choice to split its players into divisions.
+* [cup_settings](cup_settings.md) - A cup's own settings beside its event row; its choice to split its players into divisions, and the points each place of a round pays.
 * [cup_entrant_pin](cup_entrant_pin.md) - A cup player's two pins, its division placed by hand and its seed a reshuffle keeps, held apart from the flag KOTH reads.
+* [cup_leg](cup_leg.md) - One round of a cup played over several rounds, a competition of its own on its own date, with its own copy of the cup's stages.
+* [cup_leg_stage](cup_leg_stage.md) - Which round of a cup one of its stages is played in, so a round's draw, neighbours and places stay inside that round.
+* [cup_leg_checkin](cup_leg_checkin.md) - One player checked in for one round of a cup; the round's draw takes these players alone.
 * [cup_team](cup_team.md) - A team made for one cup, signed up by its captain; it lives as long as its cup and no GNL read sees it.
 * [cup_team_member](cup_team_member.md) - One confirmed player of a cup team, the captain marked among them.
 * [cup_team_invite](cup_team_invite.md) - One player invited into a cup team who has not answered yet; accepting makes them a member, declining deletes the row.

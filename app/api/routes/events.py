@@ -21,6 +21,8 @@ from app.api.deps import (
     require_event_runner,
 )
 from app.api.search import SearchQuery
+from app.models.cup_overall import CupOverallPublic
+from app.models.cup_rounds import CupLegCheckinWrite, CupLegPublic
 from app.models.cup_series import CupStagePublic
 from app.models.cup_settings import CupPinWrite
 from app.models.cup_team import (
@@ -57,6 +59,7 @@ from app.models.series import ChallengerAdd, StageSeriesPublic, StageSeriesRow
 from app.services import (
     awards,
     cup_engine,
+    cup_rounds,
     cup_teams,
     discord_posts,
     organizers,
@@ -453,6 +456,60 @@ def pin_cup_entrant(
     """Pin a cup player to its division, or its seed, so a new cut or a
     reshuffle leaves it where it is."""
     return service.set_pins(event_id, entrant_id, data)
+
+
+@router.post("/events/{event_id}/legs/{leg_id}/checkins")
+def check_in_for_leg(
+    event_id: int, leg_id: int, data: CupLegCheckinWrite, claims: RequireLogin
+) -> list[CupLegPublic]:
+    """Check a player in for one round of a cup while the round is not drawn:
+    the caller's own entry, or any entry the body names for a runner."""
+    return cup_rounds.check_in(event_id, leg_id, data.entrant_id, claims, True)
+
+
+@router.delete("/events/{event_id}/legs/{leg_id}/checkins")
+def check_out_of_leg(
+    event_id: int,
+    leg_id: int,
+    claims: RequireLogin,
+    entrant_id: Annotated[int | None, Query()] = None,
+) -> list[CupLegPublic]:
+    """Take a round's check-in back while the round is not drawn."""
+    return cup_rounds.check_in(event_id, leg_id, entrant_id, claims, False)
+
+
+@router.post(
+    "/events/{event_id}/legs/{leg_id}/checkins/everyone",
+    dependencies=[Depends(require_event_runner)],
+)
+def check_everyone_in(event_id: int, leg_id: int) -> list[CupLegPublic]:
+    """Check every playing entrant of the cup in for one round."""
+    return cup_rounds.check_in_everyone(event_id, leg_id)
+
+
+@router.post(
+    "/events/{event_id}/legs/{leg_id}/finish",
+    dependencies=[Depends(require_event_runner)],
+)
+def finish_leg(event_id: int, leg_id: int) -> list[CupLegPublic]:
+    """Finish a played round: its places pay points into the overall table."""
+    return cup_rounds.finish_leg(event_id, leg_id)
+
+
+@router.delete(
+    "/events/{event_id}/legs/{leg_id}/finish",
+    dependencies=[Depends(require_event_runner)],
+)
+def reopen_leg(event_id: int, leg_id: int) -> list[CupLegPublic]:
+    """Take a round's finish back while the cup is open."""
+    return cup_rounds.reopen_leg(event_id, leg_id)
+
+
+@router.get("/events/{event_id}/overall")
+def get_overall(event_id: int, response: Response) -> CupOverallPublic:
+    """A cup's overall table: the points each finished round paid, added up."""
+    event_edge_cache(response, event_id)
+    return cup_rounds.overall(event_id)
 
 
 @router.put(

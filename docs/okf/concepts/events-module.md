@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, cups on tables and an engine of their own, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-13T10:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-13T16:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -116,6 +116,17 @@ One rule answers every write on a cup series: the player a side names, or a memb
 - `GET` and `PUT /cup-series/{id}/veto` serve the board to a player of either side and to a runner. A player takes the steps of their own side and takes back what they entered; a runner records any step and takes back the last one.
 
 A cup series posts no Discord card, takes no replay and no cast, and shows in no player history, head-to-head or Home list. The `/series` and `/player-series` routes answer `series` rows alone.
+
+# Cup rounds
+
+A cup is played on one evening, or over several rounds, each a competition of its own on its own date (`app/services/cup_rounds.py`). `POST /events` for a cup with `legs`, two or more, writes one [cup_leg](../data/tables/cup_leg.md) per entry and copies the body's `stages` into every round ([cup_leg_stage](../data/tables/cup_leg_stage.md)), so every round plays the same format. Players sign up once and check in per round ([cup_leg_checkin](../data/tables/cup_leg_checkin.md)); the cup-wide check-in is off. The full event read answers the rounds as `cup_legs`.
+
+- A round draws and seeds the entrants checked in for it, and its stages seed from, and advance into, stages of the same round alone. A check-in is refused once the round is drawn, and a finished round keeps its draw until it is reopened.
+- A signup after the first round is drawn joins the later rounds and goes on no waitlist; the entrant cap still holds.
+- `PUT /events/{id}/stages` takes one round's stages and writes them onto every round; a body that changes how many stages a round plays is refused.
+- A runner finishes a round once every series of it holds a result (`POST /events/{id}/legs/{leg_id}/finish`). Its places, read by `awards.event_places` over the round's stages alone, pay points from `cup_settings.points_by_place`, and every entrant's seed is cleared, so the next round seeds afresh. `DELETE` on the same path takes the finish back while the cup is open.
+- `GET /events/{id}/overall` answers the overall table: each entrant's points from every finished round, a missed round paying 0, the points per round, and the best single place. Points rank first, then the best single place, then more of that place; entrants still level share their position. It is edge cached as the event is, and reads a fixed number of statements, each round's places one more.
+- Closing a cup with rounds pays its awards from the overall table, one per entrant who played a finished round, the position its place.
 
 # Awards
 

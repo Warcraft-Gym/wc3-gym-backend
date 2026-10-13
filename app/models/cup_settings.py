@@ -23,6 +23,9 @@ class CupSettings(DBModel, table=True):
     uses_divisions: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
+    # A cup played over rounds: the points each place of a round pays, best place
+    # first, as "10,8,6,5,4,3,2,1"; a place past the list pays none
+    points_by_place: str | None = Field(default=None, max_length=200)
 
 
 class CupEntrantPin(DBModel, table=True):
