@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-13
+
+* **Add**: a cup chooses at creation whether it splits its players into divisions ([cup_settings](data/tables/cup_settings.md)). A cup without them refuses every division write; a cup with them refuses its draw while a player stands in no division, and its divisions once drawn. A cup's two pins, division and seed, live apart in [cup_entrant_pin](data/tables/cup_entrant_pin.md), set with `PUT /events/{id}/entrants/{entrant_id}/pins`. A seed write may name one division. Hidden seeds hide their source and MMR too. The [events module](concepts/events-module.md#entrants-seeds-divisions) states it.
+
 ## 2026-10-12
 
 * **Add**: a cup plays on its own tables. [cup_series](data/tables/cup_series.md), [cup_series_game](data/tables/cup_series_game.md), [cup_veto_step](data/tables/cup_veto_step.md) and [cup_series_side](data/tables/cup_series_side.md) hold its series, and [cup_team](data/tables/cup_team.md), [cup_team_member](data/tables/cup_team_member.md) and [cup_team_invite](data/tables/cup_team_invite.md) its teams; `event_entrant.cup_team_id` names an entrant's cup team, `team_invite` became `cup_team_invite`, and `teams` names its league again. The cup engine and the `/cup-series` routes serve them with one permission rule, a side's player or a runner; the `/series` routes answer `series` rows alone, and `PUT /series/{id}/places` and `/sides` are gone. A cup refuses a league team, its round robin writes no fixture, and its series show in no history, Home list or Discord card. [The decision](decisions/cups-own-tables.md), the [events module](concepts/events-module.md#cup-series) and [roles and permissions](concepts/roles-and-permissions.md#organizers) state it.

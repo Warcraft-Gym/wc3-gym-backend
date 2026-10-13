@@ -96,6 +96,8 @@ BEFORE_PLACEMENT = "f3c8a1d6e027"
 BEFORE_WAITLIST = "d3a7f2c9b814"
 # The revision before the cups took tables of their own
 BEFORE_CUP_TABLES = "c4e8a2f7d915"
+# The revision before a cup held its settings and its pins apart
+BEFORE_CUP_SETTINGS = "a8e3c5f1d276"
 
 
 def comparable(
@@ -1762,3 +1764,51 @@ def test_the_cup_tables_take_the_test_cups_and_leave_every_other_series(
         c["name"] for c in inspect(create_engine(url)).get_columns("teams")
     }
     assert not {"cup_series", "cup_team", "cup_series_game"} & tables
+
+
+def test_a_cup_takes_its_settings_and_its_pins_and_gives_them_back(
+    tmp_path: Path,
+) -> None:
+    """A cup that holds divisions reads them as its choice, and a player it
+    placed by hand holds both pins; the downgrade folds them back."""
+    url = fresh_database(tmp_path, "cup_settings")
+    upgrade_to(url, BEFORE_CUP_SETTINGS)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) VALUES "
+                "(1, 'Split Cup', 1, 'cup'), (2, 'Plain Cup', 1, 'cup'), "
+                "(3, 'Night', 1, 'koth')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_division (id, event_id, position, name) "
+                "VALUES (1, 1, 1, 'Top'), (2, 3, 1, 'Bracket 1')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_entrant (id, event_id, user_id, manual_placement) "
+                "VALUES (10, 1, 7, 1), (11, 2, 8, 0), (12, 3, 9, 1)"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT event_id, uses_divisions FROM cup_settings ORDER BY event_id")
+        ).all() == [(1, True), (2, False)]
+        assert connection.execute(
+            text("SELECT entrant_id, division_pinned, seed_pinned FROM cup_entrant_pin")
+        ).all() == [(10, True, True)]
+
+    downgrade_to(url, BEFORE_CUP_SETTINGS)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT id, manual_placement FROM event_entrant ORDER BY id")
+        ).all() == [(10, True), (11, False), (12, True)]
+    tables = set(inspect(create_engine(url)).get_table_names())
+    assert not {"cup_settings", "cup_entrant_pin"} & tables

@@ -17,7 +17,7 @@ from app.core.db import Session
 from app.models.enums import EventKind, Race, StageFormat
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
-from tests.test_event_divisions import add_player, enter
+from tests.test_event_divisions import add_player, divided_cup, enter
 from tests.test_event_organizers import Headers, Member, create, grant
 from tests.test_events import add_event
 from tests.test_stage_engine import bracket, cup, players_of, score
@@ -300,8 +300,15 @@ def test_a_reseed_keeps_the_hand_placed_seeds_and_fills_around_them(
     )
     with Session.begin() as session:
         row = session.get_one(EventEntrant, weakest)
-        row.manual_placement = True
         row.seed = 1
+    # a cup pins the seed apart from the division
+    pinned = client.put(
+        f"/events/{event}/entrants/{weakest}/pins",
+        json={"seed_pinned": True},
+        headers=auth_headers,
+    )
+    assert pinned.status_code == 200, pinned.text
+    assert pinned.json()["seed_pinned"] is True
 
     written = put_seeds(client, auth_headers, event, stage, source="mmr")
 
@@ -343,7 +350,7 @@ def test_a_previous_stage_reseed_does_not_keep_a_pinned_entrant_that_went_out(
 def test_the_draw_locks_the_seeds_and_unlock_waits_for_the_redraw(
     client: Client, auth_headers: Headers
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     stage = single_stage(event)
     response = client.put(
         f"/events/{event}/divisions",

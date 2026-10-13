@@ -22,6 +22,7 @@ from app.api.deps import (
 )
 from app.api.search import SearchQuery
 from app.models.cup_series import CupStagePublic
+from app.models.cup_settings import CupPinWrite
 from app.models.cup_team import (
     CupTeamAdd,
     CupTeamCreate,
@@ -437,6 +438,21 @@ def place_entrant(
 ) -> EventEntrantPublic:
     """Move one entrant into a division and mark it placed by hand."""
     return service.place_entrant(event_id, entrant_id, data)
+
+
+@router.put(
+    "/events/{event_id}/entrants/{entrant_id}/pins",
+    dependencies=[Depends(require_event_runner)],
+)
+def pin_cup_entrant(
+    event_id: int,
+    entrant_id: int,
+    data: CupPinWrite,
+    service: EventServiceDep,
+) -> EventEntrantPublic:
+    """Pin a cup player to its division, or its seed, so a new cut or a
+    reshuffle leaves it where it is."""
+    return service.set_pins(event_id, entrant_id, data)
 
 
 @router.put(

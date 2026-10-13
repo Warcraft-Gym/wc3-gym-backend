@@ -1,6 +1,6 @@
 # Tables
 
-The 63 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
+The 65 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
 
 # People and access
 
@@ -45,6 +45,8 @@ The 63 tables, one concept each. A concept's `# Schema` lists every column; `tes
 # Teams and rosters
 
 * [teams](teams.md) - One league-owned team: its league, short name, long name and the public URL of its logo.
+* [cup_settings](cup_settings.md) - A cup's own settings beside its event row; today its choice to split its players into divisions.
+* [cup_entrant_pin](cup_entrant_pin.md) - A cup player's two pins, its division placed by hand and its seed a reshuffle keeps, held apart from the flag KOTH reads.
 * [cup_team](cup_team.md) - A team made for one cup, signed up by its captain; it lives as long as its cup and no GNL read sees it.
 * [cup_team_member](cup_team_member.md) - One confirmed player of a cup team, the captain marked among them.
 * [cup_team_invite](cup_team_invite.md) - One player invited into a cup team who has not answered yet; accepting makes them a member, declining deletes the row.

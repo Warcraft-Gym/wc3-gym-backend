@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, cups on tables and an engine of their own, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T21:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-13T10:30:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -66,6 +66,14 @@ An event's phase is derived on every read and never stored. The rungs, read from
 An entrant is a player or a pre-made team in one event, with a race, a seed, a division, and eligibility warnings (`min_games`, `mmr_min`, `mmr_max`, a ban). Warnings show on the row and never refuse a signup, except on an event with `eligibility_required` on: there a player signs up, or is added by hand, only with a battle tag that W3Champions rates on the signup race, inside the MMR bounds and the games floor, and the refusal names the rule it missed. An event that also turns on `bnet_required` asks for that battle tag to be verified through Battle.net, and takes members only, because a battle tag alone proves no Battle.net link. An event that names `race_games_min`, which every cup does with 20, rates the player on the races they have really played: a race counts once its lifetime games on W3Champions reach that number, the best current rating among those races is checked against the bounds, the games floor counts the window over every race, and a player with no race over the limit is refused; the race of the signup then decides nothing. The lifetime games read every stored season, and a signup to such an event reads a player's past seasons once and keeps them (`users.w3c_history_through`). A GNL season and a KOTH night never turn it on. Without `race_games_min` the games rule is one rule: `min_games` ladder games on the signup race, counted over the live W3C window, the current season and the one before it, or over the current season alone where `min_games_seasons` is 1. Seeds come from MMR, a shuffle, a hand order, the previous stage, a qualifier or an invitation. Seeding from a qualifier is not built: an event names the event it feeds through `parent_id`, and the seed write answers `not_built` until the parent reads its qualifiers' tables. The draw seeds the unseeded entrants of the first stage by the stage's `seed_source` and locks the seeds; a locked stage refuses a reseed until it is unlocked. An event with `hide_seeds` on answers seed numbers only to its runners. A seed from the previous stage and the advance to the next stage read one order, and both refuse with a 400 while any series of that stage has no result.
 
 Divisions cut the entrant pool by MMR (`app/core/divisions.py`). A band list that names a lower bound for every band takes no entrant without a rating: that entrant stays unplaced until an admin places it. Every division runs the same stage list on its own; a merged playoff across divisions is never a rule in the app.
+
+A cup chooses at creation whether it splits its players ([cup_settings](../data/tables/cup_settings.md) `uses_divisions`), and these rules hold on a cup alone (`app/services/cup_divisions.py`); every other kind keeps the rules above:
+
+- A cup without divisions refuses every division write and plays one field.
+- A cup with divisions refuses its draw while a playing entrant stands in no division ("Place every player in a division first"), and refuses a new division list or cut once it is drawn, until the draw is undone.
+- A cup pins a player's division and its seed apart ([cup_entrant_pin](../data/tables/cup_entrant_pin.md)): a new cut keeps the seed pins, and a reshuffle keeps the division pins.
+- `PUT /events/{id}/stages/{stage_id}/seeds` may name a `division_id`, and then seeds that division alone and leaves every other one as it was; without it the write is as before for every kind.
+- With `hide_seeds` on, the entrant read also leaves `seed_source` and `mmr_at_seed` null for a caller who does not run the cup.
 
 # Signup policy
 

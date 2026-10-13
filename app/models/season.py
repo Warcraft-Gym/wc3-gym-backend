@@ -710,6 +710,8 @@ class EventPublic(SQLModel):
     divisions: list[EventDivisionPublic] = []
     # The events this one is the parent of, newest first; empty on a list read
     children: list["EventPublic"] = []
+    # A cup's choice to split into divisions; null on any other kind and on a list read
+    uses_divisions: bool | None = None
 
 
 class EventCreate(SQLModel):
@@ -758,6 +760,8 @@ class EventCreate(SQLModel):
     team_size: int | None = Field(default=None, ge=2, le=4)
     entrant_cap: int | None = None
     entrant_min: int | None = Field(default=None, ge=2)
+    # A cup's choice to split its players into divisions; read on a cup alone
+    uses_divisions: bool = False
     # How many series one fixture holds, and a fixture pairs two team
     # entrants, so it reads only on a team event.
     series_per_round: int = 1
@@ -809,6 +813,8 @@ class EventUpdate(SQLModel):
     veto_by_best_of: bool | None = None
     hide_seeds: bool | None = None
     team_size: int | None = Field(default=None, ge=2, le=4)
+    # A cup's choice to split into divisions; off takes them back before the draw
+    uses_divisions: bool | None = None
     entrant_cap: int | None = None
     entrant_min: int | None = Field(default=None, ge=2)
     series_per_round: int | None = None

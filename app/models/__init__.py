@@ -24,6 +24,7 @@ from app.models import (
     base,
     clerk_account,
     cup_series,
+    cup_settings,
     cup_team,
     discord_post,
     discord_role_binding,

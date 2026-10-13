@@ -77,6 +77,8 @@ def open_the_season(
             "kind": "cup",
             "league_id": league.json()["id"],
             "signup_policy": "members",
+            # FOML splits its members into two divisions, a cup's choice at creation
+            "uses_divisions": True,
             "series_per_round": 2,
             "stages": [
                 {

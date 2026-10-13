@@ -112,6 +112,7 @@ def _generate(
         raise BadRequestError("A bracket stage draws every division together")
     if fill is not None:
         fill(session, stage)
+    _hold_placed(session, event_id)
     fields = _fields(_entrants(session, event_id))
     _hold_minimum(session, stage, fields)
     cup_reads.hold_pool(session, event)
@@ -282,6 +283,8 @@ def _draw_round(
     held = list(_rounds_of(session, stage_id))
     if fill is not None:
         fill(session, stage)
+    if not drawn:
+        _hold_placed(session, event_id)
     fields = _fields(_entrants(session, event_id))
     if not drawn:
         _hold_minimum(session, stage, fields)
@@ -1190,6 +1193,30 @@ def _next_number(session: OrmSession, event_id: int) -> int:
         )
     )
     return (highest or 0) + 1
+
+
+def _hold_placed(session: OrmSession, event_id: int) -> None:
+    """Refuse to draw a cup with divisions while a player stands in none of
+    them: the draw plays each division apart, so that player would be left out."""
+    held = session.scalar(
+        select(col(EventDivision.id))
+        .where(col(EventDivision.event_id) == event_id)
+        .limit(1)
+    )
+    if held is None:
+        return
+    loose = session.scalar(
+        select(col(EventEntrant.id))
+        .where(
+            col(EventEntrant.event_id) == event_id,
+            col(EventEntrant.division_id).is_(None),
+            col(EventEntrant.withdrawn_at).is_(None),
+            col(EventEntrant.waitlisted_at).is_(None),
+        )
+        .limit(1)
+    )
+    if loose is not None:
+        raise BadRequestError("Place every player in a division first")
 
 
 def _hold_minimum(

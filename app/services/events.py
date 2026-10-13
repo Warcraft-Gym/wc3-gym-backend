@@ -39,6 +39,7 @@ from app.core.query import QueryElement, QueryUtil
 from app.core.security import is_admin
 from app.models.base import ident
 from app.models.cup_series import CupSeries, CupVetoStep
+from app.models.cup_settings import CupPinWrite
 from app.models.cup_team import CupTeam, CupTeamInvite, CupTeamMember, team_summary
 from app.models.draft_series import DraftSeries
 from app.models.enums import (
@@ -103,7 +104,7 @@ from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
-from app.services import cup_engine, organizers, stage_engine
+from app.services import cup_divisions, cup_engine, organizers, stage_engine
 from app.services.battle_tags import active_row, attach_tag, person_by_tag
 from app.services.series_rules import hold_pool
 from app.services.users import summary_loads
@@ -475,7 +476,9 @@ class EventService:
         signup-only event is.
         """
         with Session.begin() as session:
-            fields = data.model_dump(exclude={"stages", "round_count", "map_ids"})
+            fields = data.model_dump(
+                exclude={"stages", "round_count", "map_ids", "uses_divisions"}
+            )
             _hold_bounds(fields)
             if fields.get("entrant_kind") is None:
                 fields["entrant_kind"] = _league_entrant_kind(
@@ -491,6 +494,8 @@ class EventService:
             )
             _write_stages(session, event, stages)
             _write_pool(session, ident(event), data.map_ids)
+            if cup_divisions.is_cup(event):
+                cup_divisions.write_settings(session, event, data.uses_divisions)
             hold_pool(session, event)
             return _answer(session, ident(event))
 
@@ -498,7 +503,9 @@ class EventService:
         """Change the event fields the body names; the stages have their own route."""
         with Session.begin() as session:
             event = _event(session, event_id, full=True)
-            fields = data.model_dump(exclude_unset=True, exclude={"round_count"})
+            fields = data.model_dump(
+                exclude_unset=True, exclude={"round_count", "uses_divisions"}
+            )
             if "league_id" in fields and fields["league_id"] != event.league_id:
                 linked_team = session.scalar(
                     select(col(DBTeamSeason.team_id))
@@ -527,6 +534,8 @@ class EventService:
                 from app.services.seasons import fill_rounds
 
                 fill_rounds(session, event, data.round_count or 0)
+            if data.uses_divisions is not None and cup_divisions.is_cup(event):
+                cup_divisions.set_uses_divisions(session, event, data.uses_divisions)
             session.flush()
             hold_pool(session, event)
             return _answer(session, ident(event))
@@ -979,6 +988,9 @@ class EventService:
         with Session.begin() as session:
             event = _event(session, event_id)
             row = _entrant(session, event_id, entrant_id)
+            cup = cup_divisions.is_cup(event)
+            if cup and data.division_id is not None:
+                cup_divisions.hold_divisions_on(session, event)
             if data.division_id is not None:
                 division = session.get(EventDivision, data.division_id)
                 if division is None or division.event_id != event_id:
@@ -996,7 +1008,13 @@ class EventService:
             ):
                 raise ApiError(409, {"error": "The seeds of this event are locked"})
             row.division_id = data.division_id
-            row.manual_placement = data.manual_placement
+            # A cup pins the division apart from the seed; another kind holds one flag
+            if cup:
+                cup_divisions.set_pins(
+                    session, ident(row), division=data.manual_placement
+                )
+            else:
+                row.manual_placement = data.manual_placement
             # A row moved into a division stands at the end of its line
             if moved:
                 row.seed = (
@@ -1009,6 +1027,25 @@ class EventService:
             session.flush()
             return _entrant_publics(session, event, [row])[0]
 
+    def set_pins(
+        self, event_id: int, entrant_id: int, data: CupPinWrite
+    ) -> EventEntrantPublic:
+        """Write a cup player's pins; only a cup pins apart from its placement."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if not cup_divisions.is_cup(event):
+                raise BadRequestError("Only a cup pins its players")
+            row = _entrant(session, event_id, entrant_id)
+            if data.division_pinned is not None:
+                cup_divisions.hold_divisions_on(session, event)
+            cup_divisions.set_pins(
+                session,
+                ident(row),
+                division=data.division_pinned,
+                seed=data.seed_pinned,
+            )
+            return _entrant_publics(session, event, [row])[0]
+
     # ============ Divisions and seeds ============
     def set_divisions(
         self, event_id: int, divisions: Sequence[EventDivisionWrite]
@@ -1016,10 +1053,20 @@ class EventService:
         """Replace the division list; the order of the body is their position."""
         with Session.begin() as session:
             event = _event(session, event_id)
+            cup = cup_divisions.is_cup(event)
+            if cup:
+                # A cup's divisions are its choice, and its draw holds them
+                cup_divisions.hold_divisions_on(session, event)
+                cup_divisions.hold_undrawn(session, event_id)
+                cup_divisions.reset_division_pins(session, event_id)
             session.execute(
                 update(EventEntrant)
                 .where(col(EventEntrant.event_id) == event_id)
-                .values(division_id=None, manual_placement=False)
+                .values(
+                    {"division_id": None}
+                    if cup
+                    else {"division_id": None, "manual_placement": False}
+                )
             )
             gone = select(col(EventDivision.id)).where(
                 col(EventDivision.event_id) == event_id
@@ -1049,13 +1096,21 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id)
+            if cup_divisions.is_cup(event):
+                cup_divisions.hold_divisions_on(session, event)
+                cup_divisions.hold_undrawn(session, event_id)
             divisions = _divisions(session, event_id)
             if not divisions:
                 raise BadRequestError("The event has no divisions to assign")
             live = _live_entrants(session, event_id)
-            rows = [row for row in live if not row.manual_placement]
+            by_hand = (
+                cup_divisions.division_pinned(session, live)
+                if cup_divisions.is_cup(event)
+                else {ident(row) for row in live if row.manual_placement}
+            )
+            rows = [row for row in live if ident(row) not in by_hand]
             # A hand-placed entrant takes one of its division's seats
-            placed = Counter(row.division_id for row in live if row.manual_placement)
+            placed = Counter(row.division_id for row in live if ident(row) in by_hand)
             mmrs = _mmrs(session, rows)
             bands = cut(
                 [(ident(row), mmrs[ident(row)]) for row in rows],
@@ -1092,11 +1147,18 @@ class EventService:
             if stage.seeds_locked_at is not None:
                 raise ApiError(409, {"error": "The seeds of this stage are locked"})
             rows = _live_entrants(session, event_id)
+            if data.division_id is not None:
+                rows = [row for row in rows if row.division_id == data.division_id]
             mmrs = _mmrs(session, rows)
             order = (
                 _from_previous_stage(session, event_id, stage, rows)
                 if data.source is SeedSource.previous_stage
                 else _seed_order(rows, mmrs, data)
+            )
+            kept = (
+                cup_divisions.seed_pinned(session, rows)
+                if cup_divisions.is_cup(event)
+                else {ident(row) for row in rows if row.manual_placement}
             )
             pinned = (
                 {}
@@ -1104,7 +1166,7 @@ class EventService:
                 else {
                     ident(row): row.seed
                     for row in rows
-                    if row.manual_placement and row.seed is not None
+                    if ident(row) in kept and row.seed is not None
                 }
             )
             held: dict[int | None, set[int | None]] = {}
@@ -1786,6 +1848,7 @@ def _public(
     if not full:
         return public
     public.checkin_open = event.checkin_enabled and checkin_open(event, event.rounds)
+    public.uses_divisions = cup_divisions.uses_divisions(session, event)
     public.stages = [
         EventStagePublic.model_validate(row)
         for row in session.scalars(
@@ -2024,6 +2087,12 @@ def _entrant_publics(
     for public, row in zip(publics, rows, strict=True):
         if row.cup_team_id in rosters:
             public.roster, public.invited = rosters[row.cup_team_id]
+    if cup_divisions.is_cup(event):
+        held = cup_divisions.pins(session, [ident(row) for row in rows])
+        for public in publics:
+            pin = held.get(public.id)
+            public.division_pinned = bool(pin and pin.division_pinned)
+            public.seed_pinned = bool(pin and pin.seed_pinned)
     return publics
 
 
@@ -2455,8 +2524,8 @@ def _entrant_public(
         mmr_synced_at=user.w3c_synced_at if user else None,
         warnings=_warnings(event, user, warn_mmr, warn_games),
         seed=row.seed if shown else None,
-        seed_source=row.seed_source,
-        mmr_at_seed=row.mmr_at_seed,
+        seed_source=row.seed_source if shown else None,
+        mmr_at_seed=row.mmr_at_seed if shown else None,
         division_id=row.division_id,
         manual_placement=row.manual_placement,
         checked_in_at=row.checked_in_at,

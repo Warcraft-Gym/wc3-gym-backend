@@ -140,10 +140,12 @@ class EntrantPlacement(SQLModel):
 
 
 class SeedWrite(SQLModel):
+    # Named: only that division is seeded again, and every other one stays
     """What orders the seeds of one stage; `order` names the entrants by hand."""
 
     source: SeedSource = SeedSource.mmr
     order: list[int] | None = None
+    division_id: int | None = None
 
 
 class TeamMemberPublic(SQLModel):
@@ -178,6 +180,10 @@ class EventEntrantPublic(SQLModel):
     division_id: int | None = None
     group_no: int | None = None
     manual_placement: bool = False
+    # A cup's two pins: placed in its division by hand, and a seed a reshuffle
+    # keeps; null on any other kind
+    division_pinned: bool | None = None
+    seed_pinned: bool | None = None
     checked_in_at: Annotated[datetime | None, AwareUTC] = None
     withdrawn_at: Annotated[datetime | None, AwareUTC] = None
     waitlisted_at: Annotated[datetime | None, AwareUTC] = None
