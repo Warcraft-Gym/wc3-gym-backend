@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, cups on tables and an engine of their own, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-13T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-14T09:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -74,6 +74,7 @@ A cup chooses at creation whether it splits its players ([cup_settings](../data/
 - A cup pins a player's division and its seed apart ([cup_entrant_pin](../data/tables/cup_entrant_pin.md)): a new cut keeps the seed pins, and a reshuffle keeps the division pins.
 - `PUT /events/{id}/stages/{stage_id}/seeds` may name a `division_id`, and then seeds that division alone and leaves every other one as it was; without it the write is as before for every kind.
 - With `hide_seeds` on, the entrant read also leaves `seed_source` and `mmr_at_seed` null for a caller who does not run the cup.
+- A cup's seeds change after the draw: `PUT /events/{id}/stages/{stage_id}/seeds/redraw` takes the body of a seed write, takes the stage's draw back, writes the seeds and draws the stage again in one transaction, so the bracket follows its seeds at once; a stage not drawn yet is drawn by the same write. A stage whose series hold results answers 409 until the call sends `confirm=true`, which deletes them, a refused draw keeps the draw that stood, a stage that pairs by round draws its first round again, and a later stage, which plays what the stage before sends on, is refused. A `division_id` reseeds that division alone; the whole stage is drawn again.
 
 # Signup policy
 

@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-14
+
+* **Add**: a cup's seeds change after the draw, and the draw follows them: `PUT /events/{id}/stages/{stage_id}/seeds/redraw` writes the seeds and draws the first stage again in one transaction, asking to confirm while its series hold results. The [events module](concepts/events-module.md#entrants-seeds-divisions) states it.
+
 ## 2026-10-13
 
 * **Add**: recurring cups. A runner sets a rule up from a cup, every week or the nth weekday of the month at a local time ([cup_recurrence](data/tables/cup_recurrence.md)), and makes each next cup on one of the rule's days as a copy of the latest one ([cup_occurrence](data/tables/cup_occurrence.md)) with `POST /cup-recurrences/{id}/occurrences`. `GET /cup-recurrences` and `GET /cup-recurrences/{id}` read the rules, and a cup's full read names its rule as `cup_recurrence`. The [events module](concepts/events-module.md#recurring-cups) states it.

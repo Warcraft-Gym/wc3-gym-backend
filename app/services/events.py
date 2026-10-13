@@ -1176,51 +1176,41 @@ class EventService:
             stage = _stage(session, event_id, stage_id)
             if stage.seeds_locked_at is not None:
                 raise ApiError(409, {"error": "The seeds of this stage are locked"})
-            rows = cup_rounds.leg_field(
-                session, stage, _live_entrants(session, event_id)
-            )
-            if data.division_id is not None:
-                rows = [row for row in rows if row.division_id == data.division_id]
-            mmrs = _mmrs(session, rows)
-            order = (
-                _from_previous_stage(session, event_id, stage, rows)
-                if data.source is SeedSource.previous_stage
-                else _seed_order(rows, mmrs, data)
-            )
-            kept = (
-                cup_divisions.seed_pinned(session, rows)
-                if cup_divisions.is_cup(event)
-                else {ident(row) for row in rows if row.manual_placement}
-            )
-            pinned = (
-                {}
-                if data.source is SeedSource.previous_stage
-                else {
-                    ident(row): row.seed
-                    for row in rows
-                    if ident(row) in kept and row.seed is not None
-                }
-            )
-            held: dict[int | None, set[int | None]] = {}
-            for row in rows:
-                if ident(row) in pinned:
-                    held.setdefault(row.division_id, set()).add(row.seed)
-            taken: dict[int | None, int] = {}
-            for row in order:
-                if ident(row) in pinned:
-                    continue
-                number = taken.get(row.division_id, 0) + 1
-                while number in held.get(row.division_id, set()):
-                    number += 1
-                taken[row.division_id] = number
-                row.seed = number
-                row.seed_source = data.source.value
-                row.mmr_at_seed = mmrs[ident(row)]
-            seeded = {ident(row) for row in order} | set(pinned)
-            for row in rows:
-                if ident(row) not in seeded:
-                    row.seed = None
-            session.flush()
+            rows = _write_seeds(session, event, stage, data)
+            return _entrant_publics(session, event, rows)
+
+    def redraw_seeds(
+        self, event_id: int, stage_id: int, data: SeedWrite, confirm: bool = False
+    ) -> list[EventEntrantPublic]:
+        """Change the seeds of a cup's first stage after its draw, and draw it
+        again from them, in one transaction.
+
+        The draw goes, the seeds are written as `set_seeds` writes them, and
+        the stage is drawn as Generate draws it; a stage that pairs by round
+        draws its first round. A stage whose series hold results answers 409
+        until the call confirms, as the undo of a draw does, and a refused
+        draw keeps the draw that stood.
+        """
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if not cup_divisions.is_cup(event):
+                raise BadRequestError("Only a cup's draw follows its seeds")
+            stage = _stage(session, event_id, stage_id)
+            if cup_engine.previous_stage(session, event_id, stage) is not None:
+                raise BadRequestError(
+                    "A later stage plays what the stage before sends on; "
+                    "it has no seeds to change"
+                )
+            if cup_engine.stage_drawn(session, stage_id):
+                cup_engine.undo_in(session, event_id, stage_id, confirm)
+            rows = _write_seeds(session, event, stage, data)
+            if cup_engine.draws_by_round(stage):
+                cup_engine.draw_round_in(
+                    session, event_id, stage_id, self.seed_for_draw
+                )
+            else:
+                cup_engine.generate_in(session, event_id, stage_id, self.seed_for_draw)
+            # the draw seeds whoever the order left without a seed, after it
             rows.sort(key=lambda row: (row.division_id or 0, row.seed or 0))
             return _entrant_publics(session, event, rows)
 
@@ -1286,6 +1276,59 @@ class EventService:
             row.seed_source = source.value
             row.mmr_at_seed = mmrs[ident(row)]
         session.flush()
+
+
+def _write_seeds(
+    session: OrmSession, event: Season, stage: EventStage, data: SeedWrite
+) -> list[EventEntrant]:
+    """The seed write of `set_seeds`, inside the caller's transaction: the rows
+    it seeded, in division and seed order."""
+    event_id = ident(event)
+    rows = cup_rounds.leg_field(session, stage, _live_entrants(session, event_id))
+    if data.division_id is not None:
+        rows = [row for row in rows if row.division_id == data.division_id]
+    mmrs = _mmrs(session, rows)
+    order = (
+        _from_previous_stage(session, event_id, stage, rows)
+        if data.source is SeedSource.previous_stage
+        else _seed_order(rows, mmrs, data)
+    )
+    kept = (
+        cup_divisions.seed_pinned(session, rows)
+        if cup_divisions.is_cup(event)
+        else {ident(row) for row in rows if row.manual_placement}
+    )
+    pinned = (
+        {}
+        if data.source is SeedSource.previous_stage
+        else {
+            ident(row): row.seed
+            for row in rows
+            if ident(row) in kept and row.seed is not None
+        }
+    )
+    held: dict[int | None, set[int | None]] = {}
+    for row in rows:
+        if ident(row) in pinned:
+            held.setdefault(row.division_id, set()).add(row.seed)
+    taken: dict[int | None, int] = {}
+    for row in order:
+        if ident(row) in pinned:
+            continue
+        number = taken.get(row.division_id, 0) + 1
+        while number in held.get(row.division_id, set()):
+            number += 1
+        taken[row.division_id] = number
+        row.seed = number
+        row.seed_source = data.source.value
+        row.mmr_at_seed = mmrs[ident(row)]
+    seeded = {ident(row) for row in order} | set(pinned)
+    for row in rows:
+        if ident(row) not in seeded:
+            row.seed = None
+    session.flush()
+    rows.sort(key=lambda row: (row.division_id or 0, row.seed or 0))
+    return rows
 
 
 def _nested(events: list[EventPublic]) -> list[EventPublic]:

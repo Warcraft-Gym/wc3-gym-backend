@@ -205,41 +205,49 @@ def undraw(event_id: int, stage_id: int, confirm: bool = False) -> dict[str, int
     stage whose series hold results keeps them unless the caller confirms.
     """
     with Session.begin() as session:
-        stage = _stage(session, event_id, stage_id)
-        if stage.format in (StageFormat.gnl, StageFormat.koth):
-            raise BadRequestError(
-                "A GNL or KOTH stage is not drawn, so it has no draw to undo"
-            )
-        event = session.get(Season, event_id)
-        if event is not None and event.closed_at is not None:
-            raise BadRequestError(
-                "The event is finished; reopen it before the draw is undone"
-            )
-        from app.services import cup_rounds
+        return undo_in(session, event_id, stage_id, confirm)
 
-        cup_rounds.hold_unfinished(session, stage)
-        rows = list(_series_of(session, stage_id))
-        if not rows:
-            raise BadRequestError("This stage holds no draw to undo")
-        following = _next_stage(session, event_id, stage)
-        if following is not None and _series_of(session, ident(following)):
-            raise BadRequestError("A later stage is drawn; undo its draw first")
-        results = sum(
-            1 for row in rows if scored(row) and row.entrant1_id and row.entrant2_id
+
+def undo_in(
+    session: OrmSession, event_id: int, stage_id: int, confirm: bool = False
+) -> dict[str, int]:
+    """The undo of `undraw`, inside the caller's transaction, so a seed change
+    can take a draw back and draw it again in one write."""
+    stage = _stage(session, event_id, stage_id)
+    if stage.format in (StageFormat.gnl, StageFormat.koth):
+        raise BadRequestError(
+            "A GNL or KOTH stage is not drawn, so it has no draw to undo"
         )
-        if results and not confirm:
-            raise ApiError(
-                409,
-                {
-                    "error": f"{results} series of this stage hold results; "
-                    "confirm to delete them"
-                },
-            )
-        for round_row in _rounds_of(session, stage_id):
-            session.delete(round_row)
-        stage.seeds_locked_at = None
-        session.flush()
-        return {"series": len(rows), "results": results}
+    event = session.get(Season, event_id)
+    if event is not None and event.closed_at is not None:
+        raise BadRequestError(
+            "The event is finished; reopen it before the draw is undone"
+        )
+    from app.services import cup_rounds
+
+    cup_rounds.hold_unfinished(session, stage)
+    rows = list(_series_of(session, stage_id))
+    if not rows:
+        raise BadRequestError("This stage holds no draw to undo")
+    following = _next_stage(session, event_id, stage)
+    if following is not None and _series_of(session, ident(following)):
+        raise BadRequestError("A later stage is drawn; undo its draw first")
+    results = sum(
+        1 for row in rows if scored(row) and row.entrant1_id and row.entrant2_id
+    )
+    if results and not confirm:
+        raise ApiError(
+            409,
+            {
+                "error": f"{results} series of this stage hold results; "
+                "confirm to delete them"
+            },
+        )
+    for round_row in _rounds_of(session, stage_id):
+        session.delete(round_row)
+    stage.seeds_locked_at = None
+    session.flush()
+    return {"series": len(rows), "results": results}
 
 
 def generate_next_round(
@@ -1177,6 +1185,25 @@ def _same_leg(session: OrmSession, stage: EventStage) -> list[ColumnElement[bool
             select(col(CupLegStage.stage_id)).where(col(CupLegStage.leg_id) == leg)
         )
     ]
+
+
+def generate_in(
+    session: OrmSession, event_id: int, stage_id: int, fill: SeedFill | None = None
+) -> dict[str, int]:
+    """`generate` inside the caller's transaction."""
+    return _generate(session, event_id, stage_id, fill=fill)
+
+
+def draw_round_in(
+    session: OrmSession, event_id: int, stage_id: int, fill: SeedFill | None = None
+) -> None:
+    """The first round of a stage that pairs by round, inside the caller's
+    transaction."""
+    _draw_round(session, event_id, stage_id, fill=fill)
+
+
+def draws_by_round(stage: EventStage) -> bool:
+    return _draws_by_round(stage)
 
 
 def stage_drawn(session: OrmSession, stage_id: int) -> bool:

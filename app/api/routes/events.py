@@ -606,6 +606,23 @@ def set_seeds(
     return service.set_seeds(event_id, stage_id, data)
 
 
+@router.put(
+    "/events/{event_id}/stages/{stage_id}/seeds/redraw",
+    dependencies=[Depends(require_event_runner)],
+)
+def redraw_seeds(
+    event_id: int,
+    stage_id: int,
+    data: SeedWrite,
+    service: EventServiceDep,
+    confirm: bool = False,
+) -> list[EventEntrantPublic]:
+    """Change the seeds of a cup's first stage after its draw and draw it again
+    from them, in one write. A stage whose series hold results answers 409
+    until the call sends `confirm=true`, which deletes those results."""
+    return service.redraw_seeds(event_id, stage_id, data, confirm)
+
+
 @router.post(
     "/events/{event_id}/stages/{stage_id}/seeds/lock",
     dependencies=[Depends(require_event_runner)],
