@@ -155,7 +155,7 @@ def _best_of_plan[T](value: T) -> T | str | None:
 
 
 # The modes a map is played as, in the order a list reads them
-MAP_MODES = ("1v1", "2v2", "3v3", "4v4", "5v5", "6v6", "8v8", "ffa")
+MAP_MODES = ("1v1", "2v2", "3v3", "4v4", "5v5", "6v6", "8v8", "ffa", "custom")
 
 
 def map_modes(value: object) -> str | None:

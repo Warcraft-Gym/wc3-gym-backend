@@ -145,6 +145,12 @@ def _fixed_map_id(
     """The map a fixed rule claims for game 1; it never enters the veto."""
     if "fixed" not in rules_of(rules.map_rules):
         return None
+    from app.services.cup_divisions import custom_game
+    from app.services.cup_reads import event_of
+
+    if custom_game(session, event_of(session, series)):
+        # a custom game cup's fixed map is the one map of its pool
+        return rules.map_pool[0] if rules.map_pool else None
     row = session.get(DBEventRound, series.round_id)
     return row.map_id if row else None
 

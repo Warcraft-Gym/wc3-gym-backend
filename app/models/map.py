@@ -48,6 +48,12 @@ class MapUpdate(MapBase):
     modes: Annotated[str | None, MapModes] = Field(default=None, max_length=100)
 
 
+class CustomMapCreate(SQLModel):
+    """A custom game's map an organizer names: the app finds it, or adds it."""
+
+    name: str = Field(min_length=1, max_length=50)
+
+
 class MapPublic(MapBase):
     id: int
 

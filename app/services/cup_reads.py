@@ -23,6 +23,7 @@ from app.core.exceptions import BadRequestError
 from app.core.map_order import cup_rules, default_rules, rules_of
 from app.models.base import ident
 from app.models.cup_series import CupSeries, CupSeriesPublic
+from app.models.cup_settings import CupSettings
 from app.models.cup_team import CupTeamMember
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
@@ -59,6 +60,11 @@ def rules_of(session: OrmSession, row: CupSeries) -> CupRules:
     stage = session.get(EventStage, round_.stage_id) if round_.stage_id else None
     pool = [link.map_id for link in map_pool(session, event)]
     best_of = round_.best_of or (stage.best_of if stage else None) or DEFAULT_BEST_OF
+    from app.services.cup_divisions import custom_game
+
+    if custom_game(session, event):
+        # a custom game cup plays every game on its one map: a fixed map each game
+        return CupRules(",".join(["fixed"] * best_of), best_of, pool)
     if event.veto_by_best_of:
         return CupRules(cup_rules(best_of), best_of, pool)
     stage_rules = stage.map_rules if stage else None
@@ -137,17 +143,32 @@ def fill(
             col(DBEventRound.best_of),
             col(EventStage.map_rules),
             col(EventStage.best_of),
+            col(CupSettings.custom_game),
         )
         .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
         .join(Season, col(Season.id) == col(DBEventRound.season_id))
         .outerjoin(EventStage, col(EventStage.id) == col(DBEventRound.stage_id))
+        .outerjoin(CupSettings, col(CupSettings.event_id) == col(Season.id))
         .where(col(CupSeries.id).in_(by_id))
     ).all()
     events: dict[int, int] = {}
-    for series_id, event_id, by_best_of, round_best, stage_rules, stage_best in found:
+    for (
+        series_id,
+        event_id,
+        by_best_of,
+        round_best,
+        stage_rules,
+        stage_best,
+        custom,
+    ) in found:
         best_of = round_best or stage_best or DEFAULT_BEST_OF
         map_rules = (
-            cup_rules(best_of) if by_best_of else stage_rules or default_rules(best_of)
+            # a custom game cup plays every game on its one map
+            ",".join(["fixed"] * best_of)
+            if custom
+            else cup_rules(best_of)
+            if by_best_of
+            else stage_rules or default_rules(best_of)
         )
         events[series_id] = event_id
         for public in publics:

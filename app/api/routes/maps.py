@@ -14,7 +14,14 @@ from app.api.deps import (
 from app.api.search import SearchQuery
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.security import is_admin
-from app.models.map import LadderMapNames, LadderMapRow, MapCreate, MapPublic, MapUpdate
+from app.models.map import (
+    CustomMapCreate,
+    LadderMapNames,
+    LadderMapRow,
+    MapCreate,
+    MapPublic,
+    MapUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +37,18 @@ router = APIRouter(tags=["maps"])
 def add_map(data: MapCreate, service: MapServiceDep) -> MapPublic:
     """Create a new map with the provided details."""
     return service.add(data)
+
+
+@router.post(
+    "/maps/custom",
+    status_code=201,
+    response_model=MapPublic,
+    dependencies=[Depends(require_organizer)],
+)
+def add_custom_map(data: CustomMapCreate, service: MapServiceDep) -> MapPublic:
+    """An organizer names a custom game's map: the app's map of that name, or a
+    new one marked `custom`. An admin adds its picture on the Maps page."""
+    return service.add_custom(data.name)
 
 
 @router.put(

@@ -104,6 +104,8 @@ BEFORE_CUP_ROUNDS = "c7d2e9a4f183"
 BEFORE_CUP_RECURRENCE = "d3b8f1a6c925"
 # The revision before a cup lobby held its map
 BEFORE_LOBBY_MAP = "e5c1a9d7b246"
+# The revision before a cup could be a custom game
+BEFORE_CUSTOM_GAME = "f2a6c3d8b417"
 
 
 def comparable(
@@ -1890,3 +1892,31 @@ def test_the_lobby_map_comes_and_goes(tmp_path: Path) -> None:
     downgrade_to(url, BEFORE_LOBBY_MAP)
     columns = {c["name"] for c in inspect(create_engine(url)).get_columns("cup_series")}
     assert "lobby_map_id" not in columns
+
+
+def test_the_custom_game_switch_comes_and_goes(tmp_path: Path) -> None:
+    """Every cup's settings take the custom game switch, off, and give it back."""
+    url = fresh_database(tmp_path, "custom_game")
+    upgrade_to(url, BEFORE_CUSTOM_GAME)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) "
+                "VALUES (1, 'Cup', 1, 'cup')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO cup_settings (event_id, uses_divisions) VALUES (1, 0)")
+        )
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT event_id, custom_game FROM cup_settings")
+        ).all() == [(1, False)]
+
+    downgrade_to(url, BEFORE_CUSTOM_GAME)
+    assert "custom_game" not in {
+        c["name"] for c in inspect(create_engine(url)).get_columns("cup_settings")
+    }

@@ -37,7 +37,14 @@ from app.models.series_game import SeriesGamePublic
 from app.models.series_side import LobbySidesWrite, PlacesWrite
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
 from app.models.user import User
-from app.services import cup_engine, cup_reads, cup_veto, organizers, series_games
+from app.services import (
+    cup_divisions,
+    cup_engine,
+    cup_reads,
+    cup_veto,
+    organizers,
+    series_games,
+)
 
 NOT_AUTHORIZED = {"error": "not_authorized_for_this_series"}
 
@@ -396,6 +403,14 @@ def _offers(session: OrmSession, row: CupSeries) -> dict[int, int | None]:
     on the map the veto left, every later game on the next pick of the side
     that lost. Another cup offers none."""
     event = cup_reads.event_of(session, row)
+    if cup_divisions.custom_game(session, event):
+        # a custom game cup plays every game on its one map
+        rules = cup_reads.rules_of(session, row)
+        return (
+            dict.fromkeys(range(1, rules.best_of + 1), rules.map_pool[0])
+            if rules.map_pool
+            else {}
+        )
     if not event.veto_by_best_of:
         return {}
     rules = cup_reads.rules_of(session, row)

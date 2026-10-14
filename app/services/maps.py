@@ -1,10 +1,10 @@
 from collections.abc import Callable, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlmodel import col
 
 from app.core.db import Session
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
 from app.models.map import LadderMapRow, Map, MapCreate, MapPublic, MapUpdate
@@ -35,6 +35,41 @@ class MapService:
         with Session.begin() as session:
             new_map = Map.add(session, map.model_dump())
             return MapPublic.model_validate(new_map)
+
+    def add_custom(self, name: str) -> MapPublic:
+        """The custom game map of that name: the one the app holds under it as
+        its name or its short name, or a new map marked `custom`, its short
+        name kept apart from every other map's."""
+        wanted = name.strip()
+        if not wanted:
+            raise BadRequestError("Name the map")
+        key = wanted.lower()
+        with Session.begin() as session:
+            found = session.scalars(
+                select(Map).where(
+                    or_(
+                        func.lower(func.trim(col(Map.name))) == key,
+                        func.lower(func.trim(col(Map.shortname))) == key,
+                    )
+                )
+            ).first()
+            if found is not None:
+                return MapPublic.model_validate(found)
+            taken = set(
+                session.scalars(
+                    select(func.lower(func.trim(col(Map.shortname)))).where(
+                        func.lower(func.trim(col(Map.shortname))).like(f"{key[:40]}%")
+                    )
+                )
+            )
+            short, number = wanted[:50], 2
+            while short.lower() in taken:
+                short = f"{wanted[:44]} ({number})"
+                number += 1
+            made = Map(name=wanted, shortname=short, modes="custom")
+            session.add(made)
+            session.flush()
+            return MapPublic.model_validate(made)
 
     def update(self, map_id: int, map: MapUpdate) -> MapPublic:
         with Session.begin() as session:

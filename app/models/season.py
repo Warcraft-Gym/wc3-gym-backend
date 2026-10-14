@@ -714,6 +714,8 @@ class EventPublic(SQLModel):
     children: list["EventPublic"] = []
     # A cup's choice to split into divisions; null on any other kind and on a list read
     uses_divisions: bool | None = None
+    # A cup played as a custom game on one map; null on any other kind and on a list read
+    custom_game: bool | None = None
     # A cup played over rounds: its rounds in order; null on any other event and on a list read
     cup_legs: list[CupLegPublic] | None = None
     # A cup made from a recurring rule: the rule; null otherwise and on a list read
@@ -772,6 +774,8 @@ class EventCreate(SQLModel):
     # and the points each place of a round pays; read on a cup alone
     legs: list[CupLegWrite] = []
     points_by_place: list[int] | None = None
+    # A custom game cup: one map in `map_ids`, no veto, every game on it; read on a cup alone
+    custom_game: bool = False
     # A cup that repeats on a rule from the start: the rule, set up with the cup
     recurrence: CupRecurrenceWrite | None = None
     # How many series one fixture holds, and a fixture pairs two team

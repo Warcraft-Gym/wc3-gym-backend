@@ -492,6 +492,7 @@ class EventService:
                     "legs",
                     "points_by_place",
                     "recurrence",
+                    "custom_game",
                 }
             )
             _hold_bounds(fields)
@@ -508,6 +509,13 @@ class EventService:
                 else [_default_stage(event)]
             )
             cup = cup_divisions.is_cup(event)
+            if data.custom_game:
+                if not cup:
+                    raise BadRequestError("Only a cup is played as a custom game")
+                if len(set(data.map_ids)) != 1:
+                    raise BadRequestError("A custom game cup is played on one map")
+                # every game is played on the cup's one map, so nothing is vetoed
+                event.veto_by_best_of = False
             if cup and data.legs:
                 # every round of the cup plays its own copy of the stages, and
                 # checks its players in per round rather than once for the cup
@@ -522,6 +530,7 @@ class EventService:
                     event,
                     data.uses_divisions,
                     cup_rounds.points_text(data.points_by_place) if data.legs else None,
+                    data.custom_game,
                 )
             if data.recurrence is not None:
                 if not cup:
@@ -648,6 +657,8 @@ class EventService:
                 raise BadRequestError(
                     "A series of this event has started its veto; the pool stays"
                 )
+            if cup_divisions.custom_game(session, event) and len(set(map_ids)) != 1:
+                raise BadRequestError("A custom game cup is played on one map")
             session.execute(
                 delete(DBMapSeason).where(col(DBMapSeason.season_id) == event_id)
             )
@@ -1955,6 +1966,7 @@ def _public(
         return public
     public.checkin_open = event.checkin_enabled and checkin_open(event, event.rounds)
     public.uses_divisions = cup_divisions.uses_divisions(session, event)
+    public.custom_game = cup_divisions.custom_game(session, event)
     if cup_divisions.is_cup(event):
         public.cup_legs = cup_rounds.legs_of(session, ident(event)) or None
         public.cup_recurrence = cup_recurrence.ref_of(session, ident(event))

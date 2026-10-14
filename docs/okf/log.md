@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-15
+
+* **Add**: custom game cups. `POST /events` for a cup takes `custom_game` with exactly one map: no veto, every game of a series on that map (`fixed` rules, the veto board's fixed map), lobbies on it too, and the pool stays one map ([cup_settings](data/tables/cup_settings.md) `custom_game`). `POST /maps/custom` lets an organizer name a custom map, found or added with the new `custom` mode ([maps](data/tables/maps.md)). The [events module](concepts/events-module.md#cup-series) states it.
+
 ## 2026-10-14
 
 * **Add**: team free for all. A team cup's FFA lobby seats cup teams; the lobby read names each seat's team and players, and any player of a seated team enters the places. The [events module](concepts/events-module.md#cup-series) states it.

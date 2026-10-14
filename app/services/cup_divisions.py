@@ -44,15 +44,30 @@ def uses_divisions(session: OrmSession, event: Season) -> bool | None:
 
 
 def write_settings(
-    session: OrmSession, event: Season, divisions: bool, points: str | None = None
+    session: OrmSession,
+    event: Season,
+    divisions: bool,
+    points: str | None = None,
+    custom_game: bool = False,
 ) -> None:
-    """The settings row of a new cup: its divisions, and the points table of a
-    cup played over rounds."""
+    """The settings row of a new cup: its divisions, the points table of a cup
+    played over rounds, and whether it is a custom game on one map."""
     session.add(
         CupSettings(
-            event_id=ident(event), uses_divisions=divisions, points_by_place=points
+            event_id=ident(event),
+            uses_divisions=divisions,
+            points_by_place=points,
+            custom_game=custom_game,
         )
     )
+
+
+def custom_game(session: OrmSession, event: Season) -> bool | None:
+    """Whether the cup is a custom game on one map; null for any other kind."""
+    if not is_cup(event):
+        return None
+    row = session.get(CupSettings, ident(event))
+    return row is not None and row.custom_game
 
 
 def set_uses_divisions(session: OrmSession, event: Season, divisions: bool) -> None:
