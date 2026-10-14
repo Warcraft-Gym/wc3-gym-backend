@@ -4,7 +4,7 @@ no organizer, so their writes stay the admins'."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
 
 from app.api.deps import (
     EventServiceDep,
@@ -21,6 +21,7 @@ from app.api.deps import (
     require_event_runner,
 )
 from app.api.search import SearchQuery
+from app.models.announcement import AnnouncementState, AnnouncementWrite
 from app.models.cup_overall import CupOverallPublic
 from app.models.cup_recurrence import (
     CupOccurrenceCreate,
@@ -70,6 +71,7 @@ from app.models.season import (
 from app.models.series import ChallengerAdd, StageSeriesPublic, StageSeriesRow
 from app.services import (
     awards,
+    cup_announcements,
     cup_engine,
     cup_recurrence,
     cup_rounds,
@@ -164,11 +166,13 @@ def add_event(
     service: EventServiceDep,
     gnl: GnlEventServiceDep,
     claims: RequireOrganizer,
+    background: BackgroundTasks,
 ) -> EventPublic:
     """Create an event, applying the creation rules of the league it runs in.
 
     An organizer creates a small event and runs it from then on; an admin
-    creates any event.
+    creates any event. A cup created published with its signups open is
+    announced in Discord once the answer is out.
     """
     organizers.hold_to_small_events(
         claims, data.model_dump(), [stage.format for stage in data.stages]
@@ -178,6 +182,7 @@ def add_event(
     event = service.add(data, str(claims["sub"]))
     if claims["sub"] != "admin":
         organizers.add_to_event(event.id, claims["sub"], claims["sub"])
+    background.add_task(cup_announcements.announce_open, event.id)
     return event
 
 
@@ -187,10 +192,14 @@ def update_event(
     data: EventUpdate,
     service: EventServiceDep,
     claims: RequireEventRunner,
+    background: BackgroundTasks,
 ) -> EventPublic:
-    """Change the event fields the body names."""
+    """Change the event fields the body names. A cup that now reads
+    published with its signups open is announced, the first time only."""
     organizers.hold_to_small_events(claims, data.model_dump(exclude_unset=True))
-    return service.update(event_id, data)
+    event = service.update(event_id, data)
+    background.add_task(cup_announcements.announce_open, event_id)
+    return event
 
 
 @router.delete(
@@ -222,13 +231,16 @@ def set_pool(
 
 
 @router.post("/events/{event_id}/finish", dependencies=[Depends(require_event_runner)])
-def finish_event(event_id: int) -> list[EventAwardPublic]:
+def finish_event(event_id: int, background: BackgroundTasks) -> list[EventAwardPublic]:
     """Close the event: write the places its last stage's table pays.
 
     The answer is the award list, best place first per division. Closing an
-    event that is already closed rewrites its places.
+    event that is already closed rewrites its places. A cup posts its top
+    three in Discord, and a second close edits that card.
     """
-    return awards.finish(event_id)
+    paid = awards.finish(event_id)
+    background.add_task(cup_announcements.announce_result, event_id)
+    return paid
 
 
 @router.post("/events/{event_id}/reopen", dependencies=[Depends(require_event_runner)])
@@ -376,6 +388,20 @@ def replace_team_member(
 ) -> EventEntrantPublic:
     """Put another player in a team's place of one who leaves it, before it plays."""
     return cup_teams.replace_member(event_id, team_id, user_id, data.user_id)
+
+
+@router.get("/me/announcements")
+def get_my_announcements(claims: RequireLogin) -> AnnouncementState:
+    """Whether Home offers the announcement switch, and where it stands."""
+    return cup_announcements.state_of(claims)
+
+
+@router.put("/me/announcements")
+def set_my_announcements(
+    data: AnnouncementWrite, claims: RequireLogin
+) -> AnnouncementState:
+    """Take or leave the cup announcement role in the guild."""
+    return cup_announcements.subscribe(claims, data.subscribed)
 
 
 @router.get("/me/team-invites")
@@ -606,11 +632,17 @@ def delete_cup_recurrence(recurrence_id: int, claims: RequireLogin) -> None:
 
 @router.post("/cup-recurrences/{recurrence_id}/occurrences", status_code=201)
 def create_cup_occurrence(
-    recurrence_id: int, data: CupOccurrenceCreate, claims: RequireLogin
+    recurrence_id: int,
+    data: CupOccurrenceCreate,
+    claims: RequireLogin,
+    background: BackgroundTasks,
 ) -> EventPublic:
     """Make the rule's cup on one of its coming days, a copy of the latest cup
-    with its organizers; a runner of that cup alone."""
-    return cup_recurrence.create_occurrence(recurrence_id, data.on, claims)
+    with its organizers; a runner of that cup alone. A published copy with
+    its signups open is announced."""
+    made = cup_recurrence.create_occurrence(recurrence_id, data.on, claims)
+    background.add_task(cup_announcements.announce_open, made.id)
+    return made
 
 
 @router.put(

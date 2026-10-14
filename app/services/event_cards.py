@@ -130,8 +130,9 @@ def _buttons(event: EventPublic) -> dict[str, Any]:
     }
 
 
-def event_card(event: EventPublic) -> dict[str, Any]:
-    """The card an admin posts about an event, with its two buttons."""
+def card_embed(event: EventPublic) -> dict[str, Any]:
+    """What the card says about an event: its name, when it runs, how it plays,
+    how many are in, how to enter and its links. A cup's announcement shows it too."""
     lines = [
         f"## {md(event_label(event.name, event.league_short_name))}",
         _when(event),
@@ -140,12 +141,12 @@ def event_card(event: EventPublic) -> dict[str, Any]:
         POLICY[event.signup_policy] if event.signups_open else SHUT,
         *_links(event),
     ]
-    return {
-        "embeds": [
-            {"description": "\n".join(lines), "color": series_cards.COLOR},
-        ],
-        "components": [_buttons(event)],
-    }
+    return {"description": "\n".join(lines), "color": series_cards.COLOR}
+
+
+def event_card(event: EventPublic) -> dict[str, Any]:
+    """The card an admin posts about an event, with its two buttons."""
+    return {"embeds": [card_embed(event)], "components": [_buttons(event)]}
 
 
 def _row(event_id: int, user_id: int) -> MemberEventRow | None:

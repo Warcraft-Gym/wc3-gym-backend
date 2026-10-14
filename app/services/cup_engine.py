@@ -67,6 +67,29 @@ BY_ROUND = (StageFormat.swiss,)
 type SeedFill = Callable[[OrmSession, EventStage], None]
 
 
+# The draws a transaction made, as (event, stage, round or None, round name);
+# the cup announcements post them once it commits, so a refused draw posts nothing
+DRAWS = "cup_draws"
+
+
+def note_draw(
+    session: OrmSession,
+    event_id: int,
+    stage_id: int,
+    round_row: DBEventRound | None = None,
+) -> None:
+    """Mark a draw for the announcement after the commit: a stage's first draw,
+    or one more round of a stage that draws round by round."""
+    session.info.setdefault(DRAWS, []).append(
+        (
+            event_id,
+            stage_id,
+            ident(round_row) if round_row is not None else None,
+            round_row.name if round_row is not None else None,
+        )
+    )
+
+
 def series_wins(session: OrmSession, row: CupSeries) -> int:
     """The maps a win takes, from the best-of the series plays under."""
     return wins_of(cup_reads.rules_of(session, row).best_of)
@@ -207,6 +230,7 @@ def _generate(
     for row in walkovers:
         on_scored(session, row)
     stage.seeds_locked_at = stage.seeds_locked_at or utcnow()
+    note_draw(session, event_id, stage_id)
     return {"series": len(made), "rounds": len(rounds) - len(held)}
 
 
@@ -345,6 +369,12 @@ def _draw_round(
             row.sequence = sequence
             made.append(row)
     session.flush()
+    # The stage's first round is its draw; every later round is a round drawn
+    if not drawn:
+        note_draw(session, event_id, stage_id)
+    else:
+        for round_row in drew.values():
+            note_draw(session, event_id, stage_id, round_row)
     return made, drew
 
 

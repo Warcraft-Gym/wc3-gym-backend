@@ -21,6 +21,7 @@ SQLModel.metadata.naming_convention = {
 
 from app.models import (
     admin_grant,
+    announcement,
     base,
     clerk_account,
     cup_overall,

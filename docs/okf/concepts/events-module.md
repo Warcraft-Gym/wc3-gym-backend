@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, cups on tables and an engine of their own, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T19:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -119,7 +119,7 @@ One rule answers every write on a cup series: the player a side names, or a memb
 - A free for all lobby takes its places with `PUT /cup-series/{id}/places`, from a player seated in it or a runner: every seat once, places 1 to the seat count, no tie, and no place while a seat waits for its player. A round whose every lobby has places seats the round after it; a corrected lobby seats that round again while it is unplayed, and once it has a result the correction answers 409. `DELETE /cup-series/{id}/result` on a lobby is a runner's: its places go and the round after it gives back its seats, with the same 409. Each lobby plays one map of the cup's pool ([cup_series](../data/tables/cup_series.md) `lobby_map_id`), drawn with the lobby, and a free for all stage draws only with a pool. A team cup plays a team free for all the same way: each seat holds a cup team, the lobby read names the team and its players in every seat, and any player of a seated team enters the places; a lobby of two seats is drawn as a series of two sides. A stage of heats down to a final ranks the deepest round a player reached first, then the place taken there, then the points, so the final decides the top places; one lobby played several times ranks on the points.
 - `GET` and `PUT /cup-series/{id}/veto` serve the board to a player of either side and to a runner. A player takes the steps of their own side and takes back what they entered; a runner records any step and takes back the last one.
 
-A cup series posts no Discord card, takes no replay and no cast, and shows in no player history, head-to-head or Home list. The `/series` and `/player-series` routes answer `series` rows alone.
+A cup series posts no Discord card of its own; the cup announces itself, its draws and its top three to the members who opt in, see [cup announcements](discord-integration.md#cup-announcements). A cup series takes no replay and no cast, and shows in no player history, head-to-head or Home list. The `/series` and `/player-series` routes answer `series` rows alone.
 
 # Cup rounds
 

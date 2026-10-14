@@ -1327,6 +1327,27 @@ def test_the_home_cup_reads_do_not_grow_with_the_cups(
 HOME_CUP_READS = {"/me/cup-series": 12, "/me/events": 12}
 
 
+def test_the_announcement_switch_reads_in_fixed_statements(
+    client: Client, member: Callable[..., dict[str, str]]
+) -> None:
+    """GET /me/announcements reads the two settings and the caller's row."""
+    from app.models.settings import Settings
+
+    with Session.begin() as session:
+        session.add(Settings(key="announcement_channel_id", value="announce"))
+        session.add(Settings(key="announcement_role_id", value="role"))
+    headers = member("1")
+    assert client.get("/me/announcements", headers=headers).status_code == 200
+    with count_statements() as tally:
+        response = client.get("/me/announcements", headers=headers)
+    assert response.status_code == 200, response.text
+    assert tally[0] <= ANNOUNCEMENT_READ
+
+
+# Statements of one announcement switch read: the session's account, the settings, the row
+ANNOUNCEMENT_READ = 5
+
+
 def test_the_signups_read_costs_seven_statements(league: dict[str, Any]) -> None:
     """The season, two for the current W3C season, the signups with their users,
     one statement for the signups of those users with their seasons, one for

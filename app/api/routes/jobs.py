@@ -12,7 +12,14 @@ from app.models.egress_ledger import EgressLedger
 from app.models.egress_snapshot import EgressSnapshotResult, EgressWindow
 from app.models.types import utcnow
 from app.models.w3c_stats import W3CSyncResult
-from app.services import casts, discord_posts, egress, egress_monitor, egress_snapshot
+from app.services import (
+    casts,
+    cup_announcements,
+    discord_posts,
+    egress,
+    egress_monitor,
+    egress_snapshot,
+)
 from app.services.users import stalest_members
 
 log = logging.getLogger(__name__)
@@ -42,10 +49,17 @@ def cast_reminders(credentials: Credentials) -> dict[str, int]:
     show in that Worker's Cron Events. A series already carrying its card is
     skipped, so a run that repeats posts nothing twice. The Worker holds its own
     secret, so a leak there triggers nothing but this job.
+
+    The same run calls every cup, and every round of a cup played over
+    rounds, that starts within the hour to check in, each once.
     """
     only_the_scheduler(credentials, "CLOUDFLARE_CRON_SECRET")
-    due = casts.starting_soon(utcnow())
-    return {"posted": sum(discord_posts.post_reminder(row) for row in due)}
+    now = utcnow()
+    due = casts.starting_soon(now)
+    return {
+        "posted": sum(discord_posts.post_reminder(row) for row in due),
+        "cup_reminders": cup_announcements.remind_due(now),
+    }
 
 
 @router.get("/jobs/w3c-sync")
