@@ -95,10 +95,10 @@ class Caller:
 
     def hold_seat_or_runner(self) -> None:
         """Refuse a caller who sits in no seat of the lobby and does not run the
-        cup: every player of a lobby may enter its places."""
-        if self.user_id is not None and any(
-            side.user_id == self.user_id
-            for side in cup_engine.lobby_seats(self._session, self._row)
+        cup: every player of a lobby may enter its places, and in a team free
+        for all every player of a team seated in it."""
+        if self.user_id is not None and cup_engine.seated_in(
+            self._session, self._row, self.user_id
         ):
             return
         self.hold_runner()

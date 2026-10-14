@@ -2,6 +2,7 @@
 
 ## 2026-10-14
 
+* **Add**: team free for all. A team cup's FFA lobby seats cup teams; the lobby read names each seat's team and players, and any player of a seated team enters the places. The [events module](concepts/events-module.md#cup-series) states it.
 * **Add**: free for all cups play on. A player seated in a lobby enters its places, which must name every seat once from 1; a correction seats the round after again while it is unplayed, and a runner clears a lobby. Every lobby plays a map of the pool (`cup_series.lobby_map_id`, `PUT /cup-series/{id}/lobby-map`), and heats rank on the deepest round reached, so the final decides the top places. The [events module](concepts/events-module.md#cup-series) and [cup_series](data/tables/cup_series.md) state it.
 * **Add**: a cup's rounds change after creation: rename or move one (`PUT /events/{id}/legs/{leg_id}`), add one after the last (`POST /events/{id}/legs`), remove one not drawn (`DELETE /events/{id}/legs/{leg_id}`). `POST /events` for a cup takes its recurring rule as `recurrence`. [cup_leg](data/tables/cup_leg.md), [cup_recurrence](data/tables/cup_recurrence.md) and the [events module](concepts/events-module.md#cup-rounds) state it.
 * **Update**: a seed change after the draw that names a division takes back and draws that division alone; the other divisions keep their series and results. The [events module](concepts/events-module.md#entrants-seeds-divisions) states it.

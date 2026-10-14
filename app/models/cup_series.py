@@ -186,6 +186,14 @@ def _pick_map(series: CupSeries, side: str) -> str | None:
     return None
 
 
+class CupSeriesSidePublic(SeriesSidePublic):
+    """One seat of a cup lobby: a player, or in a team free for all the cup team
+    in it with its players."""
+
+    team: TeamSummaryPublic | None = None
+    players: list[UserSummaryPublic] = []
+
+
 class LobbyMapPublic(SQLModel):
     """The map a lobby is played on."""
 
@@ -234,7 +242,7 @@ class CupSeriesPublic(PublicModel):
     team2: TeamSummaryPublic | None = None
     side_size: int = 1
     # Every seat of a lobby, or every player of a team side, in side order
-    sides: list[SeriesSidePublic] = []
+    sides: list[CupSeriesSidePublic] = []
     # The map a lobby is played on; null on a two-sided series
     lobby_map: LobbyMapPublic | None = None
     slot1_from_series_id: int | None = None

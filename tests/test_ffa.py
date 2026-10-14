@@ -511,3 +511,46 @@ def test_an_ffa_stage_draws_only_with_a_map_pool(
     assert refused.json() == {
         "error": "Add at least one map to the pool; every lobby plays one"
     }
+
+
+def test_a_team_ffa_seats_teams_and_any_player_of_a_seated_team_reports(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+) -> None:
+    """Four teams of two share one lobby for two games; a seat names its team and
+    its players, and any player of a seated team reports the places."""
+    from tests.test_stage_engine import team_cup
+
+    event, stage, team_ids, tags = team_cup(
+        client,
+        auth_headers,
+        member,
+        StageFormat.ffa,
+        lobby_size=4,
+        swiss_rounds=2,
+        points_by_place="3,2,1,0",
+    )
+    with Session.begin() as session:
+        session.add_all(
+            DBMapSeason(season_id=event, map_id=map_id, position=position)
+            for position, map_id in enumerate(maps(2))
+        )
+    generate(client, auth_headers, event, stage)
+
+    games = lobbies(client, event, stage)
+    assert len(games) == 2
+    seats = games[0]["sides"]
+    assert sorted(seat["team"]["id"] for seat in seats) == sorted(team_ids)
+    assert all(len(seat["players"]) == 2 for seat in seats)
+    assert all(seat["user_id"] is None for seat in seats)
+
+    # the second player of a seated team reports; a player outside the cup cannot
+    order = [seat["side_no"] for seat in seats]
+    assert play(client, member("99990"), games[0], order).status_code == 403
+    reported = play(client, member(tags[2][1]), games[0], order)
+    assert reported.status_code == 200, reported.text
+    assert sorted(seat["place"] for seat in reported.json()["sides"]) == [1, 2, 3, 4]
+    rows = table(client, event, stage)
+    assert [row["points"] for row in rows] == [3, 2, 1, 0]
+    assert {row["team_id"] for row in rows} == set(team_ids)

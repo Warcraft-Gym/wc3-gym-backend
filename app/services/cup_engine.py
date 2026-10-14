@@ -30,6 +30,7 @@ from app.models.cup_series import (
     CupSeries,
     CupSeriesPublic,
     CupSeriesSide,
+    CupSeriesSidePublic,
     CupStagePublic,
     LobbyMapPublic,
 )
@@ -48,7 +49,7 @@ from app.models.map import Map
 from app.models.relationships import DBEventRound, DBMapSeason, EventRoundPublic
 from app.models.season import Season
 from app.models.series import ResultKindWrite
-from app.models.series_side import LobbySidesWrite, PlacesWrite, SeriesSidePublic
+from app.models.series_side import LobbySidesWrite, PlacesWrite
 from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
 from app.services import cup_reads, organizers
@@ -522,6 +523,32 @@ def set_lobby_map(session: OrmSession, row: CupSeries, map_id: int) -> None:
 NEXT_PLAYED = "The next round has results; clear them first"
 
 
+def seated_in(session: OrmSession, row: CupSeries, user_id: int) -> bool:
+    """Whether the player sits in the lobby: in a seat of their own, or as a
+    player of the cup team a seat holds."""
+    seats = _seats(session, ident(row))
+    if any(side.user_id == user_id for side in seats):
+        return True
+    entrant_ids = [side.entrant_id for side in seats if side.entrant_id is not None]
+    if not entrant_ids:
+        return False
+    return (
+        session.scalar(
+            select(col(CupTeamMember.user_id))
+            .join(
+                EventEntrant,
+                col(EventEntrant.cup_team_id) == col(CupTeamMember.team_id),
+            )
+            .where(
+                col(EventEntrant.id).in_(entrant_ids),
+                col(CupTeamMember.user_id) == user_id,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def lobby_seats(session: OrmSession, row: CupSeries) -> list[CupSeriesSide]:
     """The seats of a free for all lobby; empty for a two-sided series."""
     return list(_seats(session, ident(row)))
@@ -768,7 +795,7 @@ def _fill_sides(session: OrmSession, rows: Sequence[CupSeriesPublic]) -> None:
     wanted = [row.id for row in rows]
     if not wanted:
         return
-    found: dict[int, list[SeriesSidePublic]] = {}
+    found: dict[int, list[CupSeriesSidePublic]] = {}
     for side, user in session.execute(
         select(CupSeriesSide, User)
         .outerjoin(User, col(User.id) == col(CupSeriesSide.user_id))
@@ -776,7 +803,7 @@ def _fill_sides(session: OrmSession, rows: Sequence[CupSeriesPublic]) -> None:
         .order_by(col(CupSeriesSide.series_id), col(CupSeriesSide.side_no))
     ):
         found.setdefault(side.series_id, []).append(
-            SeriesSidePublic(
+            CupSeriesSidePublic(
                 side_no=side.side_no,
                 user_id=side.user_id or None,
                 user=UserSummaryPublic.from_user(user) if user else None,
@@ -786,6 +813,46 @@ def _fill_sides(session: OrmSession, rows: Sequence[CupSeriesPublic]) -> None:
         )
     for row in rows:
         row.sides = found.get(row.id, [])
+    _fill_seat_teams(
+        session,
+        [
+            seat
+            for row in rows
+            if row.entrant1_id is None and row.entrant2_id is None
+            for seat in row.sides
+        ],
+    )
+
+
+def _fill_seat_teams(session: OrmSession, seats: Sequence[CupSeriesSidePublic]) -> None:
+    """Name the cup team in every lobby seat a team holds, with its players, in
+    two reads; a seat of a player stays as it is."""
+    entrant_ids = {seat.entrant_id for seat in seats if seat.entrant_id is not None}
+    if not entrant_ids:
+        return
+    teams = {
+        entrant_id: team
+        for entrant_id, team in session.execute(
+            select(col(EventEntrant.id), CupTeam)
+            .join(CupTeam, col(CupTeam.id) == col(EventEntrant.cup_team_id))
+            .where(col(EventEntrant.id).in_(entrant_ids))
+        )
+    }
+    if not teams:
+        return
+    players: dict[int, list[UserSummaryPublic]] = {}
+    for member, user in session.execute(
+        select(CupTeamMember, User)
+        .join(User, col(User.id) == col(CupTeamMember.user_id))
+        .where(col(CupTeamMember.team_id).in_({ident(team) for team in teams.values()}))
+        .order_by(col(CupTeamMember.captain).desc(), col(User.name))
+    ):
+        players.setdefault(member.team_id, []).append(UserSummaryPublic.from_user(user))
+    for seat in seats:
+        team = teams.get(seat.entrant_id or 0)
+        if team is not None:
+            seat.team = team_summary(team)
+            seat.players = players.get(ident(team), [])
 
 
 def _fill_seeds(rows: Sequence[CupSeriesPublic], held: Sequence[CupSeries]) -> None:
