@@ -4,7 +4,7 @@ title: cup_occurrence
 description: One cup made from a recurring rule, on one of the rule's days.
 resource: ../../../../app/models/cup_recurrence.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-13T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T21:00:00Z }
 sources:
   - id: model
     resource: ../../../../app/models/cup_recurrence.py
@@ -28,5 +28,5 @@ Primary key `event_id`, a foreign key to [event](event.md), `ON DELETE CASCADE`.
 
 # Rules
 
-- `POST /cup-recurrences/{id}/occurrences` with `on` makes the cup of a coming day the rule names, for a runner of the latest cup: a copy of the latest cup with its sign-up rules, stages, map pool, divisions choice, points table and organizers, its start on that day at the rule's time, and on a cup over rounds every round moved by the same days. A day that has passed or that the rule does not name answers 400, and a day with its cup answers 409.
+- `POST /cup-recurrences/{id}/occurrences` with `on` makes the cup of a coming day the rule names, for a runner of the latest cup: a copy of the latest cup with its sign-up rules, stages, map pool, divisions choice, custom game choice, points table and organizers, its start on that day at the rule's time, and on a cup over rounds every round moved by the same days. A day that has passed or that the rule does not name answers 400, and a day with its cup answers 409.
 - The full event read of a cup made from a rule answers it as `cup_recurrence`, its id and name.

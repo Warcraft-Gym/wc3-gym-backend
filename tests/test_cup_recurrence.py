@@ -257,3 +257,23 @@ def test_a_rule_without_a_start_creates_no_cup(
         headers=auth_headers,
     )
     assert signup.status_code == 400, signup.text
+
+
+def test_a_custom_game_cup_repeats_as_a_custom_game_cup(
+    client: Client, auth_headers: Headers
+) -> None:
+    from tests.test_cup_best_of import maps
+
+    [one_map] = maps(1)
+    _, made = repeat(
+        client,
+        auth_headers,
+        map_ids=[one_map],
+        custom_game=True,
+        veto_by_best_of=True,
+    )
+    response = occur(client, auth_headers, made["id"], "2030-01-11")
+    assert response.status_code == 201, response.text
+    copy = response.json()
+    assert (copy["custom_game"], copy["veto_by_best_of"]) == (True, False)
+    assert [row["id"] for row in copy["maps"]] == [one_map]

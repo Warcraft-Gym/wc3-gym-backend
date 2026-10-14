@@ -305,6 +305,7 @@ def _copy(
         ],
         map_ids=list(pool),
         uses_divisions=bool(settings and settings.uses_divisions),
+        custom_game=bool(settings and settings.custom_game),
         legs=[
             CupLegWrite(
                 name=leg.name,
