@@ -35,7 +35,7 @@ from app.models.cup_rounds import (
     CupLegUpdate,
     CupLegWrite,
 )
-from app.models.cup_series import CupStagePublic
+from app.models.cup_series import CupStagePublic, MyCupSeriesPublic
 from app.models.cup_settings import CupPinWrite
 from app.models.cup_team import (
     CupTeamAdd,
@@ -382,6 +382,15 @@ def replace_team_member(
 def get_my_team_invites(claims: RequireLogin) -> list[TeamInvitePublic]:
     """The team invitations the caller has not answered yet, newest first."""
     return cup_teams.invites_for(claims)
+
+
+@router.get("/me/cup-series")
+def get_my_cup_series(
+    users: UserServiceDep, claims: RequireLogin
+) -> list[MyCupSeriesPublic]:
+    """The cup series and lobbies the caller still has to play, each with its
+    cup, stage and round: one read for the home's events panel."""
+    return cup_engine.open_for(users.id_by_discord_id(claims["sub"]))
 
 
 @router.delete("/events/{event_id}/entrants/me", status_code=204)

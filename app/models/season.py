@@ -871,6 +871,15 @@ class CaptainFixture(SQLModel):
     played: int = 0
 
 
+class MemberCupTeam(SQLModel):
+    """The cup team the caller plays a team cup in, on their member row."""
+
+    id: int
+    name: str
+    # The caller captains it: they invite, take back and withdraw the team
+    captain: bool = False
+
+
 class MemberEventRow(SQLModel):
     """One row of the member home's events list, over every kind of event.
 
@@ -889,11 +898,13 @@ class MemberEventRow(SQLModel):
     end: date | None = None
     phase: EventPhase
     signups_open: bool
-    # The caller holds an entrant row, or a GNL signup, for this event
+    # The caller holds an entrant row, plays in a cup team that does, or holds
+    # a GNL signup, for this event
     joined: bool
     # The event's optional "Page" link; the home builds its own in-app link
     url: str | None = None
-    # The caller's own entrant row; null for a GNL signup, which holds no entrant
+    # The caller's own entrant row, or their cup team's; null for a GNL signup,
+    # which holds no entrant
     entrant_id: int | None = None
     # The race of every live entrant row of the caller, oldest row first
     entrant_races: list[str] = []
@@ -916,7 +927,8 @@ class MemberEventRow(SQLModel):
     # caller is in and the check-in is not open; `check_in` the window stands
     # open; `checked_in` the caller checked in already; `view` the event runs or
     # is finished, so the page reads the bracket or the standings; `closed`
-    # nothing is open to the caller yet.
+    # nothing is open to the caller yet. A player of a cup team reads
+    # `check_in`, `checked_in` or `view`: the team leaves on its own panel.
     action: MemberAction
     # The caller's own team's next fixture with places left, on an event he
     # holds a captain seat in; null for every other caller and every other event
@@ -925,3 +937,13 @@ class MemberEventRow(SQLModel):
     # holds a captain seat in that is not closed; empty for every other caller
     # and every other event
     captain_matches: list[CaptainFixture] = []
+    # How many players a team of a team cup fields; null on a 1v1 cup and on
+    # every other kind of event
+    team_size: int | None = None
+    # The cup team the caller plays in, as a player who accepted; null for a
+    # solo entrant, a caller who is only invited, and every other kind
+    cup_team: MemberCupTeam | None = None
+    # A cup whose stages play free for all lobbies; false on every other kind
+    ffa: bool = False
+    # A custom game cup, played on one map with no veto; false on every other kind
+    custom_game: bool = False

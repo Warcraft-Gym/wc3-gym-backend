@@ -15,6 +15,7 @@ from typing import Any, NamedTuple
 from sqlalchemy import (
     ColumnElement,
     Row,
+    and_,
     case,
     delete,
     distinct,
@@ -39,7 +40,7 @@ from app.core.query import QueryElement, QueryUtil
 from app.core.security import is_admin
 from app.models.base import ident
 from app.models.cup_series import CupSeries, CupVetoStep
-from app.models.cup_settings import CupPinWrite
+from app.models.cup_settings import CupPinWrite, CupSettings
 from app.models.cup_team import CupTeam, CupTeamInvite, CupTeamMember, team_summary
 from app.models.draft_series import DraftSeries
 from app.models.enums import (
@@ -88,6 +89,7 @@ from app.models.season import (
     EventPublic,
     EventUpdate,
     MemberAction,
+    MemberCupTeam,
     MemberEventRow,
     Season,
     series_counts,
@@ -155,8 +157,12 @@ _MEMBER_COLUMNS = load_only(
     rel(Season.series_per_round),
     rel(Season.page_url),
     rel(Season.round_end_zone),
+    rel(Season.team_size),
     raiseload=True,
 )
+
+# A player's own signup to a team cup, which takes a team instead
+TEAM_CUP_SIGNUP = "This cup signs teams up; sign a team up"
 
 # Newest first by when the event starts; an event with neither date sorts last
 NEWEST_FIRST = (
@@ -750,7 +756,8 @@ class EventService:
                 )
                 .order_by(col(Season.id).desc())
             ).all()
-            joined, races = _joined_events(session, user_id)
+            joined, races, teams = _joined_events(session, user_id)
+            formats = _cup_formats(session, events)
             ids = [event.id for event in events]
             counts = series_counts_by_event(session, ids)
             drawn = last_stage_drawn(session, ids)
@@ -783,6 +790,8 @@ class EventService:
                     _answer_time(event, rounds.get(event.id), answered),
                     fixtures.get(event.id) if event.id is not None else None,
                     every.get(event.id, []) if event.id is not None else [],
+                    teams.get(ident(event)),
+                    formats.get(ident(event), (False, False)),
                 )
                 for event in events
             ]
@@ -827,6 +836,9 @@ class EventService:
                     )
                 row = _enter(session, event, data, team_id=data.team_id)
             else:
+                # a team cup enters teams: its captain signs one up with its players
+                if event.kind is EventKind.cup and event.team_size:
+                    raise BadRequestError(TEAM_CUP_SIGNUP)
                 row = _enter(
                     session,
                     event,
@@ -1541,37 +1553,57 @@ def _day(event: Season) -> date | None:
 
 def _joined_events(
     session: OrmSession, user_id: int | None
-) -> tuple[dict[int, EventEntrant | None], dict[int, list[str]]]:
-    """The player's entrant row per event he joined, and the races of every one
-    of his rows there; a GNL signup has neither.
+) -> tuple[
+    dict[int, EventEntrant | None], dict[int, list[str]], dict[int, MemberCupTeam]
+]:
+    """The player's entrant row per event he joined, the races of every one of
+    his rows there, and the cup team he plays a team cup in; a GNL signup has
+    none of them.
 
     A key with no row is a season the player signed up for, which carries no
-    entrant; an event he never entered is no key at all. The same read answers
-    both maps, so an event that takes one entry per race costs no statement.
+    entrant; an event he never entered is no key at all. A player of a cup team
+    joined the cup through the team's row. The same read answers the three
+    maps, so an event that takes one entry per race costs no statement, and
+    neither does a team.
     """
     if user_id is None:
-        return {}, {}
-    entered = session.scalars(
-        select(EventEntrant)
+        return {}, {}, {}
+    member = and_(
+        col(CupTeamMember.team_id) == col(EventEntrant.cup_team_id),
+        col(CupTeamMember.user_id) == user_id,
+    )
+    entered = session.execute(
+        select(EventEntrant, col(CupTeam.name), col(CupTeamMember.captain))
         .options(
             load_only(
                 rel(EventEntrant.event_id),
                 rel(EventEntrant.race),
                 rel(EventEntrant.checked_in_at),
                 rel(EventEntrant.waitlisted_at),
+                rel(EventEntrant.cup_team_id),
                 raiseload=True,
             )
         )
+        .outerjoin(CupTeamMember, member)
+        .outerjoin(CupTeam, col(CupTeam.id) == col(CupTeamMember.team_id))
         .where(
-            col(EventEntrant.user_id) == user_id,
+            or_(
+                col(EventEntrant.user_id) == user_id,
+                col(CupTeamMember.user_id).is_not(None),
+            ),
             col(EventEntrant.withdrawn_at).is_(None),
         )
         .order_by(col(EventEntrant.id))
     )
     joined: dict[int, EventEntrant | None] = {}
     races: dict[int, list[str]] = {}
-    for row in entered:
+    teams: dict[int, MemberCupTeam] = {}
+    for row, team_name, captain in entered:
         joined[row.event_id] = row
+        if row.cup_team_id is not None and team_name is not None:
+            teams[row.event_id] = MemberCupTeam(
+                id=row.cup_team_id, name=team_name, captain=bool(captain)
+            )
         if row.race is not None:
             races.setdefault(row.event_id, []).append(row.race.value)
     signed = session.scalars(
@@ -1581,7 +1613,34 @@ def _joined_events(
     )
     for season_id in signed:
         joined.setdefault(season_id, None)
-    return joined, races
+    return joined, races, teams
+
+
+def _cup_formats(
+    session: OrmSession, events: Sequence[Season]
+) -> dict[int, tuple[bool, bool]]:
+    """Whether each cup of the list plays free for all lobbies, and whether it
+    is a custom game cup, in one read; a list with no cup reads nothing."""
+    cups = [ident(event) for event in events if event.kind is EventKind.cup]
+    if not cups:
+        return {}
+    lobbies = (
+        exists()
+        .where(
+            col(EventStage.event_id) == col(Season.id),
+            col(EventStage.format) == StageFormat.ffa,
+        )
+        .correlate(Season)
+    )
+    found = {
+        event_id: (bool(ffa), bool(custom))
+        for event_id, ffa, custom in session.execute(
+            select(col(Season.id), lobbies, col(CupSettings.custom_game))
+            .outerjoin(CupSettings, col(CupSettings.event_id) == col(Season.id))
+            .where(col(Season.id).in_(cups))
+        )
+    }
+    return {event_id: found.get(event_id, (False, False)) for event_id in cups}
 
 
 def _round_hints(
@@ -1831,6 +1890,8 @@ def _member_row(
     answered_at: datetime | None,
     fixture: CaptainFixture | None,
     fixtures: list[CaptainFixture],
+    team: MemberCupTeam | None = None,
+    cup_format: tuple[bool, bool] = (False, False),
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts, last_stage)
@@ -1877,9 +1938,14 @@ def _member_row(
             checked_in_at,
             is_open,
             waiting=entrant is not None and entrant.waitlisted_at is not None,
+            team=team is not None,
         ),
         captain_fixture=fixture,
         captain_matches=fixtures,
+        team_size=event.team_size if event.kind is EventKind.cup else None,
+        cup_team=team,
+        ffa=cup_format[0],
+        custom_game=cup_format[1],
     )
 
 
@@ -1890,8 +1956,13 @@ def _member_action(
     checked_in_at: datetime | None,
     checkin_open_now: bool,
     waiting: bool = False,
+    team: bool = False,
 ) -> MemberAction:
-    """The one action the member home offers, so every page agrees on it."""
+    """The one action the member home offers, so every page agrees on it.
+
+    A player of a cup team checks the team in, and leaves or withdraws it on
+    the cup's team panel, so the home offers them no withdraw.
+    """
     # A KOTH night runs while it takes signups, so its first series closes no
     # door; nor does a cup's, whose late signups wait on its waitlist
     open_door = (
@@ -1901,6 +1972,10 @@ def _member_action(
     )
     if phase == "finished":
         return "view"
+    if team:
+        if checked_in_at is not None:
+            return "checked_in"
+        return "check_in" if checkin_open_now and phase != "running" else "view"
     if waiting:
         return "waitlisted"
     if phase == "running" and not open_door:

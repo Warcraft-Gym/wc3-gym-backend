@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-three route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T14:13:27Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T14:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -31,7 +31,7 @@ sources:
 | `teams.py` | `/leagues/{league_id}/teams`, `/events/{event_id}/teams`, `/teams/{team_id}/image` | league-owned teams, event rosters, captains, availability grid, logos; the unscoped logo read is deprecated |
 | `seasons.py` | `/events/{event_id}`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges |
 | `leagues.py` | `/leagues` | leagues |
-| `events.py` | `/events`, `/me/events` | event CRUD and search, entrants, divisions, stages, standings |
+| `events.py` | `/events`, `/me/events`, `/me/cup-series` | event CRUD and search, entrants, divisions, stages, standings, the caller's open cup series |
 | `matches.py` | `/matches` | fixtures |
 | `series.py` | `/series`, `/events/{event_id}/series`, `/casts` | series, event series searches, result kind, places, sides, casts |
 | `draft_series.py` | `/draft-series`, `/matches/{match_id}/draft-board` | a captain's proposed series, the Ready, seen and MMR state of one fixture's draft, and every figure its draft board draws |

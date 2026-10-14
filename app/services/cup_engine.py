@@ -14,7 +14,7 @@ import random
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -33,6 +33,7 @@ from app.models.cup_series import (
     CupSeriesSidePublic,
     CupStagePublic,
     LobbyMapPublic,
+    MyCupSeriesPublic,
 )
 from app.models.cup_team import CupTeam, CupTeamMember, team_summary
 from app.models.enums import EventKind, SchedulingMode, StageFormat
@@ -660,6 +661,94 @@ def series_of(
         return CupStagePublic(
             rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
         )
+
+
+def open_for(user_id: int | None) -> list[MyCupSeriesPublic]:
+    """Every cup series and lobby the player still has to play, in one list.
+
+    A series counts once both its sides are set and it has no result, and the
+    player plays a side: in their own entrant or in the cup team an entrant
+    holds. A lobby counts once every seat holds its player and it has no
+    places, and the player sits in a seat or in a seated team. Only a
+    published cup that is not closed lists its series. The read costs the same
+    statements whatever the number of rows.
+    """
+    if user_id is None:
+        return []
+    teams = select(col(CupTeamMember.team_id)).where(
+        col(CupTeamMember.user_id) == user_id
+    )
+    mine = select(col(EventEntrant.id)).where(
+        or_(
+            col(EventEntrant.user_id) == user_id,
+            col(EventEntrant.cup_team_id).in_(teams),
+        ),
+        col(EventEntrant.withdrawn_at).is_(None),
+    )
+    seated = select(col(CupSeriesSide.series_id)).where(
+        col(CupSeriesSide.entrant_id).in_(mine)
+    )
+    waiting = select(col(CupSeriesSide.series_id)).where(
+        col(CupSeriesSide.entrant_id).is_(None)
+    )
+    two_sided = and_(
+        col(CupSeries.entrant1_id).is_not(None),
+        col(CupSeries.entrant2_id).is_not(None),
+        or_(col(CupSeries.entrant1_id).in_(mine), col(CupSeries.entrant2_id).in_(mine)),
+    )
+    lobby = and_(col(CupSeries.id).in_(seated), col(CupSeries.id).not_in(waiting))
+    with Session.begin() as session:
+        found = session.execute(
+            select(
+                CupSeries,
+                col(Season.id),
+                col(Season.name),
+                col(EventStage.id),
+                col(EventStage.name),
+                col(DBEventRound.number),
+                col(DBEventRound.name),
+            )
+            .options(*CupSeries.eager_options())
+            .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
+            .join(Season, col(Season.id) == col(DBEventRound.season_id))
+            .outerjoin(EventStage, col(EventStage.id) == col(DBEventRound.stage_id))
+            .where(
+                col(Season.kind) == EventKind.cup,
+                col(Season.published).is_(True),
+                col(Season.closed_at).is_(None),
+                col(CupSeries.player1_score).is_(None),
+                col(CupSeries.player2_score).is_(None),
+                or_(two_sided, lobby),
+            )
+            .order_by(
+                col(Season.id),
+                col(EventStage.position),
+                col(DBEventRound.number),
+                col(CupSeries.sequence),
+                col(CupSeries.id),
+            )
+        ).all()
+        boxes = _publics(session, [row[0] for row in found])
+        return [
+            MyCupSeriesPublic(
+                event_id=event_id,
+                event_name=event_name,
+                stage_id=stage_id,
+                stage_name=stage_name,
+                round_number=number,
+                round_name=round_name,
+                series=box,
+            )
+            for (
+                _,
+                event_id,
+                event_name,
+                stage_id,
+                stage_name,
+                number,
+                round_name,
+            ), box in zip(found, boxes, strict=True)
+        ]
 
 
 def advance(event_id: int, stage_id: int) -> dict[str, int]:

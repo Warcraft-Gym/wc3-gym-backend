@@ -299,6 +299,19 @@ class CupStagePublic(PublicModel):
     series: list[CupSeriesPublic] = []
 
 
+class MyCupSeriesPublic(PublicModel):
+    """One cup series or lobby the caller still plays, as the home lists it:
+    the cup, the stage and the round it sits in, and its box."""
+
+    event_id: int
+    event_name: str | None = None
+    stage_id: int | None = None
+    stage_name: str | None = None
+    round_number: int
+    round_name: str | None = None
+    series: CupSeriesPublic
+
+
 class CupScoreWrite(SQLModel):
     """A result a runner writes, or clears with two nulls."""
 

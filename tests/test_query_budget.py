@@ -55,7 +55,11 @@ the signup race statement, at no statement more.
 The member home reads, GET /me/events and GET /me, keep the bearer and miss
 the edge on every visit. Each reads the columns its answer names, the rounds
 not over and the signup seasons as summaries, so its count is pinned for a
-player and for a captain.
+player and for a captain. A list that holds a cup reads the cups' formats in
+one statement more, and a cup team's player reads the team on the entrant
+statement. GET /me/cup-series reads every open series and lobby of the caller
+in one statement and fills their boxes as a stage read does, so its count does
+not grow with the number of series, lobbies or cups.
 
 A career list derives its totals, search, order and page in SQL. A single
 career row is the list's statement filtered to the user id. Neither statement
@@ -1278,6 +1282,49 @@ def test_a_member_read_costs_its_pinned_statements(
     statements, rows = MEMBER_READS[(path, captain)]
     assert tally[0] <= statements
     assert int(response.headers["X-DB-Rows"]) <= rows
+
+
+def test_the_home_cup_reads_do_not_grow_with_the_cups(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """GET /me/cup-series and GET /me/events of a player in a team free for all
+    league, whose two lobbies seat teams."""
+    from app.models.enums import StageFormat
+    from app.models.relationships import DBMapSeason
+    from tests.test_cup_best_of import maps
+    from tests.test_stage_engine import team_cup
+
+    event, stage, _, tags = team_cup(
+        client,
+        auth_headers,
+        member,
+        StageFormat.ffa,
+        lobby_size=4,
+        swiss_rounds=2,
+        points_by_place="3,2,1,0",
+    )
+    with Session.begin() as session:
+        session.add_all(
+            DBMapSeason(season_id=event, map_id=map_id, position=position)
+            for position, map_id in enumerate(maps(2))
+        )
+    generate(client, auth_headers, event, stage)
+    headers = member(tags[0][1])
+    costs = {}
+    for path in ("/me/cup-series", "/me/events"):
+        assert client.get(path, headers=headers).status_code == 200
+        with count_statements() as tally:
+            response = client.get(path, headers=headers)
+        assert response.status_code == 200, response.text
+        costs[path] = tally[0]
+    assert costs["/me/cup-series"] <= HOME_CUP_READS["/me/cup-series"]
+    assert costs["/me/events"] <= HOME_CUP_READS["/me/events"]
+
+
+# Statements of the home's cup reads for a player of a seated cup team
+HOME_CUP_READS = {"/me/cup-series": 12, "/me/events": 12}
 
 
 def test_the_signups_read_costs_seven_statements(league: dict[str, Any]) -> None:
