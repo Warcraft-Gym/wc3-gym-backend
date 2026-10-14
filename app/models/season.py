@@ -878,6 +878,9 @@ class MemberCupTeam(SQLModel):
     name: str
     # The caller captains it: they invite, take back and withdraw the team
     captain: bool = False
+    # The players who accepted, the captain included; the team checks in and
+    # is drawn once it holds the cup's team size
+    players: int = 0
 
 
 class MemberEventRow(SQLModel):

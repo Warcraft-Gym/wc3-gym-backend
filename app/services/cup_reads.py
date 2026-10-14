@@ -8,6 +8,7 @@ one of its day once it is finished.
 
 Who acts for a side is answered here as well: the player a 1v1 side names,
 or any member of the cup team a team side fields. Every cup write asks it.
+A cup team checks in only once its roster is full, on every check-in route.
 """
 
 from collections.abc import Sequence
@@ -45,6 +46,40 @@ class CupRules(NamedTuple):
     map_rules: str
     best_of: int
     map_pool: list[int]
+
+
+# A check-in of a cup team whose invited players have not all accepted
+SHORT_TEAM = "The team checks in once every player has accepted their invitation"
+
+
+def team_players(session: OrmSession, team_ids: Sequence[int]) -> dict[int, int]:
+    """How many players each cup team holds, its captain included, in one read."""
+    if not team_ids:
+        return {}
+    return {
+        team_id: total
+        for team_id, total in session.execute(
+            select(col(CupTeamMember.team_id), func.count())
+            .where(col(CupTeamMember.team_id).in_(team_ids))
+            .group_by(col(CupTeamMember.team_id))
+        ).all()
+    }
+
+
+def team_short(session: OrmSession, event: Season, entrant: EventEntrant) -> bool:
+    """Whether the entrant is a cup team with fewer players than the cup's team size."""
+    team_id = entrant.cup_team_id
+    if team_id is None or not event.team_size:
+        return False
+    return team_players(session, [team_id]).get(team_id, 0) < event.team_size
+
+
+def hold_complete_team(
+    session: OrmSession, event: Season, entrant: EventEntrant
+) -> None:
+    """Refuse the check-in of a cup team that still waits for a player."""
+    if team_short(session, event, entrant):
+        raise BadRequestError(SHORT_TEAM)
 
 
 def event_of(session: OrmSession, row: CupSeries) -> Season:

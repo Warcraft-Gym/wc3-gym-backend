@@ -2,6 +2,7 @@
 
 ## 2026-10-15
 
+* **Update**: a cup team checks in only once every invited player has accepted: `POST /events/{id}/entrants/{entrant_id}/checkin` and a round's check-in refuse a short team, a runner's check-in of everyone for a round leaves it out, and its `/me/events` row reads `view` with `cup_team.players`. The [events module](concepts/events-module.md#team-cups) states it.
 * **Add**: the member home's events side. `GET /me/cup-series` lists the series and lobbies the caller still plays in every published cup that is not closed. On `GET /me/events` a player of a cup team reads the cup as joined with `cup_team`, and a cup's row names `team_size`, `ffa` and `custom_game`. A team cup refuses a player's own signup. The [events module](concepts/events-module.md#the-member-read) and its [cup series](concepts/events-module.md#cup-series) state it.
 * **Add**: custom game cups. `POST /events` for a cup takes `custom_game` with exactly one map: no veto, every game of a series on that map (`fixed` rules, the veto board's fixed map), lobbies on it too, and the pool stays one map ([cup_settings](data/tables/cup_settings.md) `custom_game`). `POST /maps/custom` lets an organizer name a custom map, found or added with the new `custom` mode ([maps](data/tables/maps.md)). The [events module](concepts/events-module.md#cup-series) states it.
 

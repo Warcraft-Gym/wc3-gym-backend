@@ -48,7 +48,12 @@ def test_a_player_of_a_cup_team_reads_the_cup_as_joined(
     led = row_of(client, headers_of(member, captain), event)
     assert led["joined"] is True
     assert led["team_size"] == 2
-    assert led["cup_team"] == {"id": team, "name": "Blue", "captain": True}
+    assert led["cup_team"] == {
+        "id": team,
+        "name": "Blue",
+        "captain": True,
+        "players": 1,
+    }
     assert led["entrant_id"] == made.json()["id"]
     # the team leaves on its own panel, so the home offers its players no withdraw
     assert led["action"] == "view"
@@ -62,7 +67,12 @@ def test_a_player_of_a_cup_team_reads_the_cup_as_joined(
     accept(client, event, team, headers_of(member, mate))
     joined = row_of(client, headers_of(member, mate), event)
     assert joined["joined"] is True
-    assert joined["cup_team"] == {"id": team, "name": "Blue", "captain": False}
+    assert joined["cup_team"] == {
+        "id": team,
+        "name": "Blue",
+        "captain": False,
+        "players": 2,
+    }
 
 
 def test_a_team_cup_refuses_a_players_own_signup(
@@ -188,3 +198,69 @@ def test_a_player_of_a_seated_team_reads_its_lobby(
     assert all(len(row["series"]["sides"]) == 4 for row in rows)
     assert all(seat["team"] for row in rows for seat in row["series"]["sides"])
     assert open_series(client, member("99990")) == []
+
+
+def test_a_team_checks_in_once_every_player_accepted(
+    client: Client, member: Member, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    no_refresh(monkeypatch)
+    event = cup()
+    captain, mate = players(2)
+    made = sign_up(client, event, headers_of(member, captain), "Blue", mate)
+    assert made.status_code == 201, made.text
+    entrant, team = made.json()["id"], made.json()["team"]["id"]
+
+    early = client.post(
+        f"/events/{event}/entrants/{entrant}/checkin",
+        headers=headers_of(member, captain),
+    )
+    assert early.status_code == 400, early.text
+    assert "accepted their invitation" in early.text
+
+    accept(client, event, team, headers_of(member, mate))
+    checked = client.post(
+        f"/events/{event}/entrants/{entrant}/checkin",
+        headers=headers_of(member, captain),
+    )
+    assert checked.status_code == 200, checked.text
+
+
+def test_a_round_takes_a_team_once_every_player_accepted(
+    client: Client,
+    member: Member,
+    auth_headers: Headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.test_cup_divisions import make_cup
+    from tests.test_cup_rounds import LEGS, check_in, legs_of, player_with_login
+
+    no_refresh(monkeypatch)
+    made_cup = make_cup(
+        client,
+        auth_headers,
+        legs=LEGS,
+        team_size=2,
+        published=True,
+        signups_open=True,
+    )
+    event = made_cup["id"]
+    player_with_login("81", 1800)
+    mate = player_with_login("82", 1700)
+    made = sign_up(client, event, member("81"), "Blue", mate)
+    assert made.status_code == 201, made.text
+    entrant, team = made.json()["id"], made.json()["team"]["id"]
+    leg = legs_of(client, event)[0]["id"]
+
+    early = check_in(client, member("81"), event, leg)
+    assert early.status_code == 400, early.text
+    # a runner's check-in of everyone leaves the short team out
+    everyone = client.post(
+        f"/events/{event}/legs/{leg}/checkins/everyone", headers=auth_headers
+    )
+    assert everyone.status_code == 200, everyone.text
+    assert everyone.json()[0]["checked_in"] == []
+
+    accept(client, event, team, member("82"))
+    checked = check_in(client, member("81"), event, leg)
+    assert checked.status_code == 200, checked.text
+    assert checked.json()[0]["checked_in"] == [entrant]

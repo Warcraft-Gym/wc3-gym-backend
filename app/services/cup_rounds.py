@@ -39,7 +39,7 @@ from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
-from app.services import organizers
+from app.services import cup_reads, organizers
 
 # What each place of a round pays when the cup names no table of its own
 DEFAULT_POINTS = [10, 8, 6, 5, 4, 3, 2, 1]
@@ -217,6 +217,7 @@ def check_in(
         entrant = _entrant_for(session, event, entrant_id, claims, runs)
         row = session.get(CupLegCheckin, (ident(leg), ident(entrant)))
         if present and row is None:
+            cup_reads.hold_complete_team(session, event, entrant)
             session.add(
                 CupLegCheckin(
                     leg_id=ident(leg), entrant_id=ident(entrant), checked_in_at=utcnow()
@@ -229,9 +230,10 @@ def check_in(
 
 
 def check_in_everyone(event_id: int, leg_id: int) -> list[CupLegPublic]:
-    """A runner checks every playing entrant in for one round."""
+    """A runner checks every playing entrant in for one round; a cup team
+    still waiting for a player is left out."""
     with Session.begin() as session:
-        _cup(session, event_id)
+        event = _cup(session, event_id)
         leg = _leg(session, event_id, leg_id)
         if leg.finished_at is not None or _leg_drawn(session, ident(leg)):
             raise BadRequestError("This round is drawn; its players are set")
@@ -243,7 +245,18 @@ def check_in_everyone(event_id: int, leg_id: int) -> list[CupLegPublic]:
             )
         )
         now = utcnow()
-        for entrant in _playing(session, event_id):
+        playing = _playing(session, event_id)
+        players = cup_reads.team_players(
+            session, [row.cup_team_id for row in playing if row.cup_team_id]
+        )
+        for entrant in playing:
+            team_id = entrant.cup_team_id
+            if (
+                event.team_size
+                and team_id
+                and players.get(team_id, 0) < event.team_size
+            ):
+                continue
             if ident(entrant) not in held:
                 session.add(
                     CupLegCheckin(

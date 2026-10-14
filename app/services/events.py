@@ -27,7 +27,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import load_only, noload, selectinload
+from sqlalchemy.orm import aliased, load_only, noload, selectinload
 from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import col
 
@@ -109,6 +109,7 @@ from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services import (
     cup_divisions,
     cup_engine,
+    cup_reads,
     cup_recurrence,
     cup_rounds,
     organizers,
@@ -966,6 +967,7 @@ class EventService:
                 raise BadRequestError(
                     "A signup on the waitlist checks in once it is let in"
                 )
+            cup_reads.hold_complete_team(session, event, row)
             row.checked_in_at = utcnow()
             session.flush()
             shown = organizers.shows_seeds(claims, event)
@@ -1572,8 +1574,16 @@ def _joined_events(
         col(CupTeamMember.team_id) == col(EventEntrant.cup_team_id),
         col(CupTeamMember.user_id) == user_id,
     )
+    roster = aliased(CupTeamMember)
+    players = (
+        select(func.count())
+        .select_from(roster)
+        .where(col(roster.team_id) == col(EventEntrant.cup_team_id))
+        .correlate(EventEntrant)
+        .scalar_subquery()
+    )
     entered = session.execute(
-        select(EventEntrant, col(CupTeam.name), col(CupTeamMember.captain))
+        select(EventEntrant, col(CupTeam.name), col(CupTeamMember.captain), players)
         .options(
             load_only(
                 rel(EventEntrant.event_id),
@@ -1598,11 +1608,14 @@ def _joined_events(
     joined: dict[int, EventEntrant | None] = {}
     races: dict[int, list[str]] = {}
     teams: dict[int, MemberCupTeam] = {}
-    for row, team_name, captain in entered:
+    for row, team_name, captain, count in entered:
         joined[row.event_id] = row
         if row.cup_team_id is not None and team_name is not None:
             teams[row.event_id] = MemberCupTeam(
-                id=row.cup_team_id, name=team_name, captain=bool(captain)
+                id=row.cup_team_id,
+                name=team_name,
+                captain=bool(captain),
+                players=count or 0,
             )
         if row.race is not None:
             races.setdefault(row.event_id, []).append(row.race.value)
@@ -1939,6 +1952,9 @@ def _member_row(
             is_open,
             waiting=entrant is not None and entrant.waitlisted_at is not None,
             team=team is not None,
+            short=team is not None
+            and bool(event.team_size)
+            and team.players < (event.team_size or 0),
         ),
         captain_fixture=fixture,
         captain_matches=fixtures,
@@ -1957,11 +1973,13 @@ def _member_action(
     checkin_open_now: bool,
     waiting: bool = False,
     team: bool = False,
+    short: bool = False,
 ) -> MemberAction:
     """The one action the member home offers, so every page agrees on it.
 
     A player of a cup team checks the team in, and leaves or withdraws it on
-    the cup's team panel, so the home offers them no withdraw.
+    the cup's team panel, so the home offers them no withdraw. A team still
+    waiting for an invited player takes no check-in yet.
     """
     # A KOTH night runs while it takes signups, so its first series closes no
     # door; nor does a cup's, whose late signups wait on its waitlist
@@ -1975,7 +1993,8 @@ def _member_action(
     if team:
         if checked_in_at is not None:
             return "checked_in"
-        return "check_in" if checkin_open_now and phase != "running" else "view"
+        open_now = checkin_open_now and phase != "running" and not short
+        return "check_in" if open_now else "view"
     if waiting:
         return "waitlisted"
     if phase == "running" and not open_door:
