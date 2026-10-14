@@ -21,11 +21,6 @@ SCALE = 10**12
 DECAY = Fraction(17, 20)  # every season keeps 85% of the rating
 
 
-def season_points(won: int, played: int) -> float:
-    """The points one season pays, before the participation bonus."""
-    return won + (played - won) * 0.5
-
-
 def decay_weight(age: int) -> int:
     """What 0.85**age is worth in units of 1/SCALE, rounded."""
     return round(DECAY**age * SCALE)

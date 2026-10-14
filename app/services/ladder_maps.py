@@ -7,15 +7,10 @@ old versions of a map under their own names, so "Autumn Leaves v2" belongs to
 "Autumn Leaves 2.0" and not to the older "Autumn Leaves".
 """
 
-import logging
 import re
 
-import requests
-
 from app.models.map import LadderMapRow
-from app.services.w3c import REQUEST_TIMEOUT, W3CService
-
-logger = logging.getLogger(__name__)
+from app.services.w3c import W3CService
 
 # Every map warcraft3.info knows, with its short name and its picture.
 MAP_DB_URL = "https://warcraft3.info/api/v1/maps"
@@ -155,13 +150,3 @@ def ladder_maps() -> list[LadderMapRow]:
 def lookup(name: str, by_base: MapIndex) -> LadderMapRow:
     """One map by its name alone: what warcraft3.info holds for a map off the ladder."""
     return _row({"name": name}, by_base)
-
-
-def fetch_image(url: str) -> bytes | None:
-    """The picture behind the url. A picture that does not answer is skipped."""
-    try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT)
-    except requests.exceptions.RequestException as failure:
-        logger.warning("map picture %s: %s", url, failure)
-        return None
-    return response.content if response.status_code == 200 else None

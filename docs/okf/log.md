@@ -2,6 +2,7 @@
 
 ## 2026-10-15
 
+* **Remove**: code nothing called: a season's points before the participation bonus, the finished events of a set, the map picture fetch and the feeders payload of a series.
 * **Update**: a cup that takes check-in draws the players who checked in; a no-show stays signed up and is left out, and `POST /events/{id}/entrants/checkin-everyone` lets a runner check everyone in at once. The [events module](concepts/events-module.md#managing-an-event) states it.
 * **Fix**: a cup made from a recurring rule keeps the latest cup's custom game choice. [cup_occurrence](data/tables/cup_occurrence.md) states it.
 * **Add**: cup announcements. A cup posts in the `announcement_channel_id` channel when it takes signups, an hour before it or a round of it starts, when it or a round is drawn, and its top three when it closes, each pinging the `announcement_role_id` role once. Members take or leave the role with `GET` and `PUT /me/announcements` ([announcement_subscriber](data/tables/announcement_subscriber.md)). [Discord integration](concepts/discord-integration.md#cup-announcements) and [the decision](decisions/cup-announcements.md) state it.
