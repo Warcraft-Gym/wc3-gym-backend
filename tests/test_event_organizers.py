@@ -40,7 +40,9 @@ def grant(client: Client, admin: Headers, discord_id: str) -> None:
 
 
 def create(client: Client, headers: Headers, **fields: Any) -> dict[str, Any]:  # noqa: ANN401
-    response = client.post("/events", json=CUP | fields, headers=headers)
+    # a cup draws its checked-in players; the draw tests run with check-in off
+    body = CUP | {"checkin_enabled": False} | fields
+    response = client.post("/events", json=body, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 

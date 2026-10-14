@@ -66,7 +66,13 @@ def cup(
     """
     ids = ids or players(count * max(divisions, 1))
     with Session.begin() as session:
-        event = Season(name="Autumn Cup", kind=kind, series_per_round=1, published=True)
+        event = Season(
+            name="Autumn Cup",
+            kind=kind,
+            series_per_round=1,
+            published=True,
+            checkin_enabled=False,
+        )
         session.add(event)
         session.flush()
         rows = [EventStage(event_id=ident(event), position=1, format=fmt, **fields)]
@@ -1299,6 +1305,7 @@ def team_cup(
             series_per_round=1,
             team_size=2,
             published=True,
+            checkin_enabled=False,
         )
         session.add(event)
         session.flush()

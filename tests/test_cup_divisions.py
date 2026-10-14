@@ -21,7 +21,9 @@ from tests.test_events import add_event
 
 
 def make_cup(client: Client, headers: Headers, **fields: Any) -> dict[str, Any]:  # noqa: ANN401
-    response = client.post("/events", json=CUP | fields, headers=headers)
+    # the draw tests run with check-in off; the no-show rule has tests of its own
+    body = CUP | {"checkin_enabled": False} | fields
+    response = client.post("/events", json=body, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 

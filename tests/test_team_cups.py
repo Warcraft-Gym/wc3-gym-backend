@@ -26,6 +26,8 @@ from tests.test_stage_engine import players
 
 def cup(size: int = 2, **fields: Any) -> int:  # noqa: ANN401
     """A published team cup with signups open."""
+    # a cup draws its checked-in players; the draw tests run with check-in off
+    fields.setdefault("checkin_enabled", False)
     with Session.begin() as session:
         event = Season(
             name=fields.pop("name", "Team Cup"),

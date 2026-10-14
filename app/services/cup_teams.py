@@ -253,7 +253,9 @@ def invites_for(claims: dict[str, Any] | None) -> list[TeamInvitePublic]:
 
 
 def incomplete(session: OrmSession, event: Season) -> list[str]:
-    """The names of the teams still in a cup whose roster is short of the team size."""
+    """The names of the teams the draw would seat whose roster is short of the
+    team size. A cup that takes check-in seats the teams that checked in, and a
+    short team cannot check in, so it is left out instead of holding the draw."""
     if not event.team_size:
         return []
     counts: dict[int, int] = {
@@ -272,6 +274,11 @@ def incomplete(session: OrmSession, event: Season) -> list[str]:
             col(EventEntrant.event_id) == ident(event),
             col(EventEntrant.withdrawn_at).is_(None),
             col(EventEntrant.waitlisted_at).is_(None),
+            *(
+                [col(EventEntrant.checked_in_at).is_not(None)]
+                if event.checkin_enabled
+                else []
+            ),
         )
     ).all()
     return [name for team_id, name in teams if counts.get(team_id, 0) < event.team_size]

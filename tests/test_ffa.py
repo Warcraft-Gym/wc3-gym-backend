@@ -29,7 +29,11 @@ def ffa(count: int = 16) -> tuple[int, int, int]:
     pool = maps(3)
     with Session.begin() as session:
         event = Season(
-            name="SMF FFA", kind=EventKind.cup, series_per_round=1, published=True
+            name="SMF FFA",
+            kind=EventKind.cup,
+            series_per_round=1,
+            published=True,
+            checkin_enabled=False,
         )
         session.add(event)
         session.flush()

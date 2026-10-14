@@ -79,7 +79,7 @@ def put_seeds(
 def test_a_draw_on_an_mmr_stage_seeds_the_field_strongest_first_unrated_last(
     client: Client, auth_headers: Headers
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, checkin_enabled=False)
     stage = single_stage(event)
     unrated = enter(event, add_player("Unrated", {}))
     weak, middle, strong = (
@@ -104,7 +104,7 @@ def test_a_draw_on_an_mmr_stage_seeds_the_field_strongest_first_unrated_last(
 def test_the_first_round_of_a_swiss_stage_seeds_by_mmr_and_locks(
     client: Client, auth_headers: Headers
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, checkin_enabled=False)
     single_stage(event)
     written = client.put(
         f"/events/{event}/stages",
@@ -128,7 +128,7 @@ def test_the_first_round_of_a_swiss_stage_seeds_by_mmr_and_locks(
 def test_a_draw_fills_only_the_unseeded_around_the_seeds_already_written(
     client: Client, auth_headers: Headers
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, checkin_enabled=False)
     stage = single_stage(event)
     early = [
         enter(event, add_player(f"P{mmr}", {Race.HU: mmr}))
@@ -155,7 +155,7 @@ def test_a_draw_fills_only_the_unseeded_around_the_seeds_already_written(
 def test_a_draw_on_a_random_stage_shuffles(
     client: Client, auth_headers: Headers, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, checkin_enabled=False)
     single_stage(event)
     written = client.put(
         f"/events/{event}/stages",
@@ -189,7 +189,7 @@ def test_a_draw_on_a_random_stage_shuffles(
 def test_a_draw_on_a_manual_stage_refuses_until_every_entrant_has_a_seed(
     client: Client, auth_headers: Headers
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, checkin_enabled=False)
     single_stage(event)
     written = client.put(
         f"/events/{event}/stages",
@@ -230,7 +230,7 @@ def test_a_draw_on_a_manual_stage_refuses_until_every_entrant_has_a_seed(
 def test_a_refused_draw_writes_no_seed(
     client: Client, auth_headers: Headers, stage_body: dict[str, Any], draw: str
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, checkin_enabled=False)
     single_stage(event)
     written = client.put(
         f"/events/{event}/stages", json=[stage_body], headers=auth_headers
@@ -292,7 +292,7 @@ def test_a_later_stage_draws_only_the_entrants_advance_seeded(
 def test_a_reseed_keeps_the_hand_placed_seeds_and_fills_around_them(
     client: Client, auth_headers: Headers
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, checkin_enabled=False)
     stage = single_stage(event)
     weakest, *rest = (
         enter(event, add_player(f"P{mmr}", {Race.HU: mmr}))
@@ -403,7 +403,7 @@ def test_the_draw_locks_the_seeds_and_unlock_waits_for_the_redraw(
 def test_a_hand_lock_unlocks_and_the_reseed_opens_again(
     client: Client, auth_headers: Headers, member: Member
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, checkin_enabled=False)
     stage = single_stage(event)
     enter(event, add_player("Only", {Race.HU: 1700}))
     lock = f"/events/{event}/stages/{stage}/seeds/lock"

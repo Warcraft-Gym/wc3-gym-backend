@@ -552,6 +552,10 @@ def set_lobby_map(session: OrmSession, row: CupSeries, map_id: int) -> None:
 
 
 NEXT_PLAYED = "The next round has results; clear them first"
+# A cup that takes check-in draws the players who checked in, and needs two
+NOT_CHECKED_IN = (
+    "Fewer than two players have checked in; the draw takes the players who checked in"
+)
 
 
 def seated_in(session: OrmSession, row: CupSeries, user_id: int) -> bool:
@@ -1625,9 +1629,19 @@ def _next_number(session: OrmSession, event_id: int) -> int:
     return (highest or 0) + 1
 
 
+def _shows_up(session: OrmSession, event_id: int) -> list[ColumnElement[bool]]:
+    """The filter that keeps the entrants who checked in, on a cup that takes
+    check-in; no filter on any other cup."""
+    event = session.get(Season, event_id)
+    if event is None or not event.checkin_enabled:
+        return []
+    return [col(EventEntrant.checked_in_at).is_not(None)]
+
+
 def _hold_placed(session: OrmSession, event_id: int) -> None:
-    """Refuse to draw a cup with divisions while a player stands in none of
-    them: the draw plays each division apart, so that player would be left out."""
+    """Refuse to draw a cup with divisions while a player it would draw stands
+    in none of them: the draw plays each division apart, so that player would be
+    left out. A no-show of a cup that takes check-in is not drawn anyway."""
     held = session.scalar(
         select(col(EventDivision.id))
         .where(col(EventDivision.event_id) == event_id)
@@ -1642,6 +1656,7 @@ def _hold_placed(session: OrmSession, event_id: int) -> None:
             col(EventEntrant.division_id).is_(None),
             col(EventEntrant.withdrawn_at).is_(None),
             col(EventEntrant.waitlisted_at).is_(None),
+            *_shows_up(session, event_id),
         )
         .limit(1)
     )
@@ -1662,18 +1677,25 @@ def _hold_minimum(
     event = session.get(Season, stage.event_id)
     least = event.entrant_min if event is not None else None
     seated = sum(len(field) for field in fields.values())
+    # a cup that takes check-in draws the players who checked in alone
+    checks_in = event is not None and event.checkin_enabled
     if least is not None and seated < least:
         raise BadRequestError(
-            f"This event is played with at least {least} entrants; {seated} would play"
+            f"This event is played with at least {least} entrants; {seated} "
+            + ("checked in" if checks_in else "would play")
         )
+    if checks_in and seated < 2:
+        raise BadRequestError(NOT_CHECKED_IN)
 
 
 def _entrants(
     session: OrmSession, event_id: int, stage: EventStage | None = None
 ) -> dict[int | None, list[EventEntrant]]:
     """Every entrant of every division in seed order; one field without divisions.
-    An entrant on a cup's waitlist stands in no field until it is let in, and a
-    stage of a round plays the entrants checked in for that round alone."""
+    An entrant on a cup's waitlist stands in no field until it is let in, a
+    stage of a round plays the entrants checked in for that round alone, and a
+    cup that takes check-in plays the entrants who checked in: a no-show stays
+    signed up and is left out of the draw."""
     divisions = session.scalars(
         select(EventDivision)
         .where(col(EventDivision.event_id) == event_id)
@@ -1697,6 +1719,7 @@ def _entrants(
                 if leg is not None
                 else []
             ),
+            *(_shows_up(session, event_id) if leg is None else []),
         )
         .order_by(
             col(EventEntrant.seed).is_(None),

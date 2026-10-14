@@ -62,6 +62,7 @@ def cup(
         json={
             "name": f"Map Cup {next(MAP_NUMBERS)}",
             "kind": "cup",
+            "checkin_enabled": False,
             "veto_by_best_of": True,
             "map_ids": pool,
             "stages": [stage],

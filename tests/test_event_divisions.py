@@ -28,8 +28,9 @@ from tests.test_events import add_event
 
 
 def divided_cup(**fields: Any) -> int:  # noqa: ANN401
-    """A cup that chose to split its players into divisions."""
-    event = add_event(kind=EventKind.cup, **fields)
+    """A cup that chose to split its players into divisions; the draw tests
+    run with check-in off, as a cup draws its checked-in players."""
+    event = add_event(kind=EventKind.cup, **({"checkin_enabled": False} | fields))
     with Session.begin() as session:
         session.add(CupSettings(event_id=event, uses_divisions=True))
     return event

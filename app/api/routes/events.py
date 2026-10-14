@@ -453,6 +453,17 @@ def withdraw_entrant(event_id: int, entrant_id: int, service: EventServiceDep) -
     service.withdraw_entrant(event_id, entrant_id)
 
 
+@router.post(
+    "/events/{event_id}/entrants/checkin-everyone",
+    dependencies=[Depends(require_event_runner)],
+)
+def check_everyone_in_to_cup(
+    event_id: int, claims: RequireLogin, service: EventServiceDep
+) -> list[EventEntrantPublic]:
+    """Check every entrant of a cup in at once; a short cup team stays out."""
+    return service.check_in_everyone(event_id, claims)
+
+
 @router.post("/events/{event_id}/entrants/{entrant_id}/checkin")
 def check_in(
     event_id: int,

@@ -973,6 +973,38 @@ class EventService:
             shown = organizers.shows_seeds(claims, event)
             return _entrant_publics(session, event, [row], shown)[0]
 
+    def check_in_everyone(
+        self, event_id: int, claims: dict[str, Any] | None
+    ) -> list[EventEntrantPublic]:
+        """A runner checks every entrant of a cup in at once, for a cup whose
+        players did not check in themselves; the draw takes the players who
+        checked in. A cup team short of players stays out, as it would on its
+        own check-in."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if event.kind is not EventKind.cup:
+                raise BadRequestError("Only a cup checks everyone in at once")
+            if not event.checkin_enabled:
+                raise BadRequestError("This cup takes no check-in")
+            rows = session.scalars(
+                select(EventEntrant).where(
+                    col(EventEntrant.event_id) == event_id,
+                    col(EventEntrant.withdrawn_at).is_(None),
+                    col(EventEntrant.waitlisted_at).is_(None),
+                    col(EventEntrant.checked_in_at).is_(None),
+                )
+            ).all()
+            players = cup_reads.team_players(
+                session, [row.cup_team_id for row in rows if row.cup_team_id]
+            )
+            now = utcnow()
+            for row in rows:
+                team = row.cup_team_id
+                if team and event.team_size and players.get(team, 0) < event.team_size:
+                    continue
+                row.checked_in_at = now
+        return self.get_entrants(event_id, claims)
+
     def replace_entrant(
         self, event_id: int, entrant_id: int, data: EntrantAdd
     ) -> EventEntrantPublic:
