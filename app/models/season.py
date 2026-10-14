@@ -24,7 +24,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
-from app.models.cup_recurrence import CupRecurrenceRef
+from app.models.cup_recurrence import CupRecurrenceRef, CupRecurrenceWrite
 from app.models.cup_rounds import CupLegPublic, CupLegWrite
 from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy
 from app.models.event_division import EventDivisionPublic
@@ -772,6 +772,8 @@ class EventCreate(SQLModel):
     # and the points each place of a round pays; read on a cup alone
     legs: list[CupLegWrite] = []
     points_by_place: list[int] | None = None
+    # A cup that repeats on a rule from the start: the rule, set up with the cup
+    recurrence: CupRecurrenceWrite | None = None
     # How many series one fixture holds, and a fixture pairs two team
     # entrants, so it reads only on a team event.
     series_per_round: int = 1

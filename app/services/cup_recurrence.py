@@ -59,6 +59,7 @@ OWN_FIELDS = {
     "round_count",
     "parent_id",
     "signups_open",
+    "recurrence",
 }
 
 
@@ -119,26 +120,33 @@ def create(
 ) -> CupRecurrencePublic:
     """Set up a rule from a cup, which becomes its first occurrence."""
     with Session.begin() as session:
-        event = _cup(session, event_id)
-        if session.get(CupOccurrence, event_id) is not None:
-            raise ApiError(409, {"error": "This cup repeats already"})
-        if event.starts_at is None:
-            raise BadRequestError("Give the cup a start first; the rule repeats it")
-        starts_on = event.starts_at.astimezone(ZoneInfo(data.zone)).date()
-        if data.ends_on is not None and data.ends_on < starts_on:
-            raise BadRequestError("The last day comes after the cup's own day")
-        rule = CupRecurrence(
-            **data.model_dump(), starts_on=starts_on, created_by=str(claims["sub"])
-        )
-        session.add(rule)
-        session.flush()
-        session.add(
-            CupOccurrence(
-                event_id=event_id, recurrence_id=ident(rule), occurs_on=starts_on
-            )
-        )
-        session.flush()
+        rule = create_in(session, _cup(session, event_id), data, str(claims["sub"]))
         return _public(session, rule)
+
+
+def create_in(
+    session: OrmSession, event: Season, data: CupRecurrenceWrite, created_by: str
+) -> CupRecurrence:
+    """`create` inside the caller's transaction, so a cup and its rule are
+    written together."""
+    event_id = ident(event)
+    if session.get(CupOccurrence, event_id) is not None:
+        raise ApiError(409, {"error": "This cup repeats already"})
+    if event.starts_at is None:
+        raise BadRequestError("Give the cup a start first; the rule repeats it")
+    starts_on = event.starts_at.astimezone(ZoneInfo(data.zone)).date()
+    if data.ends_on is not None and data.ends_on < starts_on:
+        raise BadRequestError("The last day comes after the cup's own day")
+    rule = CupRecurrence(
+        **data.model_dump(), starts_on=starts_on, created_by=created_by
+    )
+    session.add(rule)
+    session.flush()
+    session.add(
+        CupOccurrence(event_id=event_id, recurrence_id=ident(rule), occurs_on=starts_on)
+    )
+    session.flush()
+    return rule
 
 
 def get(recurrence_id: int) -> CupRecurrencePublic:

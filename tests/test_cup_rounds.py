@@ -301,3 +301,112 @@ def test_a_finished_round_keeps_its_draw(client: Client, auth_headers: Headers) 
         f"/events/{cup['id']}/legs/{first['id']}/finish", headers=auth_headers
     )
     assert reopened.json()[0]["finished_at"] is None
+
+
+def test_a_round_takes_a_new_name_and_start_in_order(
+    client: Client, auth_headers: Headers
+) -> None:
+    cup = rounds_cup(client, auth_headers)
+    first, second, third = legs_of(client, cup["id"])
+
+    moved = client.put(
+        f"/events/{cup['id']}/legs/{second['id']}",
+        json={"name": "Semi round", "starts_at": "2026-11-14T18:00:00Z"},
+        headers=auth_headers,
+    )
+    assert moved.status_code == 200, moved.text
+    assert (moved.json()[1]["name"], moved.json()[1]["starts_at"][:16]) == (
+        "Semi round",
+        "2026-11-14T18:00",
+    )
+    # a round never starts before the one ahead of it
+    early = client.put(
+        f"/events/{cup['id']}/legs/{third['id']}",
+        json={"starts_at": "2026-11-10T19:00:00Z"},
+        headers=auth_headers,
+    )
+    assert early.status_code == 400, early.text
+    # an empty name goes back to the round's number
+    named = client.put(
+        f"/events/{cup['id']}/legs/{second['id']}",
+        json={"name": ""},
+        headers=auth_headers,
+    )
+    assert named.json()[1]["name"] == "Round 2"
+    # the first round's start is the cup's start, both ways
+    client.put(
+        f"/events/{cup['id']}/legs/{first['id']}",
+        json={"starts_at": "2026-11-05T19:00:00Z"},
+        headers=auth_headers,
+    )
+    assert (
+        client.get(f"/events/{cup['id']}")
+        .json()["starts_at"]
+        .startswith("2026-11-05T19:00")
+    )
+    client.put(
+        f"/events/{cup['id']}",
+        json={"starts_at": "2026-11-04T20:00:00Z"},
+        headers=auth_headers,
+    )
+    assert legs_of(client, cup["id"])[0]["starts_at"].startswith("2026-11-04T20:00")
+
+
+def test_a_round_is_added_after_the_last_with_the_same_stages(
+    client: Client, auth_headers: Headers
+) -> None:
+    cup = rounds_cup(client, auth_headers)
+
+    added = client.post(
+        f"/events/{cup['id']}/legs",
+        json={"starts_at": "2026-11-27T19:00:00Z"},
+        headers=auth_headers,
+    )
+
+    assert added.status_code == 201, added.text
+    legs = added.json()
+    assert [(leg["number"], leg["name"]) for leg in legs][-1] == (4, "Round 4")
+    stages = client.get(f"/events/{cup['id']}").json()["stages"]
+    assert len(stages) == 4
+    assert [stage["id"] for stage in stages][-1] == legs[-1]["stage_ids"][0]
+    assert stages[-1]["format"] == stages[0]["format"]
+    before = client.post(
+        f"/events/{cup['id']}/legs",
+        json={"starts_at": "2026-11-20T19:00:00Z"},
+        headers=auth_headers,
+    )
+    assert before.status_code == 400, before.text
+
+
+def test_a_round_not_drawn_goes_and_the_later_ones_move_up(
+    client: Client, auth_headers: Headers
+) -> None:
+    cup = rounds_cup(client, auth_headers)
+    field_of(cup["id"], (2000, 1900))
+    first, second, third = legs_of(client, cup["id"])
+    client.post(
+        f"/events/{cup['id']}/legs/{first['id']}/checkins/everyone",
+        headers=auth_headers,
+    )
+    generate(client, auth_headers, cup["id"], first["stage_ids"][0])
+
+    drawn = client.delete(
+        f"/events/{cup['id']}/legs/{first['id']}", headers=auth_headers
+    )
+    assert drawn.status_code == 400, drawn.text
+
+    gone = client.delete(
+        f"/events/{cup['id']}/legs/{second['id']}", headers=auth_headers
+    )
+    assert gone.status_code == 200, gone.text
+    assert [(leg["number"], leg["name"]) for leg in gone.json()] == [
+        (1, "Round 1"),
+        (2, "Finale"),
+    ]
+    stages = client.get(f"/events/{cup['id']}").json()["stages"]
+    assert [stage["position"] for stage in stages] == [1, 2]
+    last = client.delete(
+        f"/events/{cup['id']}/legs/{third['id']}", headers=auth_headers
+    )
+    assert last.status_code == 400, last.text
+    assert last.json() == {"error": "A cup over rounds keeps two rounds or more"}

@@ -64,6 +64,14 @@ class CupLegWrite(SQLModel):
     name: str | None = Field(default=None, max_length=50)
 
 
+class CupLegUpdate(SQLModel):
+    """A round's change after creation; a field left out keeps its value, and a
+    name sent empty goes back to "Round n"."""
+
+    name: str | None = Field(default=None, max_length=50)
+    starts_at: Annotated[datetime | None, AwareUTC] = None
+
+
 class CupLegPublic(SQLModel):
     """One round as the cup's pages read it."""
 

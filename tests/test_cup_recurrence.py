@@ -217,3 +217,43 @@ def test_a_rule_changes_its_name_and_last_day(
     ]
     late = occur(client, auth_headers, made["id"], "2030-01-25")
     assert late.status_code == 400, late.text
+
+
+def test_a_cup_is_created_with_its_rule_in_one_write(
+    client: Client, auth_headers: Headers
+) -> None:
+    cup = make_cup(
+        client, auth_headers, name="Born Weekly", starts_at=FRIDAY, recurrence=WEEKLY
+    )
+
+    assert cup["cup_recurrence"]["name"] == "Friday Cup"
+    page = client.get(f"/cup-recurrences/{cup['cup_recurrence']['id']}").json()
+    assert (page["starts_on"], page["latest_event_id"]) == ("2030-01-04", cup["id"])
+
+
+def test_a_rule_without_a_start_creates_no_cup(
+    client: Client, auth_headers: Headers
+) -> None:
+    from tests.test_event_organizers import CUP
+
+    refused = client.post(
+        "/events",
+        json=CUP | {"name": "No Start Weekly", "recurrence": WEEKLY},
+        headers=auth_headers,
+    )
+
+    assert refused.status_code == 400, refused.text
+    names = [row["name"] for row in client.get("/events").json()]
+    assert "No Start Weekly" not in names
+    signup = client.post(
+        "/events",
+        json={
+            "name": "Weekly List",
+            "kind": "signup",
+            "starts_at": FRIDAY,
+            "stages": [],
+            "recurrence": WEEKLY,
+        },
+        headers=auth_headers,
+    )
+    assert signup.status_code == 400, signup.text

@@ -91,9 +91,12 @@ def _generate(
     stage_id: int,
     division_id: int | None = None,
     fill: SeedFill | None = None,
+    alongside: bool = False,
 ) -> dict[str, int]:
     """The draw of `generate`, inside the caller's transaction, so a result
-    that ends a stage can draw the one after it."""
+    that ends a stage can draw the one after it. `alongside` draws one
+    division of a bracket again beside the divisions that keep their draw,
+    aligned on the rounds the stage already holds."""
     stage = _stage(session, event_id, stage_id)
     if stage.format is StageFormat.gnl:
         raise BadRequestError(
@@ -109,7 +112,7 @@ def _generate(
         raise BadRequestError("This stage already holds series")
     if any(row.division_id == division_id for row in drawn):
         raise BadRequestError("This division already holds series")
-    if division_id is not None and stage.format in BRACKETS:
+    if division_id is not None and stage.format in BRACKETS and not alongside:
         raise BadRequestError("A bracket stage draws every division together")
     if fill is not None:
         fill(session, stage)
@@ -139,10 +142,13 @@ def _generate(
     if any(len(field) < 2 for _, field in draws):
         raise BadRequestError("A group needs two entrants; the group size is small")
     plans = [_plan(stage, len(field)) for _, field in draws]
-    depth = max(len(plan.rounds) for plan in plans)
     # A bracket part the stage names plays its own best-of; null follows the stage
     best_of_by_part = parse_plan(stage.best_of_by_round)
     held = {row.number: row for row in _rounds_of(session, stage_id)}
+    # every bracket of the stage ends on the same final, the ones already drawn included
+    depth = max(
+        [len(plan.rounds) for plan in plans] + ([len(held)] if alongside else [])
+    )
     first = min(held) if held else _next_number(session, event_id)
     rounds: dict[int, DBEventRound] = {
         number - first: row for number, row in held.items()
@@ -213,36 +219,11 @@ def undo_in(
 ) -> dict[str, int]:
     """The undo of `undraw`, inside the caller's transaction, so a seed change
     can take a draw back and draw it again in one write."""
-    stage = _stage(session, event_id, stage_id)
-    if stage.format in (StageFormat.gnl, StageFormat.koth):
-        raise BadRequestError(
-            "A GNL or KOTH stage is not drawn, so it has no draw to undo"
-        )
-    event = session.get(Season, event_id)
-    if event is not None and event.closed_at is not None:
-        raise BadRequestError(
-            "The event is finished; reopen it before the draw is undone"
-        )
-    from app.services import cup_rounds
-
-    cup_rounds.hold_unfinished(session, stage)
+    stage = _hold_undo(session, event_id, stage_id)
     rows = list(_series_of(session, stage_id))
     if not rows:
         raise BadRequestError("This stage holds no draw to undo")
-    following = _next_stage(session, event_id, stage)
-    if following is not None and _series_of(session, ident(following)):
-        raise BadRequestError("A later stage is drawn; undo its draw first")
-    results = sum(
-        1 for row in rows if scored(row) and row.entrant1_id and row.entrant2_id
-    )
-    if results and not confirm:
-        raise ApiError(
-            409,
-            {
-                "error": f"{results} series of this stage hold results; "
-                "confirm to delete them"
-            },
-        )
+    results = _hold_results(rows, confirm, "this stage")
     for round_row in _rounds_of(session, stage_id):
         session.delete(round_row)
     stage.seeds_locked_at = None
@@ -1185,6 +1166,78 @@ def _same_leg(session: OrmSession, stage: EventStage) -> list[ColumnElement[bool
             select(col(CupLegStage.stage_id)).where(col(CupLegStage.leg_id) == leg)
         )
     ]
+
+
+def _hold_undo(session: OrmSession, event_id: int, stage_id: int) -> EventStage:
+    """Refuse to take a draw back from a GNL or KOTH stage, a finished event, a
+    finished round of a cup, or a stage whose next stage is drawn."""
+    stage = _stage(session, event_id, stage_id)
+    if stage.format in (StageFormat.gnl, StageFormat.koth):
+        raise BadRequestError(
+            "A GNL or KOTH stage is not drawn, so it has no draw to undo"
+        )
+    event = session.get(Season, event_id)
+    if event is not None and event.closed_at is not None:
+        raise BadRequestError(
+            "The event is finished; reopen it before the draw is undone"
+        )
+    from app.services import cup_rounds
+
+    cup_rounds.hold_unfinished(session, stage)
+    following = _next_stage(session, event_id, stage)
+    if following is not None and _series_of(session, ident(following)):
+        raise BadRequestError("A later stage is drawn; undo its draw first")
+    return stage
+
+
+def _hold_results(rows: Sequence[CupSeries], confirm: bool, where: str) -> int:
+    """The played results among the series a take-back deletes; 409 until the
+    caller confirms deleting them."""
+    results = sum(
+        1 for row in rows if scored(row) and row.entrant1_id and row.entrant2_id
+    )
+    if results and not confirm:
+        raise ApiError(
+            409,
+            {
+                "error": f"{results} series of {where} hold results; confirm to delete them"
+            },
+        )
+    return results
+
+
+def redraw_division_in(
+    session: OrmSession,
+    event_id: int,
+    stage_id: int,
+    division_id: int,
+    confirm: bool,
+    reseed: Callable[[], None],
+    fill: SeedFill | None = None,
+) -> int:
+    """Take one division's draw back and draw it again, inside the caller's
+    transaction, while every other division keeps its series and results.
+
+    `reseed` writes the division's new seeds between the two. A bracket draws
+    the division again aligned on the rounds the stage holds; a stage that
+    pairs by round draws its first round for the division again, its later
+    rounds following as its results come in. Answers the results it deleted.
+    """
+    _hold_undo(session, event_id, stage_id)
+    stage = _stage(session, event_id, stage_id)
+    rows = [
+        row for row in _series_of(session, stage_id) if row.division_id == division_id
+    ]
+    results = _hold_results(rows, confirm, "this division")
+    for row in rows:
+        session.delete(row)
+    session.flush()
+    reseed()
+    if _draws_by_round(stage):
+        _draw_round(session, event_id, stage_id, division_id, fill)
+    else:
+        _generate(session, event_id, stage_id, division_id, fill, alongside=True)
+    return results
 
 
 def generate_in(

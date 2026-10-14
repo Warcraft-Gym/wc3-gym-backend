@@ -2,6 +2,8 @@
 
 ## 2026-10-14
 
+* **Add**: a cup's rounds change after creation: rename or move one (`PUT /events/{id}/legs/{leg_id}`), add one after the last (`POST /events/{id}/legs`), remove one not drawn (`DELETE /events/{id}/legs/{leg_id}`). `POST /events` for a cup takes its recurring rule as `recurrence`. [cup_leg](data/tables/cup_leg.md), [cup_recurrence](data/tables/cup_recurrence.md) and the [events module](concepts/events-module.md#cup-rounds) state it.
+* **Update**: a seed change after the draw that names a division takes back and draws that division alone; the other divisions keep their series and results. The [events module](concepts/events-module.md#entrants-seeds-divisions) states it.
 * **Add**: a cup's seeds change after the draw, and the draw follows them: `PUT /events/{id}/stages/{stage_id}/seeds/redraw` writes the seeds and draws the first stage again in one transaction, asking to confirm while its series hold results. The [events module](concepts/events-module.md#entrants-seeds-divisions) states it.
 
 ## 2026-10-13

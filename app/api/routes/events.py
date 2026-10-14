@@ -29,7 +29,12 @@ from app.models.cup_recurrence import (
     CupRecurrenceUpdate,
     CupRecurrenceWrite,
 )
-from app.models.cup_rounds import CupLegCheckinWrite, CupLegPublic
+from app.models.cup_rounds import (
+    CupLegCheckinWrite,
+    CupLegPublic,
+    CupLegUpdate,
+    CupLegWrite,
+)
 from app.models.cup_series import CupStagePublic
 from app.models.cup_settings import CupPinWrite
 from app.models.cup_team import (
@@ -170,7 +175,7 @@ def add_event(
     )
     if gnl.owns(data.league_id):
         return service.get(gnl.add(data), claims=claims)
-    event = service.add(data)
+    event = service.add(data, str(claims["sub"]))
     if claims["sub"] != "admin":
         organizers.add_to_event(event.id, claims["sub"], claims["sub"])
     return event
@@ -464,6 +469,35 @@ def pin_cup_entrant(
     """Pin a cup player to its division, or its seed, so a new cut or a
     reshuffle leaves it where it is."""
     return service.set_pins(event_id, entrant_id, data)
+
+
+@router.post(
+    "/events/{event_id}/legs",
+    status_code=201,
+    dependencies=[Depends(require_event_runner)],
+)
+def add_leg(event_id: int, data: CupLegWrite) -> list[CupLegPublic]:
+    """Add a round after the last one of a cup over rounds, playing the same
+    stages as the others."""
+    return cup_rounds.add_leg(event_id, data)
+
+
+@router.put(
+    "/events/{event_id}/legs/{leg_id}",
+    dependencies=[Depends(require_event_runner)],
+)
+def update_leg(event_id: int, leg_id: int, data: CupLegUpdate) -> list[CupLegPublic]:
+    """Rename a round or move its start; the first round's start is the cup's."""
+    return cup_rounds.update_leg(event_id, leg_id, data)
+
+
+@router.delete(
+    "/events/{event_id}/legs/{leg_id}",
+    dependencies=[Depends(require_event_runner)],
+)
+def remove_leg(event_id: int, leg_id: int) -> list[CupLegPublic]:
+    """Remove a round that is not drawn; a cup keeps two rounds or more."""
+    return cup_rounds.remove_leg(event_id, leg_id)
 
 
 @router.post("/events/{event_id}/legs/{leg_id}/checkins")

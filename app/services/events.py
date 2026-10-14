@@ -475,7 +475,7 @@ class EventService:
             )
             return public
 
-    def add(self, data: EventCreate) -> EventPublic:
+    def add(self, data: EventCreate, created_by: str | None = None) -> EventPublic:
         """Create an event and the stages it plays, or one default stage.
 
         A body that leaves `stages` out plays one default stage. A body that
@@ -491,6 +491,7 @@ class EventService:
                     "uses_divisions",
                     "legs",
                     "points_by_place",
+                    "recurrence",
                 }
             )
             _hold_bounds(fields)
@@ -521,6 +522,13 @@ class EventService:
                     event,
                     data.uses_divisions,
                     cup_rounds.points_text(data.points_by_place) if data.legs else None,
+                )
+            if data.recurrence is not None:
+                if not cup:
+                    raise BadRequestError("Only a cup repeats")
+                # the cup and its rule are written together, so neither stands alone
+                cup_recurrence.create_in(
+                    session, event, data.recurrence, created_by or "admin"
                 )
             hold_pool(session, event)
             return _answer(session, ident(event))
@@ -562,6 +570,9 @@ class EventService:
                 fill_rounds(session, event, data.round_count or 0)
             if data.uses_divisions is not None and cup_divisions.is_cup(event):
                 cup_divisions.set_uses_divisions(session, event, data.uses_divisions)
+            if "starts_at" in fields and cup_divisions.is_cup(event):
+                # a cup over rounds starts with its first round
+                cup_rounds.follow_start(session, event)
             session.flush()
             hold_pool(session, event)
             return _answer(session, ident(event))
@@ -1187,7 +1198,9 @@ class EventService:
 
         The draw goes, the seeds are written as `set_seeds` writes them, and
         the stage is drawn as Generate draws it; a stage that pairs by round
-        draws its first round. A stage whose series hold results answers 409
+        draws its first round. A write that names a division takes back and
+        draws that division alone, and every other division keeps its series
+        and results. Series with results among the ones taken back answer 409
         until the call confirms, as the undo of a draw does, and a refused
         draw keeps the draw that stood.
         """
@@ -1201,7 +1214,22 @@ class EventService:
                     "A later stage plays what the stage before sends on; "
                     "it has no seeds to change"
                 )
-            if cup_engine.stage_drawn(session, stage_id):
+            drawn = cup_engine.stage_drawn(session, stage_id)
+            if drawn and data.division_id is not None:
+                # one division is drawn again; the others keep their draw and results
+                written: list[EventEntrant] = []
+                cup_engine.redraw_division_in(
+                    session,
+                    event_id,
+                    stage_id,
+                    data.division_id,
+                    confirm,
+                    lambda: written.extend(_write_seeds(session, event, stage, data)),
+                    self.seed_for_draw,
+                )
+                written.sort(key=lambda row: (row.division_id or 0, row.seed or 0))
+                return _entrant_publics(session, event, written)
+            if drawn:
                 cup_engine.undo_in(session, event_id, stage_id, confirm)
             rows = _write_seeds(session, event, stage, data)
             if cup_engine.draws_by_round(stage):

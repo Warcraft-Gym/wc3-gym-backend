@@ -10,9 +10,10 @@ of that place. Finishing the cup pays its awards from the overall table.
 """
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -26,6 +27,7 @@ from app.models.cup_rounds import (
     CupLegCheckin,
     CupLegPublic,
     CupLegStage,
+    CupLegUpdate,
     CupLegWrite,
 )
 from app.models.cup_series import CupSeries
@@ -290,6 +292,115 @@ def reopen_leg(event_id: int, leg_id: int) -> list[CupLegPublic]:
         return legs_of(session, event_id)
 
 
+def update_leg(event_id: int, leg_id: int, data: CupLegUpdate) -> list[CupLegPublic]:
+    """Rename a round or move its start, while the cup is open. A round starts
+    after the one before it and before the one after; the first round's start
+    is the cup's start."""
+    with Session.begin() as session:
+        event = _open_cup(session, event_id)
+        leg = _leg(session, event_id, leg_id)
+        changes = data.model_dump(exclude_unset=True)
+        if "name" in changes:
+            leg.name = (changes["name"] or "").strip() or f"Round {leg.number}"
+        if "starts_at" in changes:
+            _hold_order(session, event_id, leg.number, changes["starts_at"])
+            leg.starts_at = changes["starts_at"]
+            if leg.number == 1:
+                _start_cup(event, leg.starts_at)
+        session.flush()
+        return legs_of(session, event_id)
+
+
+def add_leg(event_id: int, data: CupLegWrite) -> list[CupLegPublic]:
+    """Add a round after the last one, playing the same stages as the others."""
+    with Session.begin() as session:
+        _open_cup(session, event_id)
+        legs = _rows(session, event_id)
+        if not legs:
+            raise BadRequestError("This cup is played on one evening; it has no rounds")
+        last = legs[-1]
+        number = last.number + 1
+        _hold_order(session, event_id, number, data.starts_at)
+        stages = _stages_of(session, ident(last))
+        position = (
+            session.scalar(
+                select(func.max(col(EventStage.position))).where(
+                    col(EventStage.event_id) == event_id
+                )
+            )
+            or 0
+        )
+        leg = CupLeg(
+            event_id=event_id,
+            number=number,
+            name=(data.name or "").strip() or f"Round {number}",
+            starts_at=data.starts_at,
+        )
+        session.add(leg)
+        session.flush()
+        for stage in stages:
+            position += 1
+            copy = EventStage(
+                event_id=event_id,
+                position=position,
+                **EventStageWrite.model_validate(
+                    stage, from_attributes=True
+                ).model_dump(),
+            )
+            session.add(copy)
+            session.flush()
+            session.add(CupLegStage(stage_id=ident(copy), leg_id=ident(leg)))
+        session.flush()
+        return legs_of(session, event_id)
+
+
+def remove_leg(event_id: int, leg_id: int) -> list[CupLegPublic]:
+    """Remove a round that is not drawn, with its stages and its check-ins; the
+    rounds after it move up a number, and a cup keeps two rounds or more."""
+    with Session.begin() as session:
+        event = _open_cup(session, event_id)
+        leg = _leg(session, event_id, leg_id)
+        legs = _rows(session, event_id)
+        if len(legs) <= 2:
+            raise BadRequestError("A cup over rounds keeps two rounds or more")
+        if leg.finished_at is not None or _leg_drawn(session, ident(leg)):
+            raise BadRequestError(
+                f"Round {leg.number} is drawn; undo its draw before it goes"
+            )
+        for stage in _stages_of(session, ident(leg)):
+            session.delete(stage)
+        session.delete(leg)
+        session.flush()
+        for later in legs:
+            if later.number > leg.number:
+                if later.name == f"Round {later.number}":
+                    later.name = f"Round {later.number - 1}"
+                later.number -= 1
+        # the stage positions close up, so the event still reads its stages in order
+        for position, stage in enumerate(
+            session.scalars(
+                select(EventStage)
+                .where(col(EventStage.event_id) == event_id)
+                .order_by(col(EventStage.position))
+            ),
+            start=1,
+        ):
+            stage.position = position
+        session.flush()
+        if leg.number == 1:
+            first = _rows(session, event_id)[0]
+            _start_cup(event, first.starts_at)
+        session.flush()
+        return legs_of(session, event_id)
+
+
+def follow_start(session: OrmSession, event: Season) -> None:
+    """A cup over rounds whose start moved moves its first round with it."""
+    legs = _rows(session, ident(event))
+    if legs:
+        legs[0].starts_at = event.starts_at
+
+
 def overall(event_id: int) -> CupOverallPublic:
     """The cup's overall table over its finished rounds."""
     with Session.begin() as session:
@@ -407,6 +518,56 @@ def _cup(session: OrmSession, event_id: int) -> Season:
     if event.kind is not EventKind.cup:
         raise BadRequestError("Only a cup plays rounds")
     return event
+
+
+def _open_cup(session: OrmSession, event_id: int) -> Season:
+    event = _cup(session, event_id)
+    if event.closed_at is not None or event.cancelled_at is not None:
+        raise BadRequestError("The cup is over; its rounds stay as they are")
+    return event
+
+
+def _rows(session: OrmSession, event_id: int) -> list[CupLeg]:
+    return list(
+        session.scalars(
+            select(CupLeg)
+            .where(col(CupLeg.event_id) == event_id)
+            .order_by(col(CupLeg.number))
+        )
+    )
+
+
+def _stages_of(session: OrmSession, leg_id: int) -> list[EventStage]:
+    return list(
+        session.scalars(
+            select(EventStage)
+            .join(CupLegStage, col(CupLegStage.stage_id) == col(EventStage.id))
+            .where(col(CupLegStage.leg_id) == leg_id)
+            .order_by(col(EventStage.position))
+        )
+    )
+
+
+def _hold_order(
+    session: OrmSession, event_id: int, number: int, starts_at: datetime | None
+) -> None:
+    """Refuse a start that puts round `number` before the round ahead of it or
+    after the round behind it."""
+    if starts_at is None:
+        return
+    for other in _rows(session, event_id):
+        if other.starts_at is None or other.number == number:
+            continue
+        if other.number < number and starts_at <= other.starts_at:
+            raise BadRequestError(f"Round {number} starts after round {other.number}")
+        if other.number > number and starts_at >= other.starts_at:
+            raise BadRequestError(f"Round {number} starts before round {other.number}")
+
+
+def _start_cup(event: Season, starts_at: datetime | None) -> None:
+    """The first round's start is the cup's start."""
+    event.starts_at = starts_at
+    event.start_date = starts_at.date() if starts_at is not None else event.start_date
 
 
 def _leg(session: OrmSession, event_id: int, leg_id: int) -> CupLeg:
