@@ -58,6 +58,11 @@ class CupSeries(DBModel, table=True):
     )
     # Where the series sits in its round
     sequence: int | None = None
+    # The map a free for all lobby is played on, drawn from the cup's pool; a
+    # two-sided series names its maps per game instead
+    lobby_map_id: int | None = Field(
+        default=None, foreign_key="maps.id", ondelete="SET NULL"
+    )
     # The entrant on each side: a solo entrant also fills the player id below,
     # a team entrant leaves it null and its roster plays the side
     entrant1_id: int | None = Field(
@@ -181,6 +186,19 @@ def _pick_map(series: CupSeries, side: str) -> str | None:
     return None
 
 
+class LobbyMapPublic(SQLModel):
+    """The map a lobby is played on."""
+
+    id: int
+    name: str
+
+
+class LobbyMapWrite(SQLModel):
+    """A runner's map for a lobby, one of the cup's pool."""
+
+    map_id: int
+
+
 class CupSeriesPublic(PublicModel):
     """One cup series as its box and its report dialog read it."""
 
@@ -217,6 +235,8 @@ class CupSeriesPublic(PublicModel):
     side_size: int = 1
     # Every seat of a lobby, or every player of a team side, in side order
     sides: list[SeriesSidePublic] = []
+    # The map a lobby is played on; null on a two-sided series
+    lobby_map: LobbyMapPublic | None = None
     slot1_from_series_id: int | None = None
     slot1_takes_loser: bool = False
     slot2_from_series_id: int | None = None

@@ -28,6 +28,7 @@ from app.models.cup_series import (
     CupSeries,
     CupSeriesGame,
     CupSeriesPublic,
+    LobbyMapWrite,
 )
 from app.models.enums import Race
 from app.models.event_entrant import EventEntrant
@@ -91,6 +92,16 @@ class Caller:
         """Refuse a caller who does not run the cup."""
         if not self.runs:
             raise ApiError(403, NOT_AUTHORIZED)
+
+    def hold_seat_or_runner(self) -> None:
+        """Refuse a caller who sits in no seat of the lobby and does not run the
+        cup: every player of a lobby may enter its places."""
+        if self.user_id is not None and any(
+            side.user_id == self.user_id
+            for side in cup_engine.lobby_seats(self._session, self._row)
+        ):
+            return
+        self.hold_runner()
 
 
 def get(series_id: int) -> CupSeriesPublic:
@@ -195,6 +206,11 @@ def clear(
     with Session.begin() as session:
         row = _series(session, series_id)
         caller = Caller(session, claims, row)
+        if cup_engine.lobby_seats(session, row):
+            # a lobby's places are taken back by a runner, with the seats they sent on
+            caller.hold_runner()
+            cup_engine.clear_places(session, row)
+            return cup_engine.read_one(session, row)
         if force or row.result_kind != "played":
             caller.hold_runner()
         else:
@@ -221,11 +237,24 @@ def award(
 def places(
     series_id: int, data: PlacesWrite, claims: dict[str, Any] | None
 ) -> CupSeriesPublic:
-    """A runner enters where every side of a free for all lobby finished."""
+    """A player of a free for all lobby, or a runner, enters where every side
+    finished; a lobby played already is corrected while the round after it is
+    unplayed."""
+    with Session.begin() as session:
+        row = _series(session, series_id)
+        Caller(session, claims, row).hold_seat_or_runner()
+        cup_engine.set_places(session, row, data)
+        return cup_engine.read_one(session, row)
+
+
+def lobby_map(
+    series_id: int, data: LobbyMapWrite, claims: dict[str, Any] | None
+) -> CupSeriesPublic:
+    """A runner plays a lobby on another map of the cup's pool."""
     with Session.begin() as session:
         row = _series(session, series_id)
         Caller(session, claims, row).hold_runner()
-        cup_engine.set_places(session, row, data)
+        cup_engine.set_lobby_map(session, row, data.map_id)
         return cup_engine.read_one(session, row)
 
 

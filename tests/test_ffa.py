@@ -14,7 +14,9 @@ from app.models.base import ident
 from app.models.enums import EventKind, Race, StageFormat
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
+from app.models.relationships import DBMapSeason
 from app.models.season import Season
+from tests.test_cup_best_of import maps
 from tests.test_stage_engine import generate, players, players_of
 
 # What every lobby of this event pays its places, best place first
@@ -24,6 +26,7 @@ POINTS = "4,3,2,1"
 def ffa(count: int = 16) -> tuple[int, int, int]:
     """An event whose bracket of lobbies feeds a league final of one lobby."""
     ids = players(count)
+    pool = maps(3)
     with Session.begin() as session:
         event = Season(
             name="SMF FFA", kind=EventKind.cup, series_per_round=1, published=True
@@ -51,6 +54,11 @@ def ffa(count: int = 16) -> tuple[int, int, int]:
         ]
         session.add_all(stages)
         session.flush()
+        # every lobby plays one map of the pool
+        session.add_all(
+            DBMapSeason(season_id=ident(event), map_id=map_id, position=position)
+            for position, map_id in enumerate(pool)
+        )
         for seed, user_id in enumerate(ids, start=1):
             session.add(
                 EventEntrant(
@@ -290,3 +298,216 @@ def test_a_reader_cannot_place_a_lobby(
         ).status_code
         == 401
     )
+
+
+def discord_of(user_id: int) -> str:
+    from app.models.user import User
+
+    with Session.begin() as session:
+        user = session.get(User, user_id)
+        assert user is not None and user.discordId
+        return user.discordId
+
+
+def test_a_player_of_the_lobby_reports_its_places_and_an_outsider_cannot(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+) -> None:
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    first, second = lobbies(client, event, bracket, "Round 1")[:2]
+    inside = member(discord_of(first["sides"][0]["user_id"]))
+    outside = member(discord_of(second["sides"][0]["user_id"]))
+
+    refused = play(client, outside, first, by_seed(first, seeds))
+    assert refused.status_code == 403, refused.text
+    reported = play(client, inside, first, by_seed(first, seeds))
+    assert reported.status_code == 200, reported.text
+    assert sorted(side["place"] for side in reported.json()["sides"]) == [1, 2, 3, 4]
+
+
+def test_places_name_every_seat_once_from_one_to_the_seat_count(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    lobby = lobbies(client, event, bracket, "Round 1")[0]
+
+    def places(pairs: list[tuple[int, int]]) -> Any:  # noqa: ANN401
+        return client.put(
+            f"/cup-series/{lobby['id']}/places",
+            json={"places": [{"side_no": s, "place": p} for s, p in pairs]},
+            headers=auth_headers,
+        )
+
+    for pairs, error in (
+        ([(1, 1), (2, 2), (3, 3)], "Every side of the lobby needs a place"),
+        ([(1, 1), (2, 1), (3, 3), (4, 4)], "The places run from 1 to 4, each once"),
+        ([(1, 1), (2, 2), (3, 3), (4, 5)], "The places run from 1 to 4, each once"),
+        ([(1, 1), (1, 2), (3, 3), (4, 4)], "Name the place of each seat once"),
+    ):
+        answer = places(pairs)
+        assert answer.status_code == 400, answer.text
+        assert answer.json() == {"error": error}
+    # a lobby still waiting for its players takes no places
+    empty = lobbies(client, event, bracket, "Round 2")[0]
+    waiting = play(client, auth_headers, empty, [1, 2, 3, 4])
+    assert waiting.status_code == 400, waiting.text
+    assert waiting.json() == {"error": "Every seat of the lobby needs its player first"}
+
+
+def test_a_correction_seats_the_next_round_again_until_it_is_played(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    for lobby in lobbies(client, event, bracket, "Round 1"):
+        assert (
+            play(client, auth_headers, lobby, by_seed(lobby, seeds)).status_code == 200
+        )
+    first = lobbies(client, event, bracket, "Round 1")[0]
+    seated_before = {
+        seat
+        for lobby in lobbies(client, event, bracket, "Round 2")
+        for seat in seated(lobby, seeds)
+    }
+    assert 1 in seated_before and 16 not in seated_before
+
+    # the lobby's last seed in fact won it: he plays on, the top seed goes out
+    turned = list(reversed(by_seed(first, seeds)))
+    corrected = play(client, auth_headers, first, turned)
+    assert corrected.status_code == 200, corrected.text
+    seated_after = {
+        seat
+        for lobby in lobbies(client, event, bracket, "Round 2")
+        for seat in seated(lobby, seeds)
+    }
+    assert 16 in seated_after and 1 not in seated_after
+
+    # once the round below has a result, the round above stays as it is
+    below = lobbies(client, event, bracket, "Round 2")[0]
+    assert play(client, auth_headers, below, by_seed(below, seeds)).status_code == 200
+    late = play(client, auth_headers, first, by_seed(first, seeds))
+    assert late.status_code == 409, late.text
+    assert late.json() == {"error": "The next round has results; clear them first"}
+
+
+def test_a_runner_clears_a_lobby_and_the_round_below_gives_its_seats_back(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+) -> None:
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    for lobby in lobbies(client, event, bracket, "Round 1"):
+        assert (
+            play(client, auth_headers, lobby, by_seed(lobby, seeds)).status_code == 200
+        )
+    first = lobbies(client, event, bracket, "Round 1")[0]
+    player = member(discord_of(first["sides"][0]["user_id"]))
+    url = f"/cup-series/{first['id']}/result"
+    assert client.delete(url, headers=player).status_code == 403
+
+    cleared = client.delete(url, headers=auth_headers)
+
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["player1_score"] is None
+    assert [side["place"] for side in cleared.json()["sides"]] == [None] * 4
+    below = lobbies(client, event, bracket, "Round 2")
+    assert [seated(lobby, seeds) for lobby in below] == [[0, 0, 0, 0], [0, 0, 0, 0]]
+
+
+def test_the_final_lobby_decides_the_top_places_of_the_heats(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    for name in ("Round 1", "Round 2"):
+        for lobby in lobbies(client, event, bracket, name):
+            assert (
+                play(client, auth_headers, lobby, by_seed(lobby, seeds)).status_code
+                == 200
+            )
+    final = lobbies(client, event, bracket, "Final")[0]
+    # the weakest finalist wins the final, the strongest comes last
+    order = list(reversed(by_seed(final, seeds)))
+    assert play(client, auth_headers, final, order).status_code == 200
+
+    rows = table(client, event, bracket)
+
+    sides = {side["side_no"]: side["user_id"] for side in final["sides"]}
+    assert [row["user_id"] for row in rows[:4]] == [sides[side] for side in order]
+    # the players out in round 2 follow the finalists, ahead of round 1's
+    second = {
+        side["user_id"]
+        for lobby in lobbies(client, event, bracket, "Round 2")
+        for side in lobby["sides"]
+    } - set(sides.values())
+    assert {row["user_id"] for row in rows[4:8]} == second
+
+
+def test_every_lobby_plays_a_map_of_the_pool_a_runner_can_change(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+) -> None:
+    from sqlmodel import col, select
+
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    with Session.begin() as session:
+        pool = set(
+            session.scalars(
+                select(col(DBMapSeason.map_id)).where(
+                    col(DBMapSeason.season_id) == event
+                )
+            )
+        )
+    first = lobbies(client, event, bracket, "Round 1")
+    assert all(row["lobby_map"]["id"] in pool for row in first)
+    # a pool of three gives the first three lobbies of a round three maps
+    assert len({row["lobby_map"]["id"] for row in first[:3]}) == 3
+    assert lobbies(client, event, bracket, "Final")[0]["lobby_map"] is not None
+
+    lobby = first[0]
+    other = next(map_id for map_id in pool if map_id != lobby["lobby_map"]["id"])
+    player = member(discord_of(lobby["sides"][0]["user_id"]))
+    url = f"/cup-series/{lobby['id']}/lobby-map"
+    assert client.put(url, json={"map_id": other}, headers=player).status_code == 403
+    stranger = maps(1)[0]
+    assert (
+        client.put(url, json={"map_id": stranger}, headers=auth_headers).status_code
+        == 400
+    )
+    changed = client.put(url, json={"map_id": other}, headers=auth_headers)
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["lobby_map"]["id"] == other
+    play(client, auth_headers, lobby, by_seed(lobby, seeds_of(event)))
+    assert (
+        client.put(url, json={"map_id": other}, headers=auth_headers).status_code == 400
+    )
+
+
+def test_an_ffa_stage_draws_only_with_a_map_pool(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    from sqlalchemy import delete
+    from sqlmodel import col
+
+    event, bracket, _ = ffa()
+    with Session.begin() as session:
+        session.execute(delete(DBMapSeason).where(col(DBMapSeason.season_id) == event))
+
+    refused = client.post(
+        f"/events/{event}/stages/{bracket}/generate", headers=auth_headers
+    )
+
+    assert refused.status_code == 400, refused.text
+    assert refused.json() == {
+        "error": "Add at least one map to the pool; every lobby plays one"
+    }

@@ -10,6 +10,7 @@ A team side names no player: the team entrant stands on it, and every member
 of the team acts for it.
 """
 
+import random
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -30,6 +31,7 @@ from app.models.cup_series import (
     CupSeriesPublic,
     CupSeriesSide,
     CupStagePublic,
+    LobbyMapPublic,
 )
 from app.models.cup_team import CupTeam, CupTeamMember, team_summary
 from app.models.enums import EventKind, SchedulingMode, StageFormat
@@ -42,7 +44,8 @@ from app.models.event_stage import (
     EventStage,
     StandingRow,
 )
-from app.models.relationships import DBEventRound, EventRoundPublic
+from app.models.map import Map
+from app.models.relationships import DBEventRound, DBMapSeason, EventRoundPublic
 from app.models.season import Season
 from app.models.series import ResultKindWrite
 from app.models.series_side import LobbySidesWrite, PlacesWrite, SeriesSidePublic
@@ -120,6 +123,8 @@ def _generate(
     fields = _fields(_entrants(session, event_id, stage))
     _hold_minimum(session, stage, fields)
     cup_reads.hold_pool(session, event)
+    if stage.format is StageFormat.ffa and not _pool(session, event_id):
+        raise BadRequestError("Add at least one map to the pool; every lobby plays one")
     # a team cup draws complete teams only
     from app.services.cup_teams import incomplete
 
@@ -191,6 +196,8 @@ def _generate(
             rows[-1].sequence = counts[division, place]
         made += rows
     session.flush()
+    if stage.format is StageFormat.ffa:
+        _draw_lobby_maps(session, event_id, made)
     # Padded walkovers fill every slot below before any series below settles
     walkovers = [row for row in made if scored(row)]
     for row in walkovers:
@@ -450,20 +457,110 @@ def set_places(session: OrmSession, row: CupSeries, data: PlacesWrite) -> None:
     seats = {side.side_no: side for side in _seats(session, series_id)}
     if not seats:
         raise BadRequestError("This series seats no lobby, so it takes no places")
+    if any(side.entrant_id is None for side in seats.values()):
+        raise BadRequestError("Every seat of the lobby needs its player first")
+    given: dict[int, int] = {}
     for entry in data.places:
-        side = seats.get(entry.side_no)
-        if side is None:
+        if entry.side_no not in seats:
             raise BadRequestError(f"This lobby seats no side {entry.side_no}")
-        side.place = entry.place
-    if any(side.place is None for side in seats.values()):
+        if entry.side_no in given:
+            raise BadRequestError("Name the place of each seat once")
+        given[entry.side_no] = entry.place
+    if set(given) != set(seats):
         raise BadRequestError("Every side of the lobby needs a place")
+    if sorted(given.values()) != list(range(1, len(seats) + 1)):
+        raise BadRequestError(f"The places run from 1 to {len(seats)}, each once")
+    # a lobby played already is corrected: the round after follows while it is unplayed
+    correcting = scored(row)
+    split = _round_split(session, row)
+    _hold_next_round_open(split)
+    for side_no, place in given.items():
+        seats[side_no].place = place
     # A lobby plays one game and its places settle it, so the score only
     # says it was played; the seats carry who finished where
     row.player1_score, row.player2_score = 1, 0
     row.result_kind = "played"
     session.flush()
-    _fill_lobbies(session, row)
+    _fill_lobbies(session, row, refill=correcting, split=split)
     _auto_advance(session, row)
+
+
+def clear_places(session: OrmSession, row: CupSeries) -> None:
+    """Take a lobby's result back: its places go, and the round after it, while
+    unplayed, gives back the seats this round sent on."""
+    seats = _seats(session, ident(row))
+    if not seats:
+        raise BadRequestError("This series seats no lobby, so it holds no places")
+    split = _round_split(session, row)
+    _hold_next_round_open(split)
+    if split is not None:
+        for sides in _seats_of(session, [ident(other) for other in split[2]]).values():
+            for side in sides:
+                side.entrant_id = None
+                side.user_id = 0
+                side.place = None
+    for side in seats:
+        side.place = None
+    row.player1_score = row.player2_score = None
+    row.result_kind = "played"
+    session.flush()
+
+
+def set_lobby_map(session: OrmSession, row: CupSeries, map_id: int) -> None:
+    """Play a lobby on another map of the cup's pool, until it has its result."""
+    if not _seats(session, ident(row)):
+        raise BadRequestError("Only a lobby is played on one map")
+    if scored(row):
+        raise BadRequestError("The lobby has its result; its map stays")
+    event = cup_reads.event_of(session, row)
+    if map_id not in _pool(session, ident(event)):
+        raise BadRequestError("Pick a map from the cup's pool")
+    row.lobby_map_id = map_id
+    session.flush()
+
+
+NEXT_PLAYED = "The next round has results; clear them first"
+
+
+def lobby_seats(session: OrmSession, row: CupSeries) -> list[CupSeriesSide]:
+    """The seats of a free for all lobby; empty for a two-sided series."""
+    return list(_seats(session, ident(row)))
+
+
+def _hold_next_round_open(
+    split: tuple[EventStage, list[CupSeries], list[CupSeries]] | None,
+) -> None:
+    """Refuse to change a lobby's places once the round after it has a result."""
+    if split is not None and any(scored(other) for other in split[2]):
+        raise ApiError(409, {"error": NEXT_PLAYED})
+
+
+def _pool(session: OrmSession, event_id: int) -> list[int]:
+    return list(
+        session.scalars(
+            select(col(DBMapSeason.map_id))
+            .where(col(DBMapSeason.season_id) == event_id)
+            .order_by(col(DBMapSeason.position))
+        )
+    )
+
+
+def _draw_lobby_maps(
+    session: OrmSession, event_id: int, rows: Sequence[CupSeries]
+) -> None:
+    """Give every lobby a map drawn from the pool; the lobbies of one round play
+    different maps while the pool holds enough of them."""
+    pool = _pool(session, event_id)
+    if not pool:
+        return
+    by_round: dict[int, list[CupSeries]] = {}
+    for row in rows:
+        by_round.setdefault(row.round_id, []).append(row)
+    for lobbies in by_round.values():
+        order = random.sample(pool, len(pool))
+        for index, row in enumerate(lobbies):
+            row.lobby_map_id = order[index % len(order)]
+    session.flush()
 
 
 def set_sides(session: OrmSession, row: CupSeries, data: LobbySidesWrite) -> None:
@@ -643,7 +740,27 @@ def _publics(session: OrmSession, rows: Sequence[CupSeries]) -> list[CupSeriesPu
     cup_reads.fill(session, rows, publics)
     _fill_teams(session, publics)
     _fill_sides(session, publics)
+    _fill_lobby_maps(session, rows, publics)
     return publics
+
+
+def _fill_lobby_maps(
+    session: OrmSession, rows: Sequence[CupSeries], publics: Sequence[CupSeriesPublic]
+) -> None:
+    """Name the map of every lobby in the list, in one read."""
+    wanted = {row.lobby_map_id for row in rows if row.lobby_map_id is not None}
+    if not wanted:
+        return
+    names: dict[int, str] = {
+        map_id: name
+        for map_id, name in session.execute(
+            select(col(Map.id), col(Map.name)).where(col(Map.id).in_(wanted))
+        )
+    }
+    for row, public in zip(rows, publics, strict=True):
+        map_id = row.lobby_map_id
+        if map_id is not None and map_id in names:
+            public.lobby_map = LobbyMapPublic(id=map_id, name=names[map_id])
 
 
 def _fill_sides(session: OrmSession, rows: Sequence[CupSeriesPublic]) -> None:
@@ -701,22 +818,20 @@ def _fill_sources(rows: Sequence[CupSeriesPublic], names: Mapping[int, str]) -> 
         row.slot2_source = source(row.slot2_from_series_id, row.slot2_takes_loser)
 
 
-def _fill_lobbies(session: OrmSession, row: CupSeries) -> None:
-    """Seat the next round's lobbies once every lobby of this one has places.
-
-    The places that go through rank on the place first and the lobby second,
-    so every lobby winner sits above every runner-up, and the snake deals them
-    over the lobbies of the round after this one.
-    """
+def _round_split(
+    session: OrmSession, row: CupSeries
+) -> tuple[EventStage, list[CupSeries], list[CupSeries]] | None:
+    """A free for all lobby's stage, the lobbies of its round in its division,
+    and the lobbies of the round after; null for any other series."""
     stage = _stage_of(session, row)
     if stage is None or stage.format is not StageFormat.ffa:
-        return
+        return None
     rounds = {
         ident(held): place for place, held in enumerate(_rounds_of(session, stage.id))
     }
     place = rounds.get(row.round_id or 0)
     if place is None:
-        return
+        return None
     held = [
         other
         for other in _series_of(session, stage.id)
@@ -726,12 +841,35 @@ def _fill_lobbies(session: OrmSession, row: CupSeries) -> None:
     following = [
         other for other in held if rounds.get(other.round_id or 0) == place + 1
     ]
+    return stage, done, following
+
+
+def _fill_lobbies(
+    session: OrmSession,
+    row: CupSeries,
+    refill: bool = False,
+    split: tuple[EventStage, list[CupSeries], list[CupSeries]] | None = None,
+) -> None:
+    """Seat the next round's lobbies once every lobby of this one has places.
+
+    The places that go through rank on the place first and the lobby second,
+    so every lobby winner sits above every runner-up, and the snake deals them
+    over the lobbies of the round after this one.
+    """
+    split = split or _round_split(session, row)
+    if split is None:
+        return
+    stage, done, following = split
     if not following or any(not scored(other) for other in done):
         return
     seats = _seats_of(session, [ident(other) for other in following])
-    # A round already seated is left alone; only an empty one fills from below
+    # A round already seated stays, unless a corrected lobby above it sends
+    # other players on; a played round below refuses the correction first
     if any(side.entrant_id for sides in seats.values() for side in sides):
-        return
+        if not refill:
+            return
+        if any(scored(other) for other in following):
+            raise ApiError(409, {"error": NEXT_PLAYED})
     through = _through(session, stage, done)
     dealt = brackets.snake(len(through), len(following))
     for lobby, taking in zip(following, dealt, strict=True):
@@ -1654,6 +1792,28 @@ def _place_table(
         if side.entrant_id in entrants and side.place is not None
     ]
     table = brackets.place_standings(list(entrants), placings, _pay(stage))
+    rounds = {
+        ident(held): place for place, held in enumerate(_rounds_of(session, stage.id))
+    }
+    if len(rounds) > 1:
+        # heats down to a final: the deepest round a player reached ranks first,
+        # then the place taken there, then the points; the final decides the top
+        reach: dict[int, tuple[int, int]] = {}
+        for row in series:
+            depth = rounds.get(row.round_id, 0)
+            for side in seats.get(ident(row), []):
+                if side.entrant_id not in entrants:
+                    continue
+                held = reach.get(side.entrant_id)
+                if held is None or depth > held[0]:
+                    reach[side.entrant_id] = (depth, side.place or len(entrants) + 1)
+        table.sort(
+            key=lambda line: (
+                -reach.get(line.entrant, (-1, 0))[0],
+                reach.get(line.entrant, (-1, len(entrants) + 1))[1],
+                -line.points,
+            )
+        )
     counted = _counted_places(list(entrants), placings)
     names = _names(session, list(entrants.values()))
     return [

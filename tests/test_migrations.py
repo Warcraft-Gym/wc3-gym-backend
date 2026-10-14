@@ -102,6 +102,8 @@ BEFORE_CUP_SETTINGS = "a8e3c5f1d276"
 BEFORE_CUP_ROUNDS = "c7d2e9a4f183"
 # The revision before a cup could repeat on a rule
 BEFORE_CUP_RECURRENCE = "d3b8f1a6c925"
+# The revision before a cup lobby held its map
+BEFORE_LOBBY_MAP = "e5c1a9d7b246"
 
 
 def comparable(
@@ -1876,3 +1878,15 @@ def test_the_recurring_cups_come_and_go(tmp_path: Path) -> None:
     assert not {"cup_recurrence", "cup_occurrence"} & tables
     with create_engine(url).connect() as connection:
         assert connection.execute(text("SELECT id FROM event")).all() == [(1,)]
+
+
+def test_the_lobby_map_comes_and_goes(tmp_path: Path) -> None:
+    """A cup series takes a lobby map column, empty, and gives it back."""
+    url = fresh_database(tmp_path, "lobby_map")
+    upgrade_to(url, BEFORE_LOBBY_MAP)
+    upgrade_to(url, "head")
+    columns = {c["name"] for c in inspect(create_engine(url)).get_columns("cup_series")}
+    assert "lobby_map_id" in columns
+    downgrade_to(url, BEFORE_LOBBY_MAP)
+    columns = {c["name"] for c in inspect(create_engine(url)).get_columns("cup_series")}
+    assert "lobby_map_id" not in columns

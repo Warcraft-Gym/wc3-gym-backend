@@ -4,7 +4,12 @@ runner's writes. A stage's draw and its tables stay under /events."""
 from fastapi import APIRouter
 
 from app.api.deps import RequireLogin
-from app.models.cup_series import CupReportWrite, CupScoreWrite, CupSeriesPublic
+from app.models.cup_series import (
+    CupReportWrite,
+    CupScoreWrite,
+    CupSeriesPublic,
+    LobbyMapWrite,
+)
 from app.models.series import ResultKindWrite
 from app.models.series_game import SeriesGamePublic
 from app.models.series_side import LobbySidesWrite, PlacesWrite
@@ -66,9 +71,20 @@ def award_cup_series(
 def place_cup_lobby(
     series_id: int, data: PlacesWrite, claims: RequireLogin
 ) -> CupSeriesPublic:
-    """A runner enters where every side of a free for all lobby finished. A
-    round whose every lobby has places seats the lobbies of the next round."""
+    """A player of a free for all lobby, or a runner, enters where every side
+    finished: every seat once, places 1 to the seat count. A round whose every
+    lobby has places seats the lobbies of the next round, and a correction
+    seats it again while it is unplayed; once it has a result, 409."""
     return cup_series.places(series_id, data, claims)
+
+
+@router.put("/cup-series/{series_id}/lobby-map")
+def map_cup_lobby(
+    series_id: int, data: LobbyMapWrite, claims: RequireLogin
+) -> CupSeriesPublic:
+    """A runner plays a lobby on another map of the cup's pool, until the lobby
+    has its result."""
+    return cup_series.lobby_map(series_id, data, claims)
 
 
 @router.put("/cup-series/{series_id}/sides")
