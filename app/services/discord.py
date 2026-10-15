@@ -100,11 +100,15 @@ def _bot_headers() -> dict[str, str] | None:
     return {"Authorization": f"Bot {token}"} if token else None
 
 
-def set_role(discord_id: str, role_id: str, grant: bool) -> None:
-    """Grant or revoke a guild role. Discord refusing it is a warning, not a failure."""
+def set_role(discord_id: str, role_id: str, grant: bool) -> bool:
+    """Grant or revoke a guild role, and say whether Discord took it.
+
+    Discord refusing it is a warning, not a failure: the role sync logs it and
+    goes on, and a member's own switch answers that it did not go through.
+    """
     headers = _bot_headers()
     if not headers or not role_id:
-        return
+        return False
     guild_id = os.getenv("DISCORD_GUILD_ID", "")
     method = "PUT" if grant else "DELETE"
     url = f"{API_URL}/guilds/{guild_id}/members/{discord_id}/roles/{role_id}"
@@ -114,13 +118,14 @@ def set_role(discord_id: str, role_id: str, grant: bool) -> None:
         )
     except requests.RequestException as error:
         logger.warning("Discord role write failed for %s: %s", discord_id, error)
-        return
+        return False
     if not response.ok:
         logger.warning(
             "Discord refused the role write for %s: %s",
             discord_id,
             response.status_code,
         )
+    return response.ok
 
 
 def guild_member_list() -> list[dict[str, Any]] | None:

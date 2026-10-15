@@ -16,6 +16,7 @@ from sqlalchemy import (
     table,
     text,
     true,
+    union_all,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Session, column_property
@@ -23,6 +24,8 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
+from app.models.cup_recurrence import CupRecurrenceRef, CupRecurrenceWrite
+from app.models.cup_rounds import CupLegPublic, CupLegWrite
 from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy
 from app.models.event_division import EventDivisionPublic
 from app.models.event_stage import EventStagePublic, EventStageWrite
@@ -173,6 +176,10 @@ class Season(SeasonBase, DBModel, table=True):
     closed_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
+    # When a runner called the event off; a cancelled event is closed and pays no place
+    cancelled_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
     # The rules or landing page of the event, shown as one "Page" link
     page_url: str | None = Field(default=None, max_length=500)
     stream_url: str | None = Field(default=None, max_length=500)
@@ -193,8 +200,35 @@ class Season(SeasonBase, DBModel, table=True):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = None
+    # The lifetime games a race needs before its rating counts; null reads the
+    # race of the signup alone, as a GNL season does
+    race_games_min: int | None = None
+    mmr_min: int | None = None
     mmr_max: int | None = None
+    # On: a signup outside the bounds is refused, not only warned, and the player
+    # needs a battle tag W3Champions rates on the race
+    eligibility_required: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # On, beside eligibility_required: that battle tag is verified through Battle.net too
+    bnet_required: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # On: each series vetoes its maps by its own best-of, and game 1 plays the
+    # map the veto leaves; off: the event's pick_ban and the round's map, as a
+    # GNL season plays them
+    veto_by_best_of: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # On: seed numbers read only for the event's admins and organizers
+    hide_seeds: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # How many players a team of a team cup fields, 2 to 4; null is a 1v1 event
+    team_size: int | None = None
     entrant_cap: int | None = None
+    # The fewest entrants the event is played with; the draw refuses below it
+    entrant_min: int | None = None
     # Where the event is played, as the entrants read it
     region: str | None = Field(default=None, max_length=20)
     # The ascending MMR each fantasy tier opens at; the tier count is one more
@@ -277,11 +311,12 @@ def series_counts_by_event(
 
     Every series names its round and every round names its event, so the count
     joins through the round and takes a generated bracket series, which has no
-    fixture, the same way as a GNL one. A series has started once it is scored
-    or its time has passed; a bracket series carries no time until it is
-    scheduled, so it counts as started only once it is scored. An event with no
-    series has no row here.
+    fixture, the same way as a GNL one, and a cup's series from its own table.
+    A series has started once it is scored or its time has passed; a cup
+    series carries no time, so it counts as started only once it is scored.
+    An event with no series has no row here.
     """
+    from app.models.cup_series import CupSeries
     from app.models.relationships import DBEventRound
     from app.models.series import Series
 
@@ -290,17 +325,37 @@ def series_counts_by_event(
         return {}
     scored = series_scored()
     started = or_(scored, col(Series.date_time) <= utcnow())
-    rows = session.execute(
+    cup_scored = and_(
+        col(CupSeries.player1_score).is_not(None),
+        col(CupSeries.player2_score).is_not(None),
+    )
+    flag = case((scored, 1), else_=0)
+    cup_flag = case((cup_scored, 1), else_=0)
+    both = union_all(
         select(
-            col(DBEventRound.season_id),
-            func.count(),
-            func.coalesce(func.sum(case((started, 1), else_=0)), 0),
-            func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
+            col(DBEventRound.season_id).label("event_id"),
+            case((started, 1), else_=0).label("started"),
+            flag.label("scored"),
         )
         .select_from(Series)
         .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
-        .where(col(DBEventRound.season_id).in_(ids))
-        .group_by(col(DBEventRound.season_id))
+        .where(col(DBEventRound.season_id).in_(ids)),
+        select(
+            col(DBEventRound.season_id).label("event_id"),
+            cup_flag.label("started"),
+            cup_flag.label("scored"),
+        )
+        .select_from(CupSeries)
+        .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
+        .where(col(DBEventRound.season_id).in_(ids)),
+    ).subquery()
+    rows = session.execute(
+        select(
+            both.c.event_id,
+            func.count(),
+            func.coalesce(func.sum(both.c.started), 0),
+            func.coalesce(func.sum(both.c.scored), 0),
+        ).group_by(both.c.event_id)
     ).all()
     return {row[0]: (row[1], row[2], row[3]) for row in rows}
 
@@ -568,7 +623,7 @@ AvailabilityHint = Literal["answered_yes", "answered_no", "blocked_by_blocks", "
 
 # The one action a member's event row offers; app/services/events.py computes it
 MemberAction = Literal[
-    "sign_up", "withdraw", "check_in", "checked_in", "view", "closed"
+    "sign_up", "withdraw", "check_in", "checked_in", "view", "closed", "waitlisted"
 ]
 
 
@@ -602,6 +657,7 @@ class EventPublic(SQLModel):
     checkin_enabled: bool = True
     multi_entry: bool = False
     closed_at: Annotated[datetime | None, AwareUTC] = None
+    cancelled_at: Annotated[datetime | None, AwareUTC] = None
     region: str | None = None
     page_url: str | None = None
     stream_url: str | None = None
@@ -609,8 +665,17 @@ class EventPublic(SQLModel):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = None
+    race_games_min: int | None = None
+    mmr_min: int | None = None
     mmr_max: int | None = None
+    eligibility_required: bool = False
+    bnet_required: bool = False
+    veto_by_best_of: bool = False
+    # On: seed numbers read only for the event's admins and organizers
+    hide_seeds: bool = False
+    team_size: int | None = None
     entrant_cap: int | None = None
+    entrant_min: int | None = None
     checkin_days: int | None = None
     # On: a player may answer a round's check-in before its window opens
     early_checkin: bool = False
@@ -647,6 +712,14 @@ class EventPublic(SQLModel):
     divisions: list[EventDivisionPublic] = []
     # The events this one is the parent of, newest first; empty on a list read
     children: list["EventPublic"] = []
+    # A cup's choice to split into divisions; null on any other kind and on a list read
+    uses_divisions: bool | None = None
+    # A cup played as a custom game on one map; null on any other kind and on a list read
+    custom_game: bool | None = None
+    # A cup played over rounds: its rounds in order; null on any other event and on a list read
+    cup_legs: list[CupLegPublic] | None = None
+    # A cup made from a recurring rule: the rule; null otherwise and on a list read
+    cup_recurrence: CupRecurrenceRef | None = None
 
 
 class EventCreate(SQLModel):
@@ -684,8 +757,27 @@ class EventCreate(SQLModel):
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = Field(default=None, ge=1)
+    race_games_min: int | None = Field(default=None, ge=1)
+    mmr_min: int | None = None
     mmr_max: int | None = None
+    eligibility_required: bool = False
+    bnet_required: bool = False
+    veto_by_best_of: bool = False
+    # On: seed numbers read only for the event's admins and organizers
+    hide_seeds: bool = False
+    team_size: int | None = Field(default=None, ge=2, le=4)
     entrant_cap: int | None = None
+    entrant_min: int | None = Field(default=None, ge=2)
+    # A cup's choice to split its players into divisions; read on a cup alone
+    uses_divisions: bool = False
+    # A cup played over rounds: one entry per round, each a copy of `stages`,
+    # and the points each place of a round pays; read on a cup alone
+    legs: list[CupLegWrite] = []
+    points_by_place: list[int] | None = None
+    # A custom game cup: one map in `map_ids`, no veto, every game on it; read on a cup alone
+    custom_game: bool = False
+    # A cup that repeats on a rule from the start: the rule, set up with the cup
+    recurrence: CupRecurrenceWrite | None = None
     # How many series one fixture holds, and a fixture pairs two team
     # entrants, so it reads only on a team event.
     series_per_round: int = 1
@@ -729,8 +821,18 @@ class EventUpdate(SQLModel):
     map_rules: Annotated[str | None, MapRules] = None
     min_games: int | None = None
     min_games_seasons: int | None = Field(default=None, ge=1)
+    race_games_min: int | None = Field(default=None, ge=1)
+    mmr_min: int | None = None
     mmr_max: int | None = None
+    eligibility_required: bool | None = None
+    bnet_required: bool | None = None
+    veto_by_best_of: bool | None = None
+    hide_seeds: bool | None = None
+    team_size: int | None = Field(default=None, ge=2, le=4)
+    # A cup's choice to split into divisions; off takes them back before the draw
+    uses_divisions: bool | None = None
     entrant_cap: int | None = None
+    entrant_min: int | None = Field(default=None, ge=2)
     series_per_round: int | None = None
     round_count: int | None = Field(default=None, ge=0)
     pick_ban: Annotated[str | None, NumToStr] = None
@@ -769,6 +871,18 @@ class CaptainFixture(SQLModel):
     played: int = 0
 
 
+class MemberCupTeam(SQLModel):
+    """The cup team the caller plays a team cup in, on their member row."""
+
+    id: int
+    name: str
+    # The caller captains it: they invite, take back and withdraw the team
+    captain: bool = False
+    # The players who accepted, the captain included; the team checks in and
+    # is drawn once it holds the cup's team size
+    players: int = 0
+
+
 class MemberEventRow(SQLModel):
     """One row of the member home's events list, over every kind of event.
 
@@ -787,11 +901,13 @@ class MemberEventRow(SQLModel):
     end: date | None = None
     phase: EventPhase
     signups_open: bool
-    # The caller holds an entrant row, or a GNL signup, for this event
+    # The caller holds an entrant row, plays in a cup team that does, or holds
+    # a GNL signup, for this event
     joined: bool
     # The event's optional "Page" link; the home builds its own in-app link
     url: str | None = None
-    # The caller's own entrant row; null for a GNL signup, which holds no entrant
+    # The caller's own entrant row, or their cup team's; null for a GNL signup,
+    # which holds no entrant
     entrant_id: int | None = None
     # The race of every live entrant row of the caller, oldest row first
     entrant_races: list[str] = []
@@ -814,7 +930,8 @@ class MemberEventRow(SQLModel):
     # caller is in and the check-in is not open; `check_in` the window stands
     # open; `checked_in` the caller checked in already; `view` the event runs or
     # is finished, so the page reads the bracket or the standings; `closed`
-    # nothing is open to the caller yet.
+    # nothing is open to the caller yet. A player of a cup team reads
+    # `check_in`, `checked_in` or `view`: the team leaves on its own panel.
     action: MemberAction
     # The caller's own team's next fixture with places left, on an event he
     # holds a captain seat in; null for every other caller and every other event
@@ -823,3 +940,13 @@ class MemberEventRow(SQLModel):
     # holds a captain seat in that is not closed; empty for every other caller
     # and every other event
     captain_matches: list[CaptainFixture] = []
+    # How many players a team of a team cup fields; null on a 1v1 cup and on
+    # every other kind of event
+    team_size: int | None = None
+    # The cup team the caller plays in, as a player who accepted; null for a
+    # solo entrant, a caller who is only invited, and every other kind
+    cup_team: MemberCupTeam | None = None
+    # A cup whose stages play free for all lobbies; false on every other kind
+    ffa: bool = False
+    # A custom game cup, played on one map with no veto; false on every other kind
+    custom_game: bool = False

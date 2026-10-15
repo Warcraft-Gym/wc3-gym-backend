@@ -12,6 +12,7 @@ from httpx2 import Client
 
 from app.core.db import Session
 from app.core.divisions import cut
+from app.models.cup_settings import CupSettings
 from app.models.enums import EventKind, Race
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
@@ -24,6 +25,15 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from tests.seed import active
 from tests.test_events import add_event
+
+
+def divided_cup(**fields: Any) -> int:  # noqa: ANN401
+    """A cup that chose to split its players into divisions; the draw tests
+    run with check-in off, as a cup draws its checked-in players."""
+    event = add_event(kind=EventKind.cup, **({"checkin_enabled": False} | fields))
+    with Session.begin() as session:
+        session.add(CupSettings(event_id=event, uses_divisions=True))
+    return event
 
 
 def add_player(name: str, ratings: dict[Race, int]) -> int:
@@ -122,7 +132,7 @@ def test_an_assign_cuts_by_bound_and_reads_the_signup_race(
 ) -> None:
     """One player rated 2100 on Human and 1300 on Orc enters on Orc, so the
     cut puts them in the lower division and never in the Human one."""
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     two_race = add_player("Switcher", {Race.HU: 2100, Race.OC: 1300})
     strong = add_player("Strong", {Race.HU: 2050})
     enter(event, two_race, Race.OC)
@@ -154,7 +164,7 @@ def test_an_assign_cuts_by_size_and_leaves_a_hand_placed_entrant(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """A move marks the entrant placed by hand, and the next assign skips it."""
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     entrants = [
         enter(event, add_player(f"P{mmr}", {Race.HU: mmr}))
         for mmr in (2200, 2000, 1800, 1600)
@@ -172,7 +182,7 @@ def test_an_assign_cuts_by_size_and_leaves_a_hand_placed_entrant(
     )
 
     assert moved.status_code == 200, moved.text
-    assert moved.json()["manual_placement"] is True
+    assert moved.json()["division_pinned"] is True
     again = client.post(f"/events/{event}/divisions/assign", headers=auth_headers)
     counts = {band["name"]: band["entrant_count"] for band in again.json()["divisions"]}
     # The strongest entrant stays where the admin put it, so Top takes the next two
@@ -194,14 +204,14 @@ def test_an_assign_cuts_by_size_and_leaves_a_hand_placed_entrant(
     client.post(f"/events/{event}/divisions/assign", headers=auth_headers)
     rows = {row["id"]: row for row in client.get(f"/events/{event}/entrants").json()}
     assert rows[entrants[0]]["division_id"] == fresh[0]["id"]
-    assert rows[entrants[0]]["manual_placement"] is False
+    assert rows[entrants[0]]["division_pinned"] is False
 
 
 def test_the_seeds_count_from_one_inside_each_division(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """Four entrants, two divisions, so the seeds read 1, 2, 1, 2."""
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     stage = add_stage(event)
     for mmr in (2200, 2000, 1800, 1600):
         enter(event, add_player(f"P{mmr}", {Race.HU: mmr}))
@@ -228,7 +238,7 @@ def test_a_manual_order_seeds_and_the_engine_sources_refuse(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """Manual takes the list; a qualifier answers not_built, having no parent."""
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     stage = add_stage(event)
     entrants = [
         enter(event, add_player(f"P{mmr}", {Race.HU: mmr})) for mmr in (2200, 1600)
@@ -284,7 +294,7 @@ def test_a_manual_order_seeds_and_the_engine_sources_refuse(
 def test_a_locked_stage_refuses_a_further_seed_write(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     stage = add_stage(event)
     enter(event, add_player("Only", {Race.HU: 1700}))
     first = client.put(
@@ -305,7 +315,7 @@ def test_a_locked_stage_refuses_a_further_seed_write(
         json={"source": "mmr"},
         headers=auth_headers,
     )
-    assert refused.status_code == 400
+    assert refused.status_code == 409
     assert refused.json() == {"error": "The seeds of this stage are locked"}
     assert client.post(
         f"/events/{event}/stages/404/seeds/lock", headers=auth_headers
@@ -313,7 +323,7 @@ def test_a_locked_stage_refuses_a_further_seed_write(
 
 
 def test_every_division_and_seed_write_asks_for_an_admin(client: Client) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     stage = add_stage(event)
 
     assert client.put(f"/events/{event}/divisions", json=[]).status_code == 401
@@ -331,7 +341,7 @@ def test_every_division_and_seed_write_asks_for_an_admin(client: Client) -> None
 def test_an_assign_with_no_divisions_refuses(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
 
     refused = client.post(f"/events/{event}/divisions/assign", headers=auth_headers)
 
@@ -347,7 +357,7 @@ def test_two_teams_of_different_strength_cut_and_seed_on_their_rosters(
     The strong team means 2100, the weak one 1500, and a solo entrant beside
     them still reads its own rating on the race it signed up on.
     """
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     stage = add_stage(event)
     strong = enter_team(
         event,
@@ -400,7 +410,7 @@ def test_a_team_no_member_of_which_is_rated_answers_no_mmr(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """An unrated roster reads like an unrated player: the weakest band."""
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     empty = enter_team(event, "Newcomers", [add_player("Fresh", {})])
     rated = enter_team(event, "Veterans", [add_player("Known", {Race.HU: 1900})])
     bands = set_divisions(
@@ -420,7 +430,7 @@ def test_a_hand_placed_entrant_takes_a_seat_of_its_division(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """A sized division holds its size, hand placements counted."""
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     entrants = [
         enter(event, add_player(f"P{mmr}", {Race.HU: mmr}))
         for mmr in (2200, 2000, 1800, 1600)

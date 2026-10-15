@@ -1,13 +1,27 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import MapServiceDep, edge_cache, require_admin
+from app.api.deps import (
+    MapServiceDep,
+    RequireOrganizer,
+    edge_cache,
+    require_admin,
+    require_organizer,
+)
 from app.api.search import SearchQuery
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.models.map import LadderMapNames, LadderMapRow, MapCreate, MapPublic, MapUpdate
+from app.core.security import is_admin
+from app.models.map import (
+    CustomMapCreate,
+    LadderMapNames,
+    LadderMapRow,
+    MapCreate,
+    MapPublic,
+    MapUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +39,18 @@ def add_map(data: MapCreate, service: MapServiceDep) -> MapPublic:
     return service.add(data)
 
 
+@router.post(
+    "/maps/custom",
+    status_code=201,
+    response_model=MapPublic,
+    dependencies=[Depends(require_organizer)],
+)
+def add_custom_map(data: CustomMapCreate, service: MapServiceDep) -> MapPublic:
+    """An organizer names a custom game's map: the app's map of that name, or a
+    new one marked `custom`. An admin adds its picture on the Maps page."""
+    return service.add_custom(data.name)
+
+
 @router.put(
     "/maps/{map_id}", response_model=MapPublic, dependencies=[Depends(require_admin)]
 )
@@ -39,18 +65,33 @@ def delete_map(map_id: int, service: MapServiceDep) -> None:
     service.delete(map_id)
 
 
-@router.get("/maps/ladder-import", dependencies=[Depends(require_admin)])
-def preview_ladder_import(service: MapServiceDep) -> list[LadderMapRow]:
-    """List every 1v1 ladder map, matched against the maps the app holds."""
-    return service.ladder_import_preview()
+# The W3Champions game modes a cup's pool can start from
+LADDER_MODES = {"1v1": 1, "2v2": 2, "4v4": 4}
 
 
-@router.post("/maps/ladder-import", dependencies=[Depends(require_admin)])
+@router.get("/maps/ladder-import", dependencies=[Depends(require_organizer)])
+def preview_ladder_import(
+    service: MapServiceDep, mode: Literal["1v1", "2v2", "4v4"] = "1v1"
+) -> list[LadderMapRow]:
+    """List every ladder map of one game mode, the 1v1 one unless named,
+    matched against the maps the app holds."""
+    return service.ladder_import_preview(LADDER_MODES[mode])
+
+
+@router.post("/maps/ladder-import")
 def apply_ladder_import(
-    data: LadderMapNames, service: MapServiceDep
+    data: LadderMapNames,
+    service: MapServiceDep,
+    claims: RequireOrganizer,
+    mode: Literal["1v1", "2v2", "4v4"] = "1v1",
 ) -> list[MapPublic]:
-    """Create, rename and picture the named ladder maps. No season pool changes."""
-    return [service.get(map_id) for map_id in service.import_ladder_maps(data.names)]
+    """Create, rename and picture the named maps of one ladder. No season pool
+    changes. An organizer brings a cup the ladder's maps and nothing else; an
+    admin also fills the picture of a map off the ladder."""
+    ids = service.import_ladder_maps(
+        data.names, LADDER_MODES[mode], ladder_only=not is_admin(claims)
+    )
+    return [service.get(map_id) for map_id in ids]
 
 
 @router.get("/maps/{map_id}", response_model=MapPublic)

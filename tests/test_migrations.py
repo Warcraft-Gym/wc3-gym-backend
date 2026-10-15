@@ -80,6 +80,32 @@ BEFORE_TAG_TABLE = "1e8e59906cec"
 BEFORE_TAG_DROP = "e07324d2b4f9"
 # The revision before every row under an event goes with it
 BEFORE_EVENT_CASCADE = "55ae9f9d1db6"
+# The revision before the event organizers
+BEFORE_ORGANIZERS = "a6d3e9b14c27"
+# The revision before the best-of per bracket part and the veto by best-of
+BEFORE_CUP_BEST_OF = "a8d3e1f6c924"
+# The revision before the stage seed source and the hidden seeds switch
+BEFORE_SEED_CONTROLS = "b7d4e1a9c362"
+# The revision before a race counts by its lifetime games
+BEFORE_RACE_GAMES = "c7e2b9d4a613"
+# The revision before a map names the modes it is played as
+BEFORE_MAP_MODES = "e7b4f2a9c5d1"
+# The revision before the placement bracket
+BEFORE_PLACEMENT = "f3c8a1d6e027"
+# The revision before the cup waitlist
+BEFORE_WAITLIST = "d3a7f2c9b814"
+# The revision before the cups took tables of their own
+BEFORE_CUP_TABLES = "c4e8a2f7d915"
+# The revision before a cup held its settings and its pins apart
+BEFORE_CUP_SETTINGS = "a8e3c5f1d276"
+# The revision before a cup could be played over rounds
+BEFORE_CUP_ROUNDS = "c7d2e9a4f183"
+# The revision before a cup could repeat on a rule
+BEFORE_CUP_RECURRENCE = "d3b8f1a6c925"
+# The revision before a cup lobby held its map
+BEFORE_LOBBY_MAP = "e5c1a9d7b246"
+# The revision before a cup could be a custom game
+BEFORE_CUSTOM_GAME = "f2a6c3d8b417"
 
 
 def comparable(
@@ -1563,3 +1589,334 @@ def test_deleting_an_event_deletes_every_row_under_it(tmp_path: Path) -> None:
         for key in inspect(engine).get_foreign_keys("team_season_captain")
         if key["constrained_columns"] == ["season_id"]
     ] == [None]
+
+
+def test_the_organizer_tables_and_event_columns_are_added_and_dropped(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "organizers")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def event_columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("event")}
+
+    tables = {"organizer_grant", "organizer_request", "event_organizer"}
+    assert tables <= set(inspect(engine).get_table_names())
+    assert {"entrant_min", "cancelled_at"} <= event_columns()
+
+    downgrade_to(url, BEFORE_ORGANIZERS)
+    assert not tables & set(inspect(engine).get_table_names())
+    assert not {"entrant_min", "cancelled_at"} & event_columns()
+
+
+def test_the_best_of_plan_and_the_veto_switch_are_added_and_dropped(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "cup_best_of")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns(table: str) -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns(table)}
+
+    assert "best_of_by_round" in columns("event_stage")
+    assert "veto_by_best_of" in columns("event")
+
+    downgrade_to(url, BEFORE_CUP_BEST_OF)
+    assert "best_of_by_round" not in columns("event_stage")
+    assert "veto_by_best_of" not in columns("event")
+
+
+def test_the_race_games_floor_and_the_history_stamp_are_added_and_dropped(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "race_games")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns(table: str) -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns(table)}
+
+    assert "race_games_min" in columns("event")
+    assert "w3c_history_through" in columns("users")
+
+    downgrade_to(url, BEFORE_RACE_GAMES)
+    assert "race_games_min" not in columns("event")
+    assert "w3c_history_through" not in columns("users")
+
+
+def test_the_map_modes_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "map_modes")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("maps")}
+
+    assert "modes" in columns()
+    downgrade_to(url, BEFORE_MAP_MODES)
+    assert "modes" not in columns()
+
+
+def test_the_placement_lives_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "placement")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("event_stage")}
+
+    assert "placement_lives" in columns()
+    downgrade_to(url, BEFORE_PLACEMENT)
+    assert "placement_lives" not in columns()
+
+
+def test_the_stage_seed_source_and_the_hide_switch_are_added_and_dropped(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "seed_controls")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns(table: str) -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns(table)}
+
+    assert "seed_source" in columns("event_stage")
+    assert "hide_seeds" in columns("event")
+
+    downgrade_to(url, BEFORE_SEED_CONTROLS)
+    assert "seed_source" not in columns("event_stage")
+    assert "hide_seeds" not in columns("event")
+
+
+def test_the_waitlist_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "waitlist")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("event_entrant")}
+
+    assert "waitlisted_at" in columns()
+    downgrade_to(url, BEFORE_WAITLIST)
+    assert "waitlisted_at" not in columns()
+
+
+def test_the_cup_tables_take_the_test_cups_and_leave_every_other_series(
+    tmp_path: Path,
+) -> None:
+    """The draws and the teams of the cups made while testing go; a KOTH
+    night keeps its series and a league team stays. The downgrade gives the
+    invitations back their table on `teams`."""
+    url = fresh_database(tmp_path, "cup_tables")
+    upgrade_to(url, BEFORE_CUP_TABLES)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) "
+                "VALUES (1, 'Night', 1, 'koth'), (2, 'Cup', 1, 'cup')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_round (id, season_id, number) "
+                "VALUES (10, 1, 1), (20, 2, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO series (id, round_id, host_player_id) "
+                "VALUES (1, 10, 0), (2, 20, 0)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO teams (id, name, event_id, league_id) "
+                "VALUES (5, 'Cup Team', 2, NULL), "
+                "(6, 'League Team', NULL, (SELECT id FROM league WHERE name = 'GNL'))"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO team_season (team_id, season_id) VALUES (5, 2)")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_entrant (id, event_id, team_id, user_id) "
+                "VALUES (30, 2, 5, NULL), (31, 2, NULL, 7)"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id FROM series")).all() == [(1,)]
+        assert connection.execute(text("SELECT id FROM teams")).all() == [(6,)]
+        assert connection.execute(text("SELECT id FROM event_entrant")).all() == [(31,)]
+        assert (
+            connection.execute(text("SELECT count(*) FROM team_season")).scalar() == 0
+        )
+    tables = set(inspect(engine).get_table_names())
+    assert {"cup_series", "cup_team", "cup_team_member", "cup_team_invite"} <= tables
+    assert "team_invite" not in tables
+    # every team names its league again, and the cup column is gone
+    teams = {c["name"]: c for c in inspect(engine).get_columns("teams")}
+    assert "event_id" not in teams
+    assert teams["league_id"]["nullable"] is False
+
+    downgrade_to(url, BEFORE_CUP_TABLES)
+    tables = set(inspect(create_engine(url)).get_table_names())
+    assert "team_invite" in tables
+    assert "event_id" in {
+        c["name"] for c in inspect(create_engine(url)).get_columns("teams")
+    }
+    assert not {"cup_series", "cup_team", "cup_series_game"} & tables
+
+
+def test_a_cup_takes_its_settings_and_its_pins_and_gives_them_back(
+    tmp_path: Path,
+) -> None:
+    """A cup that holds divisions reads them as its choice, and a player it
+    placed by hand holds both pins; the downgrade folds them back."""
+    url = fresh_database(tmp_path, "cup_settings")
+    upgrade_to(url, BEFORE_CUP_SETTINGS)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) VALUES "
+                "(1, 'Split Cup', 1, 'cup'), (2, 'Plain Cup', 1, 'cup'), "
+                "(3, 'Night', 1, 'koth')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_division (id, event_id, position, name) "
+                "VALUES (1, 1, 1, 'Top'), (2, 3, 1, 'Bracket 1')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_entrant (id, event_id, user_id, manual_placement) "
+                "VALUES (10, 1, 7, 1), (11, 2, 8, 0), (12, 3, 9, 1)"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT event_id, uses_divisions FROM cup_settings ORDER BY event_id")
+        ).all() == [(1, True), (2, False)]
+        assert connection.execute(
+            text("SELECT entrant_id, division_pinned, seed_pinned FROM cup_entrant_pin")
+        ).all() == [(10, True, True)]
+
+    downgrade_to(url, BEFORE_CUP_SETTINGS)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT id, manual_placement FROM event_entrant ORDER BY id")
+        ).all() == [(10, True), (11, False), (12, True)]
+    tables = set(inspect(create_engine(url)).get_table_names())
+    assert not {"cup_settings", "cup_entrant_pin"} & tables
+
+
+def test_the_cup_rounds_come_and_go(tmp_path: Path) -> None:
+    """The rounds tables and the points table arrive empty, a cup's settings
+    stay, and the downgrade takes them away again."""
+    url = fresh_database(tmp_path, "cup_rounds")
+    upgrade_to(url, BEFORE_CUP_ROUNDS)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) "
+                "VALUES (1, 'Cup', 1, 'cup')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO cup_settings (event_id, uses_divisions) VALUES (1, 0)")
+        )
+
+    upgrade_to(url, "head")
+
+    tables = set(inspect(engine).get_table_names())
+    assert {"cup_leg", "cup_leg_stage", "cup_leg_checkin"} <= tables
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT event_id, points_by_place FROM cup_settings")
+        ).all() == [(1, None)]
+
+    downgrade_to(url, BEFORE_CUP_ROUNDS)
+    tables = set(inspect(create_engine(url)).get_table_names())
+    assert not {"cup_leg", "cup_leg_stage", "cup_leg_checkin"} & tables
+    assert "points_by_place" not in {
+        c["name"] for c in inspect(create_engine(url)).get_columns("cup_settings")
+    }
+
+
+def test_the_recurring_cups_come_and_go(tmp_path: Path) -> None:
+    """The rule and occurrence tables arrive empty, and the downgrade takes
+    them away while the cups stay."""
+    url = fresh_database(tmp_path, "cup_recurrence")
+    upgrade_to(url, BEFORE_CUP_RECURRENCE)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) "
+                "VALUES (1, 'Cup', 1, 'cup')"
+            )
+        )
+
+    upgrade_to(url, "head")
+    assert {"cup_recurrence", "cup_occurrence"} <= set(
+        inspect(engine).get_table_names()
+    )
+
+    downgrade_to(url, BEFORE_CUP_RECURRENCE)
+    tables = set(inspect(create_engine(url)).get_table_names())
+    assert not {"cup_recurrence", "cup_occurrence"} & tables
+    with create_engine(url).connect() as connection:
+        assert connection.execute(text("SELECT id FROM event")).all() == [(1,)]
+
+
+def test_the_lobby_map_comes_and_goes(tmp_path: Path) -> None:
+    """A cup series takes a lobby map column, empty, and gives it back."""
+    url = fresh_database(tmp_path, "lobby_map")
+    upgrade_to(url, BEFORE_LOBBY_MAP)
+    upgrade_to(url, "head")
+    columns = {c["name"] for c in inspect(create_engine(url)).get_columns("cup_series")}
+    assert "lobby_map_id" in columns
+    downgrade_to(url, BEFORE_LOBBY_MAP)
+    columns = {c["name"] for c in inspect(create_engine(url)).get_columns("cup_series")}
+    assert "lobby_map_id" not in columns
+
+
+def test_the_custom_game_switch_comes_and_goes(tmp_path: Path) -> None:
+    """Every cup's settings take the custom game switch, off, and give it back."""
+    url = fresh_database(tmp_path, "custom_game")
+    upgrade_to(url, BEFORE_CUSTOM_GAME)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind) "
+                "VALUES (1, 'Cup', 1, 'cup')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO cup_settings (event_id, uses_divisions) VALUES (1, 0)")
+        )
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT event_id, custom_game FROM cup_settings")
+        ).all() == [(1, False)]
+
+    downgrade_to(url, BEFORE_CUSTOM_GAME)
+    assert "custom_game" not in {
+        c["name"] for c in inspect(create_engine(url)).get_columns("cup_settings")
+    }

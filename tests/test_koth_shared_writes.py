@@ -11,12 +11,17 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
-from app.models.enums import EventKind, Race
+from app.models.enums import Race
 from app.models.event_entrant import EventEntrant
 from app.models.season import Season
 from app.models.types import utcnow
-from tests.test_event_divisions import add_player, add_stage, enter, set_divisions
-from tests.test_events import add_event
+from tests.test_event_divisions import (
+    add_player,
+    add_stage,
+    divided_cup,
+    enter,
+    set_divisions,
+)
 from tests.test_koth_guards import close, crown
 from tests.test_koth_live import (
     board,
@@ -187,7 +192,7 @@ def test_the_guarded_writes_still_run_on_an_event_of_another_kind(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """Only a KOTH night is refused; a cup divides, cuts, seeds, places and removes."""
-    event = add_event(kind=EventKind.cup)
+    event = divided_cup()
     stage = add_stage(event)
     first = enter(event, add_player("Cup1", {Race.HU: 1800}))
     second = enter(event, add_player("Cup2", {Race.HU: 1600}))

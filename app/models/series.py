@@ -273,14 +273,6 @@ class ResultKindWrite(SQLModel):
     winner: Literal[1, 2]
 
 
-class TemplateSeries(SQLModel):
-    """One series of a fixture template: how many players a side fields, and
-    how the sides are picked."""
-
-    side_size: int = Field(default=1, ge=1, le=8)
-    pick_rule: Literal["drafted", "any"] = "any"
-
-
 class ChallengerAdd(SQLModel):
     """The entrant a chain stage plays next, at the end of his division."""
 
@@ -451,6 +443,15 @@ class StageSeriesRow(SeriesPublic):
     slot1_takes_loser: bool = False
     slot2_from_series_id: int | None = None
     slot2_takes_loser: bool = False
+    # Where a fed side comes from, such as "Loser of UB R1 M3"; the stage series read fills it
+    slot1_source: str | None = None
+    slot2_source: str | None = None
+    # The seed of each side; the stage series read fills it, null when the event hides seeds
+    entrant1_seed: int | None = None
+    entrant2_seed: int | None = None
+    # The places a placement bracket series' group plays for; null on every other format
+    place_from: int | None = None
+    place_to: int | None = None
 
     @classmethod
     def from_series(cls, series: Series, event_id: int | None = None) -> Self:
@@ -476,40 +477,3 @@ class StageSeriesPublic(PublicModel):
 
     rounds: list[EventRoundPublic] = []
     series: list[StageSeriesRow] = []
-
-
-class SeriesFeedersPublic(PublicModel):
-    """The feeder graph of one series, read apart from SeriesPublic.
-
-    The bracket page reads where each slot comes from and how the series
-    ended. It is its own model, so the series payloads keep their shape.
-    """
-
-    id: int
-    result_kind: str
-    slot1_from_series_id: int | None = None
-    slot1_takes_loser: bool = False
-    slot2_from_series_id: int | None = None
-    slot2_takes_loser: bool = False
-
-    @classmethod
-    def from_series(cls, series: Series) -> Self:
-        return cls(
-            id=ident(series),
-            result_unavailable=series.result_unavailable,
-            entrant1_id=series.entrant1_id,
-            entrant2_id=series.entrant2_id,
-            division_id=series.division_id,
-            sequence=series.sequence,
-            player1_source_name=series.entrant1.historical_participant.source_name
-            if series.entrant1 and series.entrant1.historical_participant
-            else None,
-            player2_source_name=series.entrant2.historical_participant.source_name
-            if series.entrant2 and series.entrant2.historical_participant
-            else None,
-            result_kind=series.result_kind,
-            slot1_from_series_id=series.slot1_from_series_id,
-            slot1_takes_loser=series.slot1_takes_loser,
-            slot2_from_series_id=series.slot2_from_series_id,
-            slot2_takes_loser=series.slot2_takes_loser,
-        )

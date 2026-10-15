@@ -14,7 +14,14 @@ from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import SchedulingMode, StageFormat
-from app.models.types import AwareUTC, MapRules, NumToStr, PlacePoints, UTCDateTime
+from app.models.types import (
+    AwareUTC,
+    BestOfPlan,
+    MapRules,
+    NumToStr,
+    PlacePoints,
+    UTCDateTime,
+)
 
 # The tie breaks a table reads by default, in order. The words a rule takes are
 # points, buchholz (the sum of the opponents' points), game_diff and
@@ -40,6 +47,10 @@ class EventStage(DBModel, table=True):
         sa_column_kwargs={"server_default": "round_robin"},
     )
     best_of: int = Field(default=3, sa_column_kwargs={"server_default": "3"})
+    # The best-of of a bracket part, counted back from the end, as
+    # "semifinal:3,final:5"; a part it leaves out plays best_of. The draw
+    # writes it onto each round, since the field size is unknown before
+    best_of_by_round: str | None = Field(default=None, max_length=200)
     # How many series each entrant plays per round of a round robin stage
     series_per_entrant_per_round: int = Field(
         default=1, ge=1, sa_column_kwargs={"server_default": "1"}
@@ -76,7 +87,11 @@ class EventStage(DBModel, table=True):
     auto_advance: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
-    # When an admin locked the seeds; a locked stage refuses a seed write
+    # How the draw seeds an unseeded entrant: mmr, random or manual
+    seed_source: str = Field(
+        default="mmr", max_length=20, sa_column_kwargs={"server_default": "mmr"}
+    )
+    # A locked stage refuses a reseed until it is unlocked; the draw locks it
     seeds_locked_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
@@ -88,6 +103,8 @@ class EventStage(DBModel, table=True):
     grand_final_modifier: str = Field(
         default="one", max_length=10, sa_column_kwargs={"server_default": "one"}
     )
+    # How many losses end a player's run in a placement bracket; null plays every place
+    placement_lives: int | None = None
     # The largest MMR difference a captain draft pairs inside; a gnl stage only
     max_mmr_difference: int | None = None
 
@@ -100,6 +117,7 @@ class EventStagePublic(SQLModel):
     name: str | None = None
     format: StageFormat
     best_of: int
+    best_of_by_round: str | None = None
     series_per_entrant_per_round: int = 1
     swiss_rounds: int | None = None
     points_by_place: str | None = None
@@ -114,9 +132,11 @@ class EventStagePublic(SQLModel):
     group_size: int | None = None
     group_advance: int | None = None
     auto_advance: bool = False
+    seed_source: str = "mmr"
     seeds_locked_at: Annotated[datetime | None, AwareUTC] = None
     third_place: bool = False
     grand_final_modifier: str = "one"
+    placement_lives: int | None = None
     # Null on every format but gnl, where an unset stage reads the default
     max_mmr_difference: int | None = None
 
@@ -133,6 +153,9 @@ class EventStageWrite(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     format: StageFormat = StageFormat.round_robin
     best_of: int = 3
+    best_of_by_round: Annotated[str | None, BestOfPlan] = Field(
+        default=None, max_length=200
+    )
     series_per_entrant_per_round: int = Field(default=1, ge=1)
     swiss_rounds: int | None = Field(default=None, ge=1)
     points_by_place: Annotated[str | None, PlacePoints] = Field(
@@ -151,8 +174,12 @@ class EventStageWrite(SQLModel):
     advance_count: int | None = None
     group_size: int | None = Field(default=None, ge=2)
     auto_advance: bool = False
+    # How the draw seeds an entrant that has no seed yet
+    seed_source: Literal["mmr", "random", "manual"] = "mmr"
     third_place: bool = False
     grand_final_modifier: Literal["one", "reset", "skip"] = "one"
+    # How many losses end a player's run in a placement bracket; null plays every place
+    placement_lives: int | None = Field(default=None, ge=1)
     # The largest MMR difference a captain draft pairs inside; a gnl stage only
     max_mmr_difference: int | None = Field(default=None, ge=1)
 

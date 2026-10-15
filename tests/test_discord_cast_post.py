@@ -133,7 +133,7 @@ def test_the_reminder_calls_the_audience_once(
 
     resp = client.get(JOB, headers=SECRET)
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"posted": 1}
+    assert resp.json() == {"posted": 1, "cup_reminders": 0}
     assert [call[:2] for call in discord_calls] == [("POST", CONTENT)] * 2
     reminder = discord_calls[1][2]
     # The players are called to the game, and to wait for the caster, who is tagged too
@@ -145,7 +145,7 @@ def test_the_reminder_calls_the_audience_once(
     assert "**Casts**\n- <https://twitch.tv/gnlcaster> · P1" in description
 
     # A run every few minutes posts the card once, not once a run
-    assert client.get(JOB, headers=SECRET).json() == {"posted": 0}
+    assert client.get(JOB, headers=SECRET).json() == {"posted": 0, "cup_reminders": 0}
     assert len(discord_calls) == 2
 
 
@@ -163,10 +163,10 @@ def test_the_reminder_skips_a_series_that_is_not_due(
     claim(client, series_id)  # the claim card alone
     assert len(discord_calls) == 1
 
-    assert client.get(JOB, headers=SECRET).json() == {"posted": 0}
+    assert client.get(JOB, headers=SECRET).json() == {"posted": 0, "cup_reminders": 0}
     # A series nobody claimed is never announced, however close it is
     starts_in(seeded["series_played_id"], 5)
-    assert client.get(JOB, headers=SECRET).json() == {"posted": 0}
+    assert client.get(JOB, headers=SECRET).json() == {"posted": 0, "cup_reminders": 0}
     assert len(discord_calls) == 1
 
 

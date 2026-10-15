@@ -12,7 +12,7 @@ from sqlmodel import col, select
 
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.core.map_order import DEFAULT_RULES, rules_of
+from app.core.map_order import DEFAULT_RULES, cup_order, rules_of
 from app.models.base import ident
 from app.models.event_entrant import EventEntrant
 from app.models.map import Map
@@ -26,6 +26,7 @@ from app.models.series_veto_step import (
 )
 from app.models.team import Team
 from app.models.user import User
+from app.models.user_team_season import DBUserTeamSeason
 from app.services.series_rules import (
     SeriesRules,
     acts_for_side,
@@ -45,7 +46,7 @@ class SeriesVetoService:
             if not series:
                 raise NotFoundError(f"Series not found by id: {series_id}")
             return len(_steps(session, series_id)) >= len(
-                _order(series_event(session, series))
+                _series_order(session, series)
             )
 
     def board(
@@ -120,11 +121,21 @@ def _steps(session: OrmSession, series_id: int) -> list[DBSeriesVetoStep]:
     )
 
 
-def _order(event: Season | None) -> list[str]:
+def order_of(event: Season | None) -> list[str]:
     """The steps the event plays, for example Ban_A, Ban_B, Pick_A, Pick_B."""
     return [
         step for step in ((event.pick_ban if event else None) or "").split("|") if step
     ]
+
+
+def _series_order(session: OrmSession, series: Series) -> list[str]:
+    """The steps one series plays: its own by its best-of when the event vetoes
+    that way, else the event's order."""
+    event = series_event(session, series)
+    if event is not None and event.veto_by_best_of:
+        rules = series_rules(session, series)
+        return cup_order(rules.best_of, len(rules.map_pool))
+    return order_of(event)
 
 
 def _side(entry: str) -> str:
@@ -146,7 +157,7 @@ def veto_limits(season: Season) -> tuple[int, int]:
 
 def check_order(season: Season) -> None:
     """Refuse an order the season cannot play through."""
-    order = _order(season)
+    order = order_of(season)
     for step in order:
         if step not in STEPS:
             raise BadRequestError(
@@ -185,7 +196,7 @@ def _take_step(
 ) -> None:
     """A null side records the step for whichever side the order names next."""
     rules = series_rules(session, series)
-    order = _order(series_event(session, series))
+    order = _series_order(session, series)
     if len(steps) >= len(order):
         raise BadRequestError("The veto is complete")
     if side is not None and _side(order[len(steps)]) != side:
@@ -231,7 +242,7 @@ def _forced_last(
     """Whether the last step took itself: the order is complete and it used up
     the whole board, so one map was left for it."""
     rules = series_rules(session, series)
-    order = _order(series_event(session, series))
+    order = _series_order(session, series)
     fixed = _fixed_map_id(session, series, rules)
     return len(order) >= 2 and len(steps) == len(order) == len(rules.map_pool) - (
         fixed is not None
@@ -247,7 +258,8 @@ def _veto_side(session: OrmSession, series: Series, side: int) -> VetoPlayer:
     """The name the board prints for one side: the player, or the team.
 
     `id` is the user of the side or nothing at all, so a client may compare it
-    with its own user id; a team side names the team in its own two fields.
+    with its own user id; a team side names the team in its own two fields and
+    lists its players, so a step any of them enters reads as the side's own.
     """
     user_id = series.player1_id if side == 1 else series.player2_id
     user = session.get(User, user_id) if user_id else None
@@ -256,13 +268,20 @@ def _veto_side(session: OrmSession, series: Series, side: int) -> VetoPlayer:
     entrant_id = series.entrant1_id if side == 1 else series.entrant2_id
     entrant = session.get(EventEntrant, entrant_id) if entrant_id else None
     team = session.get(Team, entrant.team_id) if entrant and entrant.team_id else None
-    if team is None:
+    if entrant is None or team is None:
         return VetoPlayer()
+    members = session.scalars(
+        select(col(DBUserTeamSeason.user_id)).where(
+            col(DBUserTeamSeason.team_id) == ident(team),
+            col(DBUserTeamSeason.season_id) == entrant.event_id,
+        )
+    ).all()
     return VetoPlayer(
         name=team.name,
         team_id=ident(team),
         team_name=team.name,
         team_icon_url=team.icon_url,
+        member_ids=sorted(members),
     )
 
 
@@ -273,7 +292,7 @@ def _board(
     if stands_on_side(series, 1) is None or stands_on_side(series, 2) is None:
         raise BadRequestError("The series has no sides to veto with yet")
     rules = series_rules(session, series)
-    order = _order(series_event(session, series))
+    order = _series_order(session, series)
     steps = _steps(session, ident(series))
     side = _letter(acts_for_side(session, series, player_id))
     complete = len(steps) >= len(order)

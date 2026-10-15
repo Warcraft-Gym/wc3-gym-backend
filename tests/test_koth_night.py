@@ -826,7 +826,7 @@ def test_closing_a_night_deletes_the_series_nobody_played(
     open_chain(night["id"], stage, low)
     rows = stage_series(client, night["id"], stage)["series"]
     assert len(rows) == 2
-    assert score(client, auth_headers, played, 1, 0).status_code == 200
+    assert score(client, auth_headers, played, 1, 0, "series").status_code == 200
 
     closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
 
@@ -865,7 +865,7 @@ def test_a_chain_with_every_series_scored_still_reads_running(
         enrol(tag, mmr)
         sign_up(client, tag, tag.split("#")[0], "human")
     row = open_chain(night["id"], night["stages"][0]["id"])
-    assert score(client, auth_headers, row, 1, 0).status_code == 200
+    assert score(client, auth_headers, row, 1, 0, "series").status_code == 200
 
     resp = client.get(f"/events/{night['id']}")
 

@@ -13,17 +13,15 @@ from app.api.deps import (
     own_match,
     require_admin,
 )
-from app.core.exceptions import ApiError, NotFoundError
+from app.core.exceptions import NotFoundError
 from app.core.security import is_admin
 from app.models.series import (
     ResultKindWrite,
     SeriesCreate,
     SeriesPublic,
     SeriesUpdate,
-    StageSeriesRow,
 )
 from app.models.series_cast import CastPublic, CastWrite, ClaimWrite, VodWrite
-from app.models.series_side import LobbySidesWrite, PlacesWrite
 from app.models.series_summary import SeriesSummaryPublic
 from app.services import casts, series_edit, series_summary, stage_engine
 
@@ -87,36 +85,6 @@ def set_result_kind(
     """Score a series no game was played for: a walkover or a forfeit."""
     stage_engine.set_result_kind(series_id, data)
     return service.get(series_id)
-
-
-@router.put("/series/{series_id}/places", dependencies=[Depends(require_admin)])
-def set_places(series_id: int, data: PlacesWrite) -> StageSeriesRow:
-    """Enter where every side of a free for all lobby finished.
-
-    A lobby plays one game, so the places settle it, and a round whose every
-    lobby carries places seats the lobbies of the round after it.
-    """
-    return stage_engine.set_places(series_id, data)
-
-
-@router.put("/series/{series_id}/sides")
-def set_sides(
-    series_id: int,
-    data: LobbySidesWrite,
-    claims: RequireLogin,
-    users: UserServiceDep,
-) -> StageSeriesRow:
-    """Seat a lobby again before it is played, or name a fixture side roster.
-
-    A body naming `sides` writes the roster each side of a fixture series
-    fields, which a captain of that team writes for his own side. Seating a
-    lobby again stays an admin act.
-    """
-    admin = is_admin(claims)
-    if not admin and not data.sides:
-        raise ApiError(403, {"error": "Admins only"})
-    caller = None if admin else users.id_by_discord_id(str(claims["sub"]))
-    return stage_engine.set_sides(series_id, data, admin=admin, user_id=caller)
 
 
 @router.delete("/series/{series_id}", status_code=204)

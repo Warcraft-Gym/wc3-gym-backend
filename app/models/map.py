@@ -4,7 +4,7 @@ from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
-from app.models.types import NumToStr
+from app.models.types import MapModes, NumToStr
 
 if TYPE_CHECKING:
     from app.models.relationships import DBMapSeason
@@ -15,6 +15,8 @@ class MapBase(SQLModel):
     shortname: str | None = Field(default=None, max_length=50)
     # where the picture is published: the blob an admin uploaded, else what the ladder import found
     image: str | None = Field(default=None, max_length=500)
+    # The modes the map is played as, as "1v1,2v2"; null names none yet
+    modes: str | None = Field(default=None, max_length=100)
 
 
 class Map(MapBase, DBModel, table=True):
@@ -35,6 +37,7 @@ class MapCreate(MapBase):
     name: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     shortname: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     image: Annotated[str | None, NumToStr] = Field(default=None, max_length=500)
+    modes: Annotated[str | None, MapModes] = Field(default=None, max_length=100)
 
 
 class MapUpdate(MapBase):
@@ -42,6 +45,13 @@ class MapUpdate(MapBase):
     name: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     shortname: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     image: Annotated[str | None, NumToStr] = Field(default=None, max_length=500)
+    modes: Annotated[str | None, MapModes] = Field(default=None, max_length=100)
+
+
+class CustomMapCreate(SQLModel):
+    """A custom game's map an organizer names: the app finds it, or adds it."""
+
+    name: str = Field(min_length=1, max_length=50)
 
 
 class MapPublic(MapBase):
@@ -63,6 +73,8 @@ class LadderMapRow(SQLModel):
     shortname: str | None = None
     image_url: str | None = None
     status: str = "new"
+    # The map of the app a known ladder map is, so a cup's pool can take it as it stands
+    map_id: int | None = None
 
 
 class LadderMapNames(SQLModel):

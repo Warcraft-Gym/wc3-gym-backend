@@ -6,6 +6,8 @@ a KOTH crown without replaying the stage. The write is the whole list, so
 closing an event twice rewrites its places and never doubles them.
 """
 
+from collections.abc import Collection
+
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
@@ -13,12 +15,13 @@ from sqlmodel import col
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
+from app.models.enums import EventKind
 from app.models.event_award import EventAward, EventAwardPublic
 from app.models.event_history import KothHistoryEvent
-from app.models.event_stage import EventStage
+from app.models.event_stage import EventStage, StandingRow
 from app.models.season import Season
 from app.models.types import utcnow
-from app.services import stage_engine
+from app.services import cup_engine, stage_engine
 
 # The places that carry a name of their own; the rest are placed by number
 TITLES = {1: "Champion", 2: "Runner-up", 3: "Third"}
@@ -30,10 +33,12 @@ def title_of(place: int) -> str:
 
 
 def close_event(session: OrmSession, event_id: int) -> list[EventAward]:
-    """Write one award per placed entrant of the last stage, division by division.
+    """Write one award per placed entrant, division by division.
 
-    The last stage is the one the event ends on, so its table holds the places
-    the event pays. The old rows go first, which makes a second close a rewrite.
+    The last stage is the one the event ends on, so its table holds the first
+    places; an entrant a playoff left out takes the next place in the order of
+    the stage before it. The old rows go first, which makes a second close a
+    rewrite.
     """
     if session.get(KothHistoryEvent, event_id) is not None:
         return list(
@@ -42,20 +47,36 @@ def close_event(session: OrmSession, event_id: int) -> list[EventAward]:
             )
         )
     session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
-    stage = _last_stage(session, event_id)
-    if stage is None:
-        return []
+    # A cup played over rounds pays the places of its overall table
+    from app.services import cup_rounds
+
+    if cup_rounds.has_legs(session, event_id):
+        rows = [
+            EventAward(
+                event_id=event_id,
+                entrant_id=row.entrant_id,
+                user_id=row.user.id if row.user else None,
+                place=row.position,
+                title=title_of(row.position),
+            )
+            for row in cup_rounds.overall_rows(session, event_id)
+            if row.legs
+        ]
+        session.add_all(rows)
+        session.flush()
+        return rows
+    # A cup team is no league team: its award names it through the entrant
+    cup = _is_cup(session, event_id)
     rows = [
         EventAward(
             event_id=event_id,
             entrant_id=line.entrant_id,
             user_id=line.user_id,
-            team_id=line.team_id,
-            place=line.position,
-            title=title_of(line.position),
+            team_id=None if cup else line.team_id,
+            place=place,
+            title=title_of(place),
         )
-        for table in stage_engine._tables(session, event_id, stage)
-        for line in table.rows
+        for place, line in event_places(session, event_id)
     ]
     session.add_all(rows)
     session.flush()
@@ -72,6 +93,8 @@ def finish(event_id: int) -> list[EventAwardPublic]:
         event = session.get(Season, event_id)
         if event is None:
             raise NotFoundError(f"Event not found by id: {event_id}")
+        if event.cancelled_at is not None:
+            raise BadRequestError("A cancelled event pays no place; reopen it first")
         if event.closed_at is None:
             event.closed_at = utcnow()
         rows = close_event(session, ident(event))
@@ -93,13 +116,65 @@ def reopen(event_id: int) -> None:
                 "An archived event stays closed; its source results are preserved"
             )
         event.closed_at = None
+        event.cancelled_at = None
         session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
 
 
-def _last_stage(session: OrmSession, event_id: int) -> EventStage | None:
-    """The stage the event ends on; none when it holds no stage."""
-    return session.scalars(
+def cancel(event_id: int) -> None:
+    """Call the event off: close it, stamp the cancel and pay no place.
+
+    A cancelled event reads finished, its signups close with it, and a reopen
+    takes the cancel back with the close.
+    """
+    with Session.begin() as session:
+        event = session.get(Season, event_id)
+        if event is None:
+            raise NotFoundError(f"Event not found by id: {event_id}")
+        now = utcnow()
+        event.closed_at = event.closed_at or now
+        event.cancelled_at = event.cancelled_at or now
+        session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
+
+
+def event_places(
+    session: OrmSession, event_id: int, stage_ids: Collection[int] | None = None
+) -> list[tuple[int, StandingRow]]:
+    """Every placed entrant of the event with its place, best first.
+
+    The stages are read from the last one back: the last stage places its own
+    entrants as its table stands, a shared place staying shared, and each
+    stage before it places the entrants no later stage played, after all of
+    those, in its own order. Divisions place apart, each from place one.
+    `stage_ids` names the stages to read, which is how one round of a cup is
+    placed on its own; left out, every stage of the event is read.
+    """
+    stages = session.scalars(
         select(EventStage)
-        .where(col(EventStage.event_id) == event_id)
+        .where(
+            col(EventStage.event_id) == event_id,
+            *([col(EventStage.id).in_(stage_ids)] if stage_ids is not None else []),
+        )
         .order_by(col(EventStage.position).desc())
-    ).first()
+    ).all()
+    placed: dict[int | None, list[tuple[int, StandingRow]]] = {}
+    seen: set[int] = set()
+    # A cup ranks on its own tables, a KOTH night on the series it played
+    tables = cup_engine.tables if _is_cup(session, event_id) else stage_engine.tables
+    for index, stage in enumerate(stages):
+        for table in tables(session, event_id, stage):
+            lines = placed.setdefault(table.division_id, [])
+            fresh = [line for line in table.rows if line.entrant_id not in seen]
+            if index == 0:
+                lines += [(line.position, line) for line in fresh]
+            else:
+                lines += [
+                    (len(lines) + number, line)
+                    for number, line in enumerate(fresh, start=1)
+                ]
+            seen |= {line.entrant_id for line in fresh}
+    return [pair for lines in placed.values() for pair in lines]
+
+
+def _is_cup(session: OrmSession, event_id: int) -> bool:
+    event = session.get(Season, event_id)
+    return event is not None and event.kind is EventKind.cup

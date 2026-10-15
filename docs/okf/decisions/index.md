@@ -1,5 +1,10 @@
 # Decisions
 
+* [A cup vetoes by the best-of of each series](cup-veto-by-best-of.md) - A cup names the best-of of each part of its bracket, and each series derives its veto from its own best-of and the pool; game 1 plays the map the veto leaves. GNL keeps its order and its fixed map.
+* [A placement bracket plays out every place](placement-bracket.md) - Every round splits each group into its winners and its losers, so the last round decides every place; a loss limit ends a run early, a field off the power of two closes its places up, and the final is a round of its own.
+* [Cups keep their own tables](cups-own-tables.md) - A cup's series and teams live in tables of their own, beside GNL's series and team tables, and carry only what a cup uses.
+* [Cups announce to members who opt in](cup-announcements.md) - A cup posts four messages in one announcement channel, each pinging one announcement role; members take or leave that role on Home, and no role binding or sync touches it.
+* [Cup teams live for one cup](cup-teams-live-for-one-cup.md) - A team of a team cup is made for that cup alone, signed up by its captain and confirmed by every player; it lives in the cup's own tables and no league reads it.
 * [App-managed roles, manual sync](app-managed-roles.md) - Access comes from the database, Discord roles are a mirror of season facts, and the mirror updates only when an admin presses a button.
 * [Ask when someone cannot play](availability-blocklist.md) - Availability is collected as blocks, blank meaning fully open, and a block informs pairings without ever constraining them.
 * [Clerk owns the session](clerk-auth.md) - Members sign in through Clerk with Discord as the only social connection; the guild check and the roles stay app code.
@@ -10,6 +15,7 @@
 * [Off race per series, signup race per season](off-race-per-series.md) - A player signs up on one race for the season; a series may record a different race played on one side, stored separately from the resolved race.
 * [One event model, kind modules on top](unified-event-model.md) - GNL, KOTH and community events share one data model; a kind that behaves differently gets its own module, and the shared engine never branches on kind.
 * [One KOTH entrant row per race](koth-multi-entry.md) - A player may enter a KOTH night on more than one race; each race is its own entrant row, listed once on the page, and a player a series already names takes no second seat in it.
+* [Organizers run small events](event-organizers.md) - A member an admin granted creates cups and runs the ones it holds a row of; organizers are Discord accounts, and GNL seasons and KOTH nights stay the admins'.
 * [Pictures are URLs](pictures-as-urls.md) - Logos and map pictures live in a blob store as public URLs, uploaded from the admin UI; no bytes column exists in the database.
 * [Reads open, writes admin](reads-open-writes-admin.md) - Every GET serves any session; writes need an admin or the owning member, and the frontend hides the buttons of writes a role cannot make.
 * [The Discord adapter is its own small app](discord-adapter-separate.md) - Discord interactions land on a one-route Starlette app in a separate repository that verifies and forwards; the backend does the work.

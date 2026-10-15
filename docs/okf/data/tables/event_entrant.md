@@ -4,7 +4,7 @@ title: event_entrant
 description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
 resource: ../../../../app/models/event_entrant.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T21:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -28,25 +28,27 @@ sources:
 | `id` | INTEGER | no | Primary key. |
 | `event_id` | INTEGER | no | The event entered. |
 | `user_id` | INTEGER | yes | The player, on a solo event. Exactly one of user, team and historical participant is set. |
-| `team_id` | INTEGER | yes | The pre-made team, on a team event. |
+| `team_id` | INTEGER | yes | The league team, on a team event that is no cup. |
+| `cup_team_id` | INTEGER | yes | The team made for this cup, on a team cup. |
 | `historical_participant_id` | INTEGER | yes | The unresolved source identity, unique per entrant. No account or signup race is inferred. |
 | `race` | VARCHAR | yes | The race a player enters on: `RANDOM`, `HU`, `OC`, `NE`, `UD`. A team row has none. The service refuses a player row without one. |
 | `note` | VARCHAR | yes | What the entrant wants to work on, asked by a signup-only event. |
 | `seed` | INTEGER | yes | The seed inside the division, from 1. Null until seeded, and cleared when a seed order leaves the entrant out. On a KOTH night it is the line of the bracket: a new row takes the seed after the last one and an unplaced row holds none. |
 | `mmr_at_seed` | INTEGER | yes | The MMR the seed was cut from. On a KOTH night it is the rating the cut placed the row with, and a bounds save cuts the row by it. |
 | `seed_source` | VARCHAR | yes | What ordered the seeds: `mmr`, `random`, `manual`, `previous_stage`, `qualifier` or `invitation`. |
-| `manual_placement` | BOOLEAN | no | On: an admin placed the entrant in its division by hand, so a reassign leaves it alone. |
+| `manual_placement` | BOOLEAN | no | On: an admin placed the entrant by hand, so a reassign leaves it in its division and a reseed keeps its seed, except a reseed from the previous stage. |
 | `division_id` | INTEGER | yes | The division the entrant plays in. Null while the event has one table, and null on a row no cut could place. |
 | `group_no` | INTEGER | yes | The group of a group stage. Written by generate. |
 | `qualified_from_event_id` | INTEGER | yes | The qualifier the entrant came through. Null for a direct signup. Answered on the payload; no route writes it. |
 | `channel` | VARCHAR | no | Where the signup came from: `web`, `bot` or `twitch`. |
 | `checked_in_at` | TIMESTAMP | yes | When the entrant checked in. Null while not checked in. |
 | `withdrawn_at` | TIMESTAMP | yes | When the entrant withdrew. Null means live. A return signup clears it and reuses the row. |
+| `waitlisted_at` | TIMESTAMP | yes | When a cup put the signup on its waitlist, because the cup was drawn or full. A waiting entrant takes no seat in the cap, the draw, the seeds or check-in; a runner's admit, hand-add or swap clears it. Null means the entrant is in. |
 | `created_at` | TIMESTAMP | no | When the row was written. Set by the app. No route reads it. |
 
 # Keys and joins
 
-Primary key `id`. Foreign keys: `event_id` to [event](event.md), cascade; `user_id` to [users](users.md), cascade; `team_id` to [teams](teams.md), cascade; `division_id` to [event_division](event_division.md), set null; `qualified_from_event_id` to [event](event.md), set null; `historical_participant_id` to [historical_participant](historical_participant.md), cascade, and unique. Unique constraints on (`event_id`, `user_id`, `race`) and (`event_id`, `team_id`); an event with `multi_entry` off keeps one row per player through the entrant write. Check constraint `one_entrant`: exactly one of `user_id`, `team_id` and `historical_participant_id` is set.
+Primary key `id`. Foreign keys: `event_id` to [event](event.md), cascade; `user_id` to [users](users.md), cascade; `team_id` to [teams](teams.md), cascade; `cup_team_id` to [cup_team](cup_team.md), cascade, and unique; `division_id` to [event_division](event_division.md), set null; `qualified_from_event_id` to [event](event.md), set null; `historical_participant_id` to [historical_participant](historical_participant.md), cascade, and unique. Unique constraints on (`event_id`, `user_id`, `race`) and (`event_id`, `team_id`); an event with `multi_entry` off keeps one row per player through the entrant write. Check constraint `one_entrant`: exactly one of `user_id`, `team_id`, `cup_team_id` and `historical_participant_id` is set. A cup refuses a league team.
 
 Pointed at by [series](series.md) (`entrant1_id`, `entrant2_id`), [series_side](series_side.md) and [event_award](event_award.md) through `entrant_id`. [koth_crown_event](koth_crown_event.md) points at it through `entrant_id` too, set null on delete.
 

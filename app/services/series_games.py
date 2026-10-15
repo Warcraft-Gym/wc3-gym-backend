@@ -20,6 +20,7 @@ from app.models.match import Match
 from app.models.relationships import round_row
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame, SeriesGamePublic
+from app.services.series_rules import series_event, series_rules
 
 SIDES = map_order.SIDES
 
@@ -94,7 +95,7 @@ def _offers(session: OrmSession, series: Series) -> dict[int, int | None]:
     """The map the season's rules name for each game, given what is won so far."""
     season = series.match.season if series.match else None
     if season is None:
-        return {}
+        return _by_best_of(session, series)
     picks: dict[str, int | None] = {}
     for step in sorted(series.veto_steps, key=lambda step: step.step_no):
         if step.action == "pick":
@@ -103,14 +104,48 @@ def _offers(session: OrmSession, series: Series) -> dict[int, int | None]:
     if "fixed" in map_order.rules_of(season.map_rules) and series.match:
         row = round_row(session, series.match.season_id, series.match.playday)
         fixed_map_id = row.map_id if row else None
-    winners = {
+    return map_order.maps_by_game(
+        season.map_rules, fixed_map_id, picks, _winners(session, series)
+    )
+
+
+def _winners(session: OrmSession, series: Series) -> dict[int, str]:
+    """The side that won each game recorded so far, by game number."""
+    return {
         game.game_no: game.winner_side
         for game in session.scalars(
             select(DBSeriesGame).where(col(DBSeriesGame.series_id) == series.id)
         )
         if game.winner_side is not None
     }
-    return map_order.maps_by_game(season.map_rules, fixed_map_id, picks, winners)
+
+
+def _by_best_of(session: OrmSession, series: Series) -> dict[int, int | None]:
+    """The offers of a series whose event vetoes by best-of: game 1 on the map
+    the veto left, every later game on the next pick of the side that lost."""
+    event = series_event(session, series)
+    if event is None or not event.veto_by_best_of:
+        return {}
+    rules = series_rules(session, series)
+    steps = sorted(series.veto_steps, key=lambda step: step.step_no)
+    queue: dict[str, list[int]] = {}
+    for step in steps:
+        if step.action == "pick" and step.map_id is not None:
+            queue.setdefault(step.side, []).append(step.map_id)
+    order = map_order.cup_order(rules.best_of, len(rules.map_pool))
+    decider = map_order.decider_of(
+        rules.map_pool,
+        [step.map_id for step in steps if step.map_id is not None],
+        len(steps) >= len(order),
+    )
+    return map_order.maps_by_game(
+        rules.map_rules,
+        None,
+        {},
+        _winners(session, series),
+        queue=queue,
+        decider=decider,
+    )
 
 
 def for_series(series_id: int) -> list[SeriesGamePublic]:

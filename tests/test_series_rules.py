@@ -22,14 +22,14 @@ def bracket_series(stage_id: int) -> dict[str, Any]:
 
     from app.core.db import Session
     from app.models.base import ident
+    from app.models.cup_series import CupSeries
     from app.models.relationships import DBEventRound
-    from app.models.series import Series
     from app.models.user import User
 
     with Session() as session:
         row = session.scalars(
-            select(Series)
-            .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+            select(CupSeries)
+            .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
             .where(col(DBEventRound.stage_id) == stage_id)
         ).one()
         players = {
@@ -72,7 +72,6 @@ def test_a_bracket_series_reports_against_the_best_of_of_its_stage(
     client: Client,
     auth_headers: dict[str, str],
     member: Callable[..., dict[str, str]],
-    replay_uploaded: Callable[..., None],
 ) -> None:
     """The stage plays Bo1, so 1-0 lands and the Bo3 shape 2-0 is refused. A
     Bo3 stage would read the same as the default and prove nothing."""
@@ -81,19 +80,18 @@ def test_a_bracket_series_reports_against_the_best_of_of_its_stage(
     series = bracket_series(stage)
     side_a = member(series["discord"][1])
 
-    replay_uploaded(series["id"], 1, 2)
     long = client.put(
-        f"/player-series/{series['id']}",
+        f"/cup-series/{series['id']}/report",
         headers=side_a,
-        data={"action": "score_updated", "player1_score": "2", "player2_score": "0"},
+        json={"player1_score": 2, "player2_score": 0},
     )
     assert long.status_code == 400, long.text
-    assert long.json() == {"error": "A series of this season ends at 1 map wins."}
+    assert long.json() == {"error": "A series of this cup ends at 1 map wins."}
 
     resp = client.put(
-        f"/player-series/{series['id']}",
+        f"/cup-series/{series['id']}/report",
         headers=side_a,
-        data={"action": "score_updated", "player1_score": "1", "player2_score": "0"},
+        json={"player1_score": 1, "player2_score": 0},
     )
     assert resp.status_code == 200, resp.text
     assert (resp.json()["player1_score"], resp.json()["player2_score"]) == (1, 0)
@@ -133,7 +131,7 @@ def test_the_veto_board_of_a_bracket_series_reads_the_stage_rules(
     series = bracket_series(stage)
     side_a = member(series["discord"][1])
 
-    board = client.get(f"/player-series/{series['id']}/veto", headers=side_a)
+    board = client.get(f"/cup-series/{series['id']}/veto", headers=side_a)
     assert board.status_code == 200, board.text
     body = board.json()
     assert body["order"] == ORDER
@@ -144,7 +142,7 @@ def test_the_veto_board_of_a_bracket_series_reads_the_stage_rules(
     assert (body["viewer_side"], body["on_turn"]) == ("A", True)
 
     taken = client.put(
-        f"/player-series/{series['id']}/veto",
+        f"/cup-series/{series['id']}/veto",
         headers=side_a,
         json={"action": "step", "map_id": pool[0]},
     )

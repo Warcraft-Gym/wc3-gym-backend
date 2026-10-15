@@ -33,14 +33,18 @@ from app.models.user import User
 from app.models.user_battle_tag import MergePlan, UserBattleTag
 from app.services.battle_tags import active_row
 
-# User id columns that carry no foreign key: 0 on series_side means no player
+# User id columns that carry no foreign key: 0 on a series side means no player
 NO_FOREIGN_KEY = {
     ("series", "host_player_id"),
     ("draft_series", "host_player_id"),
     ("series_side", "user_id"),
+    ("cup_series_side", "user_id"),
 }
 # One person sits once in a series, though the key also holds the side
-EXTRA_KEYS = {"series_side": [("series_id", "user_id")]}
+EXTRA_KEYS = {
+    "series_side": [("series_id", "user_id")],
+    "cup_series_side": [("series_id", "user_id")],
+}
 # Copies of one W3Champions fact: a duplicate goes, the newest ledger row stays
 REMOVABLE = {"w3c_ladder_matches", "ladder_sync", "w3cstats"}
 TAGS = "user_battle_tag"
@@ -57,6 +61,8 @@ NOUNS = {
     "team_season_captain": ("captain seat", "captain seats"),
     "user_season_signup": ("signup", "signups"),
     "user_team_season": ("team season seat", "team season seats"),
+    "cup_team_member": ("cup team seat", "cup team seats"),
+    "cup_team_invite": ("cup team invite", "cup team invites"),
     "w3c_ladder_matches": ("ladder match", "ladder matches"),
     "event_entrant": ("event entry", "event entries"),
     "fantasy_team_player": ("fantasy team pick", "fantasy team picks"),
@@ -70,6 +76,9 @@ NOUNS = {
     "series_replay": ("replay upload", "replay uploads"),
     "series_veto_step": ("veto step", "veto steps"),
     "series_side": ("series seat", "series seats"),
+    "cup_series": ("cup series", "cup series"),
+    "cup_veto_step": ("cup veto step", "cup veto steps"),
+    "cup_series_side": ("cup series seat", "cup series seats"),
 }
 
 

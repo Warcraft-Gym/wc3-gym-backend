@@ -108,6 +108,21 @@ class W3CService:
             logger.debug(f"Player validation failed for {bnet_name}: {e!s}")
             return False
 
+    def participated_seasons(self, bnet_name: str) -> list[int]:
+        """The W3C seasons the player took part in on the main gateway."""
+        found = self.send_request(
+            url=f"{self.base_url()}/players/{urllib.parse.quote(bnet_name)}"
+        )
+        if not isinstance(found, dict):
+            return []
+        return sorted(
+            {
+                int(season["id"])
+                for season in found.get("participatedInSeasons") or []
+                if isinstance(season, dict) and season.get("id") is not None
+            }
+        )
+
     def country(self, bnet_name: str) -> str | None:
         """The flag w3champions shows for this player: the one the player picked,
         else the country w3champions places them in."""

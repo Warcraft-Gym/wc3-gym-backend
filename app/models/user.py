@@ -73,6 +73,9 @@ class User(UserBase, DBModel, table=True):
     race: Race
     # When the app last asked w3champions about this player, null when never
     w3c_synced_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    # The newest past W3C season whose stats the app holds in full, so the
+    # lifetime games of a race read the stored rows; null until backfilled
+    w3c_history_through: int | None = None
     # When the app last asked w3champions for this player's ladder matches
     ladder_synced_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     # An admin banned this player; the entrant row warns and never refuses

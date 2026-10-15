@@ -7,15 +7,10 @@ old versions of a map under their own names, so "Autumn Leaves v2" belongs to
 "Autumn Leaves 2.0" and not to the older "Autumn Leaves".
 """
 
-import logging
 import re
 
-import requests
-
 from app.models.map import LadderMapRow
-from app.services.w3c import REQUEST_TIMEOUT, W3CService
-
-logger = logging.getLogger(__name__)
+from app.services.w3c import W3CService
 
 # Every map warcraft3.info knows, with its short name and its picture.
 MAP_DB_URL = "https://warcraft3.info/api/v1/maps"
@@ -25,6 +20,8 @@ IMAGE_BASE_URL = "https://d3upx5peno0o6w.cloudfront.net/"
 
 # The w3champions game mode the league plays.
 SOLO_MODE = 1
+# The W3Champions game modes a pool is read from, by the mode a map is tagged with
+MODE_NAMES = {1: "1v1", 2: "2v2", 4: "4v4"}
 
 # A trailing version word: "v2", "2.0", "v1.3".
 _VERSION = re.compile(r"^v?(\d+(?:\.\d+)*)$")
@@ -130,12 +127,18 @@ def map_index() -> MapIndex:
     return by_base
 
 
-def ladder_rows(by_base: MapIndex) -> list[LadderMapRow]:
-    """Every 1v1 ladder map, with the short name and picture matched to it."""
+def ladder_rows(by_base: MapIndex, mode: int = SOLO_MODE) -> list[LadderMapRow]:
+    """Every ladder map of one W3Champions game mode, the 1v1 one unless named,
+    with the short name and picture matched to it."""
     w3c = W3CService()
     modes = w3c.send_request(url=f"{w3c.base_url()}/ladder/active-modes") or []
     maps = next(
-        (mode.get("maps") or [] for mode in modes if mode.get("id") == SOLO_MODE), []
+        (
+            mode_row.get("maps") or []
+            for mode_row in modes
+            if mode_row.get("id") == mode
+        ),
+        [],
     )
     return [_row(ladder_map, by_base) for ladder_map in maps]
 
@@ -147,13 +150,3 @@ def ladder_maps() -> list[LadderMapRow]:
 def lookup(name: str, by_base: MapIndex) -> LadderMapRow:
     """One map by its name alone: what warcraft3.info holds for a map off the ladder."""
     return _row({"name": name}, by_base)
-
-
-def fetch_image(url: str) -> bytes | None:
-    """The picture behind the url. A picture that does not answer is skipped."""
-    try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT)
-    except requests.exceptions.RequestException as failure:
-        logger.warning("map picture %s: %s", url, failure)
-        return None
-    return response.content if response.status_code == 200 else None

@@ -4,7 +4,7 @@ title: Roles and permissions
 description: Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T21:00:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -36,9 +36,20 @@ A role is coarse and global. Ownership is checked per row: my profile, my availa
 
 Before writing a permission, write the user story ("As a member who owns a fantasy team, I place bets for my own team") and derive the check from it.
 
+# Organizers
+
+An organizer is not a fifth role. It is a capability a guild member holds beside its role, so the member and captain guards stay as they are.
+
+- **Who.** A Discord account with an [organizer_grant](../data/tables/organizer_grant.md). It needs no player row, only a Discord login. The grant counts while the account is a guild member acting as itself: a guest, the admin token and an admin viewing as a lower role hold none. `/me` answers `organizer` and `organizer_request`. The check runs on the routes that need it, never on every request.
+- **A drawn cup.** The event's runners take a draw back (`DELETE /events/{id}/stages/{stage_id}/series`) and swap a player who has not played (`POST /events/{id}/entrants/{entrant_id}/replace`); both are event writes `require_event_runner` guards.
+- **Maps.** An organizer reads `GET /maps/ladder-import` to fill a cup's pool from the 1v1, 2v2 or 4v4 ladder, and imports the ladder maps the app lacks with `POST /maps/ladder-import`, which for an organizer creates or renames the maps of that ladder alone and leaves every other map as it is, and writes the pool of an event it runs with `PUT /events/{id}/maps`. Creating or changing any other map stays the admins'.
+- **Becoming one.** A member sends `POST /organizers/requests` with an optional note. An admin approves or declines it under Admin › Access, or grants an account directly by Discord id. See [organizer_request](../data/tables/organizer_request.md).
+- **What a grant allows.** `POST /events` for a small event: a `cup` or `signup` kind, of no league or a `custom` league, with no event Discord role, no `gnl` or `koth` stage, and a parent only among the events it runs. An admin writes any event.
+- **Running an event.** An [event_organizer](../data/tables/event_organizer.md) row lets its account run that one event: every event write `require_event_runner` guards, the event's series on the [cup series routes](events-module.md#cup-series), where it reports, writes and clears any result, `force` included, records a walkover or a forfeit, enters a lobby's places and records any veto step, as an admin does, its co-organizers, whose list (`GET /events/{id}/organizers`) is an open read so the event page names them, and its draft, which it reads as an admin does. The row outlives a revoked grant. A GNL season and a KOTH night never hold a row, so their writes stay the admins'. Posting the event card in a Discord channel stays an admin's. `GET /me/organized-events` lists the events the account runs, drafts included, in the rows and the order of `GET /events`, newest start first.
+
 # Reads open, writes admin
 
-Every GET serves any session, including a guest, unless it answers something personal. POST, PUT and DELETE keep `require_admin`, except a player's own self-service flows (signup, their own battle tags, scheduling, reporting, veto, availability, fantasy), which are member-accessible and ownership-checked in the service, and a captain's team flows, checked against the seat: the round answers of their own roster, the draft of a fixture their team plays, which either captain of that fixture writes and publishes, and the published series of that fixture: adding one up to the round's series, editing its time, result, races played, host and fantasy mark, and deleting one. These routes check the seats the session carries, as the draft routes do (`own_match` in `app/api/deps.py`). Two more writes are open: a member claims a series to cast (`POST /series/{id}/casts`), and the claim's owner or an admin changes or removes it; a captain names the roster of their own side of a fixture series (`PUT /series/{id}/sides` with `sides`), where the service checks the seat. The frontend hides the buttons of admin writes rather than letting them fail: its fetch wrapper logs the session out on a 401. See [the decision](../decisions/reads-open-writes-admin.md).
+Every GET serves any session, including a guest, unless it answers something personal. POST, PUT and DELETE keep `require_admin`, except the writes on one event, which its organizers make as well (see [organizers](#organizers)), a player's own self-service flows (signup, their own battle tags, scheduling, reporting, veto, availability, fantasy), which are member-accessible and ownership-checked in the service, and a captain's team flows, checked against the seat: the round answers of their own roster, the draft of a fixture their team plays, which either captain of that fixture writes and publishes, and the published series of that fixture: adding one up to the round's series, editing its time, result, races played, host and fantasy mark, and deleting one. These routes check the seats the session carries, as the draft routes do (`own_match` in `app/api/deps.py`). Two more writes are open: a member claims a series to cast (`POST /series/{id}/casts`), and the claim's owner or an admin changes or removes it; a captain names the roster of their own side of a fixture series (`PUT /series/{id}/sides` with `sides`), where the service checks the seat. The frontend hides the buttons of admin writes rather than letting them fail: its fetch wrapper logs the session out on a 401. See [the decision](../decisions/reads-open-writes-admin.md).
 
 # View as
 

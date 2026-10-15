@@ -63,7 +63,7 @@ def play(
         to_first = seeds[first] > seeds[second]
         if award:
             done = client.put(
-                f"/series/{row['id']}/result-kind",
+                f"/cup-series/{row['id']}/result-kind",
                 json={"result_kind": "walkover", "winner": 1 if to_first else 2},
                 headers=headers,
             )

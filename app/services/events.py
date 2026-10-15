@@ -10,14 +10,16 @@ import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 from sqlalchemy import (
     ColumnElement,
     Row,
+    and_,
     case,
     delete,
     distinct,
+    exists,
     func,
     or_,
     select,
@@ -25,7 +27,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import load_only, noload, selectinload
+from sqlalchemy.orm import aliased, load_only, noload, selectinload
 from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import col
 
@@ -33,9 +35,13 @@ from app.core.checkin_hint import availability_hints
 from app.core.db import Session, rel
 from app.core.divisions import cut
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.core.outcome import scored
 from app.core.query import QueryElement, QueryUtil
 from app.core.security import is_admin
 from app.models.base import ident
+from app.models.cup_series import CupSeries, CupVetoStep
+from app.models.cup_settings import CupPinWrite, CupSettings
+from app.models.cup_team import CupTeam, CupTeamInvite, CupTeamMember, team_summary
 from app.models.draft_series import DraftSeries
 from app.models.enums import (
     EntrantKind,
@@ -57,11 +63,12 @@ from app.models.event_entrant import (
     EventEntrant,
     EventEntrantPublic,
     SeedWrite,
+    TeamMemberPublic,
 )
 from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
-from app.models.map import MapPublic
+from app.models.map import Map, MapPublic
 from app.models.match import Match
 from app.models.relationships import (
     DBEventRound,
@@ -82,6 +89,7 @@ from app.models.season import (
     EventPublic,
     EventUpdate,
     MemberAction,
+    MemberCupTeam,
     MemberEventRow,
     Season,
     series_counts,
@@ -90,6 +98,7 @@ from app.models.season import (
     tier_count,
 )
 from app.models.series import Series
+from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.team_summary import TeamSummaryPublic
@@ -97,9 +106,19 @@ from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
-from app.services import stage_engine
-from app.services.battle_tags import attach_tag, person_by_tag
+from app.services import (
+    cup_divisions,
+    cup_engine,
+    cup_reads,
+    cup_recurrence,
+    cup_rounds,
+    organizers,
+    stage_engine,
+)
+from app.services.battle_tags import active_row, attach_tag, person_by_tag
+from app.services.series_rules import hold_pool
 from app.services.users import summary_loads
+from app.services.w3c_refresh import refresh_rating
 from app.services.w3c_stats import (
     in_window,
     summarize,
@@ -139,8 +158,12 @@ _MEMBER_COLUMNS = load_only(
     rel(Season.series_per_round),
     rel(Season.page_url),
     rel(Season.round_end_zone),
+    rel(Season.team_size),
     raiseload=True,
 )
+
+# A player's own signup to a team cup, which takes a team instead
+TEAM_CUP_SIGNUP = "This cup signs teams up; sign a team up"
 
 # Newest first by when the event starts; an event with neither date sorts last
 NEWEST_FIRST = (
@@ -216,23 +239,6 @@ def phase_of(
     return "seeded"
 
 
-def finished_ids(session: OrmSession, event_ids: set[int]) -> set[int]:
-    """The events among `event_ids` that read finished, in three reads."""
-    if not event_ids:
-        return set()
-    events = session.scalars(select(Season).where(col(Season.id).in_(event_ids)))
-    counts = series_counts_by_event(session, event_ids)
-    drawn = last_stage_drawn(session, list(event_ids))
-    return {
-        ident(event)
-        for event in events.all()
-        if phase_of(
-            session, event, counts.get(event.id, NO_SERIES), drawn.get(event.id, True)
-        )
-        == "finished"
-    }
-
-
 def _signups_open(event: Season, phase: EventPhase) -> bool:
     """The stored flag, shut once the event reads finished."""
     return event.signups_open and phase != "finished"
@@ -245,6 +251,7 @@ _STAGE_PLAN = load_only(
     rel(EventStage.format),
     rel(EventStage.third_place),
     rel(EventStage.grand_final_modifier),
+    rel(EventStage.placement_lives),
     rel(EventStage.series_per_entrant_per_round),
     rel(EventStage.swiss_rounds),
     rel(EventStage.lobby_size),
@@ -266,12 +273,17 @@ def last_stage_drawn(
     ids = [event_id for event_id in event_ids if event_id is not None]
     if not ids:
         return {}
+    # A round holds a cup's series or the series of a KOTH or GNL stage, never both
+    held = func.count(func.distinct(col(Series.id))) + func.count(
+        func.distinct(col(CupSeries.id))
+    )
     rows = session.execute(
-        select(EventStage, func.count(col(Series.id)))
+        select(EventStage, held)
         .options(_STAGE_PLAN)
         .select_from(EventStage)
         .outerjoin(DBEventRound, col(DBEventRound.stage_id) == col(EventStage.id))
         .outerjoin(Series, col(Series.round_id) == col(DBEventRound.id))
+        .outerjoin(CupSeries, col(CupSeries.round_id) == col(DBEventRound.id))
         .where(col(EventStage.event_id).in_(ids))
         .group_by(col(EventStage.id))
     ).all()
@@ -391,6 +403,20 @@ class EventService:
             ).all()
             return _publics(session, rows), total
 
+    def by_ids(self, event_ids: Sequence[int]) -> list[EventPublic]:
+        """Those events, newest first, drafts included: the caller runs them."""
+        if not event_ids:
+            return []
+        with Session.begin() as session:
+            rows = session.execute(
+                select(Season)
+                .options(*_EVENT_OPTIONS)
+                .add_columns(ARCHIVED)
+                .where(col(Season.id).in_(event_ids))
+                .order_by(*NEWEST_FIRST)
+            ).all()
+            return _publics(session, rows)
+
     def search(
         self,
         query: QueryElement | None,
@@ -419,13 +445,18 @@ class EventService:
     def get(self, event_id: int, claims: dict[str, Any] | None = None) -> EventPublic:
         """One event with its stages, its divisions and how many entrants it holds.
 
-        A draft is an admin's own, so every other caller is answered not found,
-        and the qualifiers under a published event follow the same rule.
+        A draft is its runners' own, an admin's or an organizer's of the event,
+        so every other caller is answered not found, and the qualifiers under a
+        published event follow the same rule.
         """
         with Session.begin() as session:
             event = _event(session, event_id, full=True)
             admin = is_admin(claims)
-            if not event.published and not admin:
+            if (
+                not event.published
+                and not admin
+                and not organizers.runs(claims, event_id)
+            ):
                 raise NotFoundError(f"Event not found by id: {event_id}")
             public = _public(session, event, full=True, drafts=admin)
             public.archived = (
@@ -434,7 +465,7 @@ class EventService:
             )
             return public
 
-    def add(self, data: EventCreate) -> EventPublic:
+    def add(self, data: EventCreate, created_by: str | None = None) -> EventPublic:
         """Create an event and the stages it plays, or one default stage.
 
         A body that leaves `stages` out plays one default stage. A body that
@@ -442,7 +473,19 @@ class EventService:
         signup-only event is.
         """
         with Session.begin() as session:
-            fields = data.model_dump(exclude={"stages", "round_count", "map_ids"})
+            fields = data.model_dump(
+                exclude={
+                    "stages",
+                    "round_count",
+                    "map_ids",
+                    "uses_divisions",
+                    "legs",
+                    "points_by_place",
+                    "recurrence",
+                    "custom_game",
+                }
+            )
+            _hold_bounds(fields)
             if fields.get("entrant_kind") is None:
                 fields["entrant_kind"] = _league_entrant_kind(
                     session, fields.get("league_id")
@@ -455,14 +498,47 @@ class EventService:
                 if "stages" in data.model_fields_set
                 else [_default_stage(event)]
             )
-            _write_stages(session, event, stages)
+            cup = cup_divisions.is_cup(event)
+            if data.custom_game:
+                if not cup:
+                    raise BadRequestError("Only a cup is played as a custom game")
+                if len(set(data.map_ids)) != 1:
+                    raise BadRequestError("A custom game cup is played on one map")
+                # every game is played on the cup's one map, so nothing is vetoed
+                event.veto_by_best_of = False
+            if cup and data.legs:
+                # every round of the cup plays its own copy of the stages, and
+                # checks its players in per round rather than once for the cup
+                cup_rounds.write_legs(session, event, data.legs, stages)
+                event.checkin_enabled = False
+            else:
+                _write_stages(session, event, stages)
+            _write_pool(session, ident(event), data.map_ids)
+            if cup:
+                cup_divisions.write_settings(
+                    session,
+                    event,
+                    data.uses_divisions,
+                    cup_rounds.points_text(data.points_by_place) if data.legs else None,
+                    data.custom_game,
+                )
+            if data.recurrence is not None:
+                if not cup:
+                    raise BadRequestError("Only a cup repeats")
+                # the cup and its rule are written together, so neither stands alone
+                cup_recurrence.create_in(
+                    session, event, data.recurrence, created_by or "admin"
+                )
+            hold_pool(session, event)
             return _answer(session, ident(event))
 
     def update(self, event_id: int, data: EventUpdate) -> EventPublic:
         """Change the event fields the body names; the stages have their own route."""
         with Session.begin() as session:
             event = _event(session, event_id, full=True)
-            fields = data.model_dump(exclude_unset=True, exclude={"round_count"})
+            fields = data.model_dump(
+                exclude_unset=True, exclude={"round_count", "uses_divisions"}
+            )
             if "league_id" in fields and fields["league_id"] != event.league_id:
                 linked_team = session.scalar(
                     select(col(DBTeamSeason.team_id))
@@ -482,6 +558,7 @@ class EventService:
                         "Remove the event's teams before changing its league"
                     )
             event.sqlmodel_update(fields)
+            _hold_bounds(event.model_dump())
             if data.model_fields_set & {"pick_ban", "map_rules"}:
                 from app.services.series_veto import check_order
 
@@ -490,7 +567,13 @@ class EventService:
                 from app.services.seasons import fill_rounds
 
                 fill_rounds(session, event, data.round_count or 0)
+            if data.uses_divisions is not None and cup_divisions.is_cup(event):
+                cup_divisions.set_uses_divisions(session, event, data.uses_divisions)
+            if "starts_at" in fields and cup_divisions.is_cup(event):
+                # a cup over rounds starts with its first round
+                cup_rounds.follow_start(session, event)
             session.flush()
+            hold_pool(session, event)
             return _answer(session, ident(event))
 
     def delete(self, event_id: int) -> None:
@@ -512,6 +595,10 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id)
+            if cup_divisions.is_cup(event) and cup_rounds.has_legs(session, event_id):
+                cup_rounds.set_leg_stages(session, event_id, stages)
+                hold_pool(session, event)
+                return _answer(session, event_id)
             rows = list(stages)
             current = list(
                 session.scalars(
@@ -532,7 +619,43 @@ class EventService:
                     session, event, rows[len(current) :], start=len(current) + 1
                 )
             session.flush()
+            hold_pool(session, event)
             return _answer(session, ident(event))
+
+    def set_pool(self, event_id: int, map_ids: list[int]) -> EventPublic:
+        """Replace the map pool with these maps, in this order.
+
+        A pool that a veto already reads would change under it, so the pool is
+        set before any series of the event holds a veto step.
+        """
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            vetoed = session.scalar(
+                select(col(CupVetoStep.series_id))
+                .join(CupSeries, col(CupSeries.id) == col(CupVetoStep.series_id))
+                .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
+                .where(col(DBEventRound.season_id) == event_id)
+                .limit(1)
+                if event.kind is EventKind.cup
+                else select(col(DBSeriesVetoStep.series_id))
+                .join(Series, col(Series.id) == col(DBSeriesVetoStep.series_id))
+                .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+                .where(col(DBEventRound.season_id) == event_id)
+                .limit(1)
+            )
+            if vetoed is not None:
+                raise BadRequestError(
+                    "A series of this event has started its veto; the pool stays"
+                )
+            if cup_divisions.custom_game(session, event) and len(set(map_ids)) != 1:
+                raise BadRequestError("A custom game cup is played on one map")
+            session.execute(
+                delete(DBMapSeason).where(col(DBMapSeason.season_id) == event_id)
+            )
+            _write_pool(session, event_id, map_ids)
+            session.flush()
+            hold_pool(session, event)
+            return _answer(session, event_id)
 
     def get_leagues(self) -> list[LeaguePublic]:
         """Every league, without its events."""
@@ -617,7 +740,8 @@ class EventService:
                 )
                 .order_by(col(Season.id).desc())
             ).all()
-            joined, races = _joined_events(session, user_id)
+            joined, races, teams = _joined_events(session, user_id)
+            formats = _cup_formats(session, events)
             ids = [event.id for event in events]
             counts = series_counts_by_event(session, ids)
             drawn = last_stage_drawn(session, ids)
@@ -650,26 +774,41 @@ class EventService:
                     _answer_time(event, rounds.get(event.id), answered),
                     fixtures.get(event.id) if event.id is not None else None,
                     every.get(event.id, []) if event.id is not None else [],
+                    teams.get(ident(event)),
+                    formats.get(ident(event), (False, False)),
                 )
                 for event in events
             ]
 
     # ============ Entrants ============
-    def get_entrants(self, event_id: int) -> list[EventEntrantPublic]:
-        """Every entrant of the event, seeded ones first, with their warnings."""
+    def get_entrants(
+        self, event_id: int, claims: dict[str, Any] | None = None
+    ) -> list[EventEntrantPublic]:
+        """Every entrant of the event, seeded ones first, with their warnings.
+
+        An event that hides its seeds answers a caller who does not run it no
+        seed numbers, and the list in signup order.
+        """
         with Session.begin() as session:
             event = _event(session, event_id)
+            shown = organizers.shows_seeds(claims, event)
+            order = (
+                (col(EventEntrant.seed).nulls_last(), col(EventEntrant.id))
+                if shown
+                else (col(EventEntrant.id),)
+            )
             rows = session.scalars(
                 select(EventEntrant)
                 .where(col(EventEntrant.event_id) == event_id)
-                .order_by(col(EventEntrant.seed).nulls_last(), col(EventEntrant.id))
+                .order_by(*order)
             ).all()
-            return _entrant_publics(session, event, rows)
+            return _entrant_publics(session, event, rows, shown)
 
     def add_entrant(
         self, event_id: int, data: EntrantSignup, claims: dict[str, Any] | None
     ) -> EventEntrantPublic:
         """Sign the caller up, or the team the caller captains."""
+        _refresh_for(event_id, data, claims)
         with Session.begin() as session:
             event = _event(session, event_id)
             if not _signups_open(event, phase_of(session, event)):
@@ -681,14 +820,19 @@ class EventService:
                     )
                 row = _enter(session, event, data, team_id=data.team_id)
             else:
+                # a team cup enters teams: its captain signs one up with its players
+                if event.kind is EventKind.cup and event.team_size:
+                    raise BadRequestError(TEAM_CUP_SIGNUP)
                 row = _enter(
                     session,
                     event,
                     data,
                     user_id=ident(_signup_user(session, event, data, claims)),
+                    may_wait=event.kind is EventKind.cup,
                 )
             entrant_id = ident(row)
-            public = _entrant_publics(session, event, [row])[0]
+            shown = organizers.shows_seeds(claims, event)
+            public = _entrant_publics(session, event, [row], shown)[0]
         return _after_signup(event_id, entrant_id) or public
 
     def add_entrant_as_admin(
@@ -698,7 +842,9 @@ class EventService:
 
         A caller that has just read this player from w3champions says so, and
         the follow-up the event's kind runs asks w3champions no second time.
+        An event that checks eligibility holds a hand-added player to it too.
         """
+        _refresh_for(event_id, data, None)
         with Session.begin() as session:
             event = _event(session, event_id)
             if data.team_id is not None:
@@ -718,7 +864,8 @@ class EventService:
 
         A race names one row of an event that takes one entry per race; no
         race withdraws every active row of the caller. A KOTH night takes a
-        withdraw until it closes or expires, and the rows forfeit what they owe.
+        withdraw until it closes or expires, and the rows forfeit what they owe;
+        so do the rows of a drawn cup, every open series it still holds.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
@@ -740,9 +887,39 @@ class EventService:
             if event.kind is EventKind.koth:
                 _leave_night(session, event, rows)
             else:
-                for row in rows:
-                    row.withdrawn_at = utcnow()
-                stage_engine.uncrown(session, [ident(row) for row in rows])
+                _withdraw_rows(session, event, rows)
+
+    def admit_entrant(self, event_id: int, entrant_id: int) -> EventEntrantPublic:
+        """A runner lets one entrant in off the waitlist, past the cap if need be.
+
+        Once the cup is drawn its field is set: a waiting player comes in by
+        taking the place of one who has not played, through the replace write.
+        """
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            row = _entrant(session, event_id, entrant_id)
+            if row.waitlisted_at is None or row.withdrawn_at is not None:
+                raise BadRequestError("This entrant is not on the waitlist")
+            if _first_stage_drawn(session, event_id):
+                raise BadRequestError(
+                    "The cup is drawn: swap them in for a player who has not "
+                    "played, or undo the draw first"
+                )
+            row.waitlisted_at = None
+            session.flush()
+            return _entrant_publics(session, event, [row])[0]
+
+    def withdraw_entrant(self, event_id: int, entrant_id: int) -> None:
+        """A runner withdraws one entrant and keeps the row; on a drawn cup it
+        forfeits what it still owes, as the entrant's own withdraw does."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if event.kind is EventKind.koth:
+                raise BadRequestError("A KOTH night removes a player on its run page")
+            row = _entrant(session, event_id, entrant_id)
+            if row.withdrawn_at is not None:
+                raise BadRequestError("This entrant has withdrawn already")
+            _withdraw_rows(session, event, [row])
 
     def check_in(
         self, event_id: int, entrant_id: int, claims: dict[str, Any] | None
@@ -759,18 +936,131 @@ class EventService:
                     "This event checks in per round. Answer the round instead."
                 )
             row = _entrant(session, event_id, entrant_id)
-            if not is_admin(claims):
+            if not organizers.runs(claims, event_id):
                 user = _caller(session, claims)
-                if user is None or row.user_id != user.id:
+                member = (
+                    user is not None
+                    and row.cup_team_id is not None
+                    and session.get(CupTeamMember, (row.cup_team_id, ident(user)))
+                    is not None
+                )
+                if user is None or (row.user_id != user.id and not member):
                     raise ApiError(403, {"error": "Check in your own signup"})
+            if row.waitlisted_at is not None:
+                raise BadRequestError(
+                    "A signup on the waitlist checks in once it is let in"
+                )
+            cup_reads.hold_complete_team(session, event, row)
             row.checked_in_at = utcnow()
             session.flush()
-            return _entrant_publics(session, event, [row])[0]
+            shown = organizers.shows_seeds(claims, event)
+            return _entrant_publics(session, event, [row], shown)[0]
+
+    def check_in_everyone(
+        self, event_id: int, claims: dict[str, Any] | None
+    ) -> list[EventEntrantPublic]:
+        """A runner checks every entrant of a cup in at once, for a cup whose
+        players did not check in themselves; the draw takes the players who
+        checked in. A cup team short of players stays out, as it would on its
+        own check-in."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if event.kind is not EventKind.cup:
+                raise BadRequestError("Only a cup checks everyone in at once")
+            if not event.checkin_enabled:
+                raise BadRequestError("This cup takes no check-in")
+            rows = session.scalars(
+                select(EventEntrant).where(
+                    col(EventEntrant.event_id) == event_id,
+                    col(EventEntrant.withdrawn_at).is_(None),
+                    col(EventEntrant.waitlisted_at).is_(None),
+                    col(EventEntrant.checked_in_at).is_(None),
+                )
+            ).all()
+            players = cup_reads.team_players(
+                session, [row.cup_team_id for row in rows if row.cup_team_id]
+            )
+            now = utcnow()
+            for row in rows:
+                team = row.cup_team_id
+                if team and event.team_size and players.get(team, 0) < event.team_size:
+                    continue
+                row.checked_in_at = now
+        return self.get_entrants(event_id, claims)
+
+    def replace_entrant(
+        self, event_id: int, entrant_id: int, data: EntrantAdd
+    ) -> EventEntrantPublic:
+        """Put another player in the place of one who has not played yet.
+
+        The new player takes the seed, the division and every series of the old
+        one, so a drawn bracket keeps its shape; a veto the old player began in
+        a series still open starts over. The new player is held to the event's
+        rules as a hand-added player is, and the old row leaves.
+        """
+        _refresh_for(event_id, data, None)
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            old = _entrant(session, event_id, entrant_id)
+            series = list(
+                session.scalars(
+                    select(CupSeries).where(
+                        or_(
+                            col(CupSeries.entrant1_id) == entrant_id,
+                            col(CupSeries.entrant2_id) == entrant_id,
+                        )
+                    )
+                )
+            )
+            played = [
+                row
+                for row in series
+                if scored(row) and row.entrant1_id and row.entrant2_id
+            ]
+            if played:
+                raise BadRequestError(
+                    "This player has played a match already, so the place stays theirs"
+                )
+            sides = {
+                ident(row): 1 if row.entrant1_id == entrant_id else 2 for row in series
+            }
+            seed, division_id = old.seed, old.division_id
+            checked_in = old.checked_in_at
+            session.delete(old)
+            session.flush()
+            new = _enter(
+                session, event, data, user_id=ident(_named_user(session, data))
+            )
+            new.seed = seed
+            new.division_id = division_id
+            new.checked_in_at = utcnow() if event.checkin_enabled else checked_in
+            session.flush()
+            for row in series:
+                side = sides[ident(row)]
+                setattr(row, f"entrant{side}_id", ident(new))
+                setattr(row, f"player{side}_id", new.user_id)
+                if not scored(row):
+                    session.execute(
+                        delete(CupVetoStep).where(
+                            col(CupVetoStep.series_id) == ident(row)
+                        )
+                    )
+            session.flush()
+            return _entrant_publics(session, event, [new])[0]
 
     def remove_entrant(self, event_id: int, entrant_id: int) -> None:
-        """Delete one entrant row; an admin removes what a withdrawal would keep."""
+        """Delete one entrant row; an admin removes what a withdrawal would keep.
+        A cup team goes with it, its players and its open invites, so every
+        player of it is free again."""
         with Session.begin() as session:
-            session.delete(_entrant(session, event_id, entrant_id))
+            row = _entrant(session, event_id, entrant_id)
+            team_id = row.cup_team_id
+            session.delete(row)
+            session.flush()
+            if team_id is not None:
+                for model in (CupTeamInvite, CupTeamMember):
+                    session.execute(delete(model).where(col(model.team_id) == team_id))
+                session.execute(delete(CupTeam).where(col(CupTeam.id) == team_id))
 
     def place_entrant(
         self, event_id: int, entrant_id: int, data: EntrantPlacement
@@ -779,6 +1069,9 @@ class EventService:
         with Session.begin() as session:
             event = _event(session, event_id)
             row = _entrant(session, event_id, entrant_id)
+            cup = cup_divisions.is_cup(event)
+            if cup and data.division_id is not None:
+                cup_divisions.hold_divisions_on(session, event)
             if data.division_id is not None:
                 division = session.get(EventDivision, data.division_id)
                 if division is None or division.event_id != event_id:
@@ -786,8 +1079,23 @@ class EventService:
                         f"Division not found by id: {data.division_id}"
                     )
             moved = data.division_id != row.division_id
+            if moved and session.scalar(
+                select(
+                    exists().where(
+                        col(EventStage.event_id) == event_id,
+                        col(EventStage.seeds_locked_at).is_not(None),
+                    )
+                )
+            ):
+                raise ApiError(409, {"error": "The seeds of this event are locked"})
             row.division_id = data.division_id
-            row.manual_placement = data.manual_placement
+            # A cup pins the division apart from the seed; another kind holds one flag
+            if cup:
+                cup_divisions.set_pins(
+                    session, ident(row), division=data.manual_placement
+                )
+            else:
+                row.manual_placement = data.manual_placement
             # A row moved into a division stands at the end of its line
             if moved:
                 row.seed = (
@@ -800,6 +1108,25 @@ class EventService:
             session.flush()
             return _entrant_publics(session, event, [row])[0]
 
+    def set_pins(
+        self, event_id: int, entrant_id: int, data: CupPinWrite
+    ) -> EventEntrantPublic:
+        """Write a cup player's pins; only a cup pins apart from its placement."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if not cup_divisions.is_cup(event):
+                raise BadRequestError("Only a cup pins its players")
+            row = _entrant(session, event_id, entrant_id)
+            if data.division_pinned is not None:
+                cup_divisions.hold_divisions_on(session, event)
+            cup_divisions.set_pins(
+                session,
+                ident(row),
+                division=data.division_pinned,
+                seed=data.seed_pinned,
+            )
+            return _entrant_publics(session, event, [row])[0]
+
     # ============ Divisions and seeds ============
     def set_divisions(
         self, event_id: int, divisions: Sequence[EventDivisionWrite]
@@ -807,15 +1134,25 @@ class EventService:
         """Replace the division list; the order of the body is their position."""
         with Session.begin() as session:
             event = _event(session, event_id)
+            cup = cup_divisions.is_cup(event)
+            if cup:
+                # A cup's divisions are its choice, and its draw holds them
+                cup_divisions.hold_divisions_on(session, event)
+                cup_divisions.hold_undrawn(session, event_id)
+                cup_divisions.reset_division_pins(session, event_id)
             session.execute(
                 update(EventEntrant)
                 .where(col(EventEntrant.event_id) == event_id)
-                .values(division_id=None, manual_placement=False)
+                .values(
+                    {"division_id": None}
+                    if cup
+                    else {"division_id": None, "manual_placement": False}
+                )
             )
             gone = select(col(EventDivision.id)).where(
                 col(EventDivision.event_id) == event_id
             )
-            for model in (Series, Match):
+            for model in (Series, CupSeries, Match):
                 session.execute(
                     update(model)
                     .where(col(model.division_id).in_(gone))
@@ -840,13 +1177,21 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id)
+            if cup_divisions.is_cup(event):
+                cup_divisions.hold_divisions_on(session, event)
+                cup_divisions.hold_undrawn(session, event_id)
             divisions = _divisions(session, event_id)
             if not divisions:
                 raise BadRequestError("The event has no divisions to assign")
             live = _live_entrants(session, event_id)
-            rows = [row for row in live if not row.manual_placement]
+            by_hand = (
+                cup_divisions.division_pinned(session, live)
+                if cup_divisions.is_cup(event)
+                else {ident(row) for row in live if row.manual_placement}
+            )
+            rows = [row for row in live if ident(row) not in by_hand]
             # A hand-placed entrant takes one of its division's seats
-            placed = Counter(row.division_id for row in live if row.manual_placement)
+            placed = Counter(row.division_id for row in live if ident(row) in by_hand)
             mmrs = _mmrs(session, rows)
             bands = cut(
                 [(ident(row), mmrs[ident(row)]) for row in rows],
@@ -874,30 +1219,66 @@ class EventService:
 
         An entrant the order leaves out loses its seed, which is what seeding
         from the stage before writes: only the places that came through play.
+        An entrant placed by hand keeps its seed and the others take the free
+        numbers, except from the stage before, whose standings decide alone.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
             stage = _stage(session, event_id, stage_id)
             if stage.seeds_locked_at is not None:
-                raise BadRequestError("The seeds of this stage are locked")
-            rows = _live_entrants(session, event_id)
-            mmrs = _mmrs(session, rows)
-            order = (
-                _from_previous_stage(session, event_id, stage, rows)
-                if data.source is SeedSource.previous_stage
-                else _seed_order(rows, mmrs, data)
-            )
-            taken: dict[int | None, int] = {}
-            for row in order:
-                taken[row.division_id] = taken.get(row.division_id, 0) + 1
-                row.seed = taken[row.division_id]
-                row.seed_source = data.source.value
-                row.mmr_at_seed = mmrs[ident(row)]
-            seeded = {ident(row) for row in order}
-            for row in rows:
-                if ident(row) not in seeded:
-                    row.seed = None
-            session.flush()
+                raise ApiError(409, {"error": "The seeds of this stage are locked"})
+            rows = _write_seeds(session, event, stage, data)
+            return _entrant_publics(session, event, rows)
+
+    def redraw_seeds(
+        self, event_id: int, stage_id: int, data: SeedWrite, confirm: bool = False
+    ) -> list[EventEntrantPublic]:
+        """Change the seeds of a cup's first stage after its draw, and draw it
+        again from them, in one transaction.
+
+        The draw goes, the seeds are written as `set_seeds` writes them, and
+        the stage is drawn as Generate draws it; a stage that pairs by round
+        draws its first round. A write that names a division takes back and
+        draws that division alone, and every other division keeps its series
+        and results. Series with results among the ones taken back answer 409
+        until the call confirms, as the undo of a draw does, and a refused
+        draw keeps the draw that stood.
+        """
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if not cup_divisions.is_cup(event):
+                raise BadRequestError("Only a cup's draw follows its seeds")
+            stage = _stage(session, event_id, stage_id)
+            if cup_engine.previous_stage(session, event_id, stage) is not None:
+                raise BadRequestError(
+                    "A later stage plays what the stage before sends on; "
+                    "it has no seeds to change"
+                )
+            drawn = cup_engine.stage_drawn(session, stage_id)
+            if drawn and data.division_id is not None:
+                # one division is drawn again; the others keep their draw and results
+                written: list[EventEntrant] = []
+                cup_engine.redraw_division_in(
+                    session,
+                    event_id,
+                    stage_id,
+                    data.division_id,
+                    confirm,
+                    lambda: written.extend(_write_seeds(session, event, stage, data)),
+                    self.seed_for_draw,
+                )
+                written.sort(key=lambda row: (row.division_id or 0, row.seed or 0))
+                return _entrant_publics(session, event, written)
+            if drawn:
+                cup_engine.undo_in(session, event_id, stage_id, confirm)
+            rows = _write_seeds(session, event, stage, data)
+            if cup_engine.draws_by_round(stage):
+                cup_engine.draw_round_in(
+                    session, event_id, stage_id, self.seed_for_draw
+                )
+            else:
+                cup_engine.generate_in(session, event_id, stage_id, self.seed_for_draw)
+            # the draw seeds whoever the order left without a seed, after it
             rows.sort(key=lambda row: (row.division_id or 0, row.seed or 0))
             return _entrant_publics(session, event, rows)
 
@@ -908,6 +1289,114 @@ class EventService:
             stage.seeds_locked_at = utcnow()
             session.flush()
             return EventStagePublic.model_validate(stage)
+
+    def unlock_seeds(self, event_id: int, stage_id: int) -> EventStagePublic:
+        """Open the seeds of the stage again; a stage that holds series refuses."""
+        with Session.begin() as session:
+            stage = _stage(session, event_id, stage_id)
+            if cup_engine.stage_drawn(session, stage_id):
+                raise ApiError(
+                    409, {"error": "The stage holds series; take its draw back first"}
+                )
+            stage.seeds_locked_at = None
+            session.flush()
+            return EventStagePublic.model_validate(stage)
+
+    def seed_for_draw(self, session: OrmSession, stage: EventStage) -> None:
+        """Seed every live entrant without a seed by the stage's seed source.
+
+        mmr puts the newest rating first and the unrated last, random shuffles,
+        and manual refuses until every entrant has a seed. Each takes the
+        numbers after the last seed of its division. Only the first stage
+        fills, before its first round: a later one plays what `advance` seeded.
+        It runs in the draw's transaction, so a refused draw keeps no seed.
+        """
+        drawn = session.scalar(
+            select(col(DBEventRound.id))
+            .where(col(DBEventRound.stage_id) == ident(stage))
+            .limit(1)
+        )
+        if drawn is not None or cup_engine.previous_stage(
+            session, stage.event_id, stage
+        ):
+            return
+        # a stage of a cup's round seeds the players checked in for that round
+        rows = cup_rounds.leg_field(
+            session, stage, _live_entrants(session, stage.event_id)
+        )
+        unseeded = [row for row in rows if row.seed is None]
+        if not unseeded:
+            return
+        source = SeedSource(stage.seed_source)
+        if source is SeedSource.manual:
+            raise ApiError(409, {"error": "Seed every entrant first"})
+        mmrs = _mmrs(session, unseeded)
+        order = _by_mmr(unseeded, mmrs)
+        if source is SeedSource.random:
+            random.shuffle(order)
+        last: dict[int | None, int] = {}
+        for row in rows:
+            if row.seed is not None:
+                last[row.division_id] = max(last.get(row.division_id, 0), row.seed)
+        for row in order:
+            last[row.division_id] = last.get(row.division_id, 0) + 1
+            row.seed = last[row.division_id]
+            row.seed_source = source.value
+            row.mmr_at_seed = mmrs[ident(row)]
+        session.flush()
+
+
+def _write_seeds(
+    session: OrmSession, event: Season, stage: EventStage, data: SeedWrite
+) -> list[EventEntrant]:
+    """The seed write of `set_seeds`, inside the caller's transaction: the rows
+    it seeded, in division and seed order."""
+    event_id = ident(event)
+    rows = cup_rounds.leg_field(session, stage, _live_entrants(session, event_id))
+    if data.division_id is not None:
+        rows = [row for row in rows if row.division_id == data.division_id]
+    mmrs = _mmrs(session, rows)
+    order = (
+        _from_previous_stage(session, event_id, stage, rows)
+        if data.source is SeedSource.previous_stage
+        else _seed_order(rows, mmrs, data)
+    )
+    kept = (
+        cup_divisions.seed_pinned(session, rows)
+        if cup_divisions.is_cup(event)
+        else {ident(row) for row in rows if row.manual_placement}
+    )
+    pinned = (
+        {}
+        if data.source is SeedSource.previous_stage
+        else {
+            ident(row): row.seed
+            for row in rows
+            if ident(row) in kept and row.seed is not None
+        }
+    )
+    held: dict[int | None, set[int | None]] = {}
+    for row in rows:
+        if ident(row) in pinned:
+            held.setdefault(row.division_id, set()).add(row.seed)
+    taken: dict[int | None, int] = {}
+    for row in order:
+        if ident(row) in pinned:
+            continue
+        number = taken.get(row.division_id, 0) + 1
+        while number in held.get(row.division_id, set()):
+            number += 1
+        taken[row.division_id] = number
+        row.seed = number
+        row.seed_source = data.source.value
+        row.mmr_at_seed = mmrs[ident(row)]
+    seeded = {ident(row) for row in order} | set(pinned)
+    for row in rows:
+        if ident(row) not in seeded:
+            row.seed = None
+    session.flush()
+    rows.sort(key=lambda row: (row.division_id or 0, row.seed or 0))
+    return rows
 
 
 def _nested(events: list[EventPublic]) -> list[EventPublic]:
@@ -931,6 +1420,18 @@ def _league_entrant_kind(session: OrmSession, league_id: int | None) -> EntrantK
     """The entrant kind a new event copies from its league; solo without one."""
     league = session.get(League, league_id) if league_id else None
     return league.entrant_kind if league else EntrantKind.solo
+
+
+def _withdraw_rows(
+    session: OrmSession, event: Season, rows: Sequence[EventEntrant]
+) -> None:
+    """Stamp the rows withdrawn; a cup's rows forfeit the series they still owe."""
+    for row in rows:
+        row.withdrawn_at = utcnow()
+    session.flush()
+    stage_engine.uncrown(session, [ident(row) for row in rows])
+    if event.kind is EventKind.cup:
+        cup_engine.forfeit_open(session, [ident(row) for row in rows])
 
 
 def _leave_night(
@@ -981,13 +1482,15 @@ def _divisions(session: OrmSession, event_id: int) -> list[EventDivision]:
 
 
 def _live_entrants(session: OrmSession, event_id: int) -> list[EventEntrant]:
-    """Every entrant of the event that has not withdrawn, in signup order."""
+    """Every entrant of the event that has not withdrawn and waits on no
+    waitlist, in signup order."""
     return list(
         session.scalars(
             select(EventEntrant)
             .where(
                 col(EventEntrant.event_id) == event_id,
                 col(EventEntrant.withdrawn_at).is_(None),
+                col(EventEntrant.waitlisted_at).is_(None),
             )
             .order_by(col(EventEntrant.id))
         )
@@ -1011,6 +1514,17 @@ def _write_stages(
         EventStage(event_id=ident(event), position=position, **stage.model_dump())
         for position, stage in enumerate(rows, start=start)
     )
+    session.flush()
+
+
+def _write_pool(session: OrmSession, event_id: int, map_ids: list[int]) -> None:
+    """Link the maps to the event as its pool, in the order given."""
+    if len(map_ids) != len(set(map_ids)):
+        raise BadRequestError("The map pool names each map once")
+    for position, map_id in enumerate(map_ids):
+        if session.get(Map, map_id) is None:
+            raise NotFoundError(f"Map not found by id: {map_id}")
+        session.add(DBMapSeason(season_id=event_id, map_id=map_id, position=position))
     session.flush()
 
 
@@ -1056,36 +1570,68 @@ def _day(event: Season) -> date | None:
 
 def _joined_events(
     session: OrmSession, user_id: int | None
-) -> tuple[dict[int, EventEntrant | None], dict[int, list[str]]]:
-    """The player's entrant row per event he joined, and the races of every one
-    of his rows there; a GNL signup has neither.
+) -> tuple[
+    dict[int, EventEntrant | None], dict[int, list[str]], dict[int, MemberCupTeam]
+]:
+    """The player's entrant row per event he joined, the races of every one of
+    his rows there, and the cup team he plays a team cup in; a GNL signup has
+    none of them.
 
     A key with no row is a season the player signed up for, which carries no
-    entrant; an event he never entered is no key at all. The same read answers
-    both maps, so an event that takes one entry per race costs no statement.
+    entrant; an event he never entered is no key at all. A player of a cup team
+    joined the cup through the team's row. The same read answers the three
+    maps, so an event that takes one entry per race costs no statement, and
+    neither does a team.
     """
     if user_id is None:
-        return {}, {}
-    entered = session.scalars(
-        select(EventEntrant)
+        return {}, {}, {}
+    member = and_(
+        col(CupTeamMember.team_id) == col(EventEntrant.cup_team_id),
+        col(CupTeamMember.user_id) == user_id,
+    )
+    roster = aliased(CupTeamMember)
+    players = (
+        select(func.count())
+        .select_from(roster)
+        .where(col(roster.team_id) == col(EventEntrant.cup_team_id))
+        .correlate(EventEntrant)
+        .scalar_subquery()
+    )
+    entered = session.execute(
+        select(EventEntrant, col(CupTeam.name), col(CupTeamMember.captain), players)
         .options(
             load_only(
                 rel(EventEntrant.event_id),
                 rel(EventEntrant.race),
                 rel(EventEntrant.checked_in_at),
+                rel(EventEntrant.waitlisted_at),
+                rel(EventEntrant.cup_team_id),
                 raiseload=True,
             )
         )
+        .outerjoin(CupTeamMember, member)
+        .outerjoin(CupTeam, col(CupTeam.id) == col(CupTeamMember.team_id))
         .where(
-            col(EventEntrant.user_id) == user_id,
+            or_(
+                col(EventEntrant.user_id) == user_id,
+                col(CupTeamMember.user_id).is_not(None),
+            ),
             col(EventEntrant.withdrawn_at).is_(None),
         )
         .order_by(col(EventEntrant.id))
     )
     joined: dict[int, EventEntrant | None] = {}
     races: dict[int, list[str]] = {}
-    for row in entered:
+    teams: dict[int, MemberCupTeam] = {}
+    for row, team_name, captain, count in entered:
         joined[row.event_id] = row
+        if row.cup_team_id is not None and team_name is not None:
+            teams[row.event_id] = MemberCupTeam(
+                id=row.cup_team_id,
+                name=team_name,
+                captain=bool(captain),
+                players=count or 0,
+            )
         if row.race is not None:
             races.setdefault(row.event_id, []).append(row.race.value)
     signed = session.scalars(
@@ -1095,7 +1641,34 @@ def _joined_events(
     )
     for season_id in signed:
         joined.setdefault(season_id, None)
-    return joined, races
+    return joined, races, teams
+
+
+def _cup_formats(
+    session: OrmSession, events: Sequence[Season]
+) -> dict[int, tuple[bool, bool]]:
+    """Whether each cup of the list plays free for all lobbies, and whether it
+    is a custom game cup, in one read; a list with no cup reads nothing."""
+    cups = [ident(event) for event in events if event.kind is EventKind.cup]
+    if not cups:
+        return {}
+    lobbies = (
+        exists()
+        .where(
+            col(EventStage.event_id) == col(Season.id),
+            col(EventStage.format) == StageFormat.ffa,
+        )
+        .correlate(Season)
+    )
+    found = {
+        event_id: (bool(ffa), bool(custom))
+        for event_id, ffa, custom in session.execute(
+            select(col(Season.id), lobbies, col(CupSettings.custom_game))
+            .outerjoin(CupSettings, col(CupSettings.event_id) == col(Season.id))
+            .where(col(Season.id).in_(cups))
+        )
+    }
+    return {event_id: found.get(event_id, (False, False)) for event_id in cups}
 
 
 def _round_hints(
@@ -1345,6 +1918,8 @@ def _member_row(
     answered_at: datetime | None,
     fixture: CaptainFixture | None,
     fixtures: list[CaptainFixture],
+    team: MemberCupTeam | None = None,
+    cup_format: tuple[bool, bool] = (False, False),
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts, last_stage)
@@ -1384,9 +1959,24 @@ def _member_row(
         checkin_open=is_open,
         next_round=EventRoundPublic.from_row(round_) if round_ else None,
         availability_hint=hint,
-        action=_member_action(phase, event, joined, checked_in_at, is_open),
+        action=_member_action(
+            phase,
+            event,
+            joined,
+            checked_in_at,
+            is_open,
+            waiting=entrant is not None and entrant.waitlisted_at is not None,
+            team=team is not None,
+            short=team is not None
+            and bool(event.team_size)
+            and team.players < (event.team_size or 0),
+        ),
         captain_fixture=fixture,
         captain_matches=fixtures,
+        team_size=event.team_size if event.kind is EventKind.cup else None,
+        cup_team=team,
+        ffa=cup_format[0],
+        custom_game=cup_format[1],
     )
 
 
@@ -1396,11 +1986,33 @@ def _member_action(
     joined: bool,
     checked_in_at: datetime | None,
     checkin_open_now: bool,
+    waiting: bool = False,
+    team: bool = False,
+    short: bool = False,
 ) -> MemberAction:
-    """The one action the member home offers, so every page agrees on it."""
-    # A KOTH night runs while it takes signups, so its first series closes no door
-    koth_door = event.kind is EventKind.koth and event.signups_open and not joined
-    if phase == "finished" or (phase == "running" and not koth_door):
+    """The one action the member home offers, so every page agrees on it.
+
+    A player of a cup team checks the team in, and leaves or withdraws it on
+    the cup's team panel, so the home offers them no withdraw. A team still
+    waiting for an invited player takes no check-in yet.
+    """
+    # A KOTH night runs while it takes signups, so its first series closes no
+    # door; nor does a cup's, whose late signups wait on its waitlist
+    open_door = (
+        event.kind in (EventKind.koth, EventKind.cup)
+        and event.signups_open
+        and not joined
+    )
+    if phase == "finished":
+        return "view"
+    if team:
+        if checked_in_at is not None:
+            return "checked_in"
+        open_now = checkin_open_now and phase != "running" and not short
+        return "check_in" if open_now else "view"
+    if waiting:
+        return "waitlisted"
+    if phase == "running" and not open_door:
         return "view"
     if joined:
         if checked_in_at is not None:
@@ -1462,6 +2074,11 @@ def _public(
     if not full:
         return public
     public.checkin_open = event.checkin_enabled and checkin_open(event, event.rounds)
+    public.uses_divisions = cup_divisions.uses_divisions(session, event)
+    public.custom_game = cup_divisions.custom_game(session, event)
+    if cup_divisions.is_cup(event):
+        public.cup_legs = cup_rounds.legs_of(session, ident(event)) or None
+        public.cup_recurrence = cup_recurrence.ref_of(session, ident(event))
     public.stages = [
         EventStagePublic.model_validate(row)
         for row in session.scalars(
@@ -1472,10 +2089,15 @@ def _public(
     ]
     # A count is of players, not rows: an event is solo or team, so the one
     # id an entrant carries names the player, and a race is not a second one
-    player = func.coalesce(col(EventEntrant.user_id), col(EventEntrant.team_id))
+    player = func.coalesce(
+        col(EventEntrant.user_id),
+        col(EventEntrant.team_id),
+        -col(EventEntrant.cup_team_id),
+    )
     live = (
         col(EventEntrant.event_id) == event.id,
         col(EventEntrant.withdrawn_at).is_(None),
+        col(EventEntrant.waitlisted_at).is_(None),
     )
     by_division = {
         division_id: total
@@ -1593,6 +2215,61 @@ def _stats_for(
     return rating, sum(stat.games or 0 for stat in counted)
 
 
+def _lifetime_games(
+    session: OrmSession, user_ids: Iterable[int]
+) -> dict[int, dict[Race, int]]:
+    """Every player's games per race over every W3C season the app holds."""
+    ids = set(user_ids)
+    if not ids:
+        return {}
+    lifetime: dict[int, dict[Race, int]] = {}
+    for user_id, race, games in session.execute(
+        select(col(W3CStats.user_id), col(W3CStats.race), func.sum(col(W3CStats.games)))
+        .where(col(W3CStats.user_id).in_(ids))
+        .group_by(col(W3CStats.user_id), col(W3CStats.race))
+    ):
+        lifetime.setdefault(user_id, {})[race] = int(games or 0)
+    return lifetime
+
+
+class Rated(NamedTuple):
+    """A player as an event that counts races by their games rates them: the
+    highest window rating of a race with enough lifetime games, that race, the
+    window games over every race, and whether any race counted at all."""
+
+    mmr: int | None
+    race: Race | None
+    games: int
+    counted: bool
+
+
+def _rated(
+    user: User,
+    lifetime: dict[Race, int],
+    minimum: int,
+    season: int,
+    games_seasons: int | None = None,
+) -> Rated:
+    """Rate the player on the races they have really played.
+
+    A race counts once its lifetime games reach `minimum`, so a high rating
+    from a handful of games on another race never stands for the player; the
+    best current rating among the counting races does. The games floor reads
+    the window over every race.
+    """
+    counting = [race for race, games in lifetime.items() if games >= minimum]
+    rated = [
+        (mmr, race)
+        for race in counting
+        if (mmr := _stats_for(user, race, season)[0]) is not None
+    ]
+    best = max(rated, key=lambda pair: pair[0]) if rated else None
+    games = sum(_stats_for(user, race, season, games_seasons)[1] for race in Race)
+    return Rated(
+        best[0] if best else None, best[1] if best else None, games, bool(counting)
+    )
+
+
 def _warnings(
     event: Season, user: User | None, mmr: int | None, games: int
 ) -> list[str]:
@@ -1602,28 +2279,146 @@ def _warnings(
         warnings.append("under_min_games")
     if event.mmr_max is not None and mmr is not None and mmr > event.mmr_max:
         warnings.append("over_mmr_max")
+    if event.mmr_min is not None and mmr is not None and mmr < event.mmr_min:
+        warnings.append("under_mmr_min")
     if user is not None and user.banned_at is not None:
         warnings.append("banned")
     return warnings
 
 
 def _entrant_publics(
-    session: OrmSession, event: Season, rows: Sequence[EventEntrant]
+    session: OrmSession,
+    event: Season,
+    rows: Sequence[EventEntrant],
+    shown: bool = True,
 ) -> list[EventEntrantPublic]:
     """The entrant payloads of one event, with the players and teams behind them.
 
     Three reads fill every row: the players with their W3C stats, the teams,
-    and the rosters the rating of a team entrant is the mean of.
+    and the rosters the rating of a team entrant is the mean of. `shown` off
+    answers every seed null.
     """
-    team_ids = {row.team_id for row in rows if row.team_id}
     season = w3c_season(session)
     users = _users_for(session, rows, season, event.id)
-    teams = {
-        team.id: team
-        for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
+    teams = _teams_of(session, rows)
+    means = _team_mmrs(session, rows, season, event.race_games_min)
+    lifetime = (
+        _lifetime_games(session, [row.user_id for row in rows if row.user_id])
+        if event.race_games_min is not None
+        else None
+    )
+    publics = [
+        _entrant_public(
+            event, row, users, teams, means, season, shown=shown, lifetime=lifetime
+        )
+        for row in rows
+    ]
+    rosters = _cup_rosters(session, event, rows, season)
+    for public, row in zip(publics, rows, strict=True):
+        if row.cup_team_id in rosters:
+            public.roster, public.invited = rosters[row.cup_team_id]
+    if cup_divisions.is_cup(event):
+        held = cup_divisions.pins(session, [ident(row) for row in rows])
+        for public in publics:
+            pin = held.get(public.id)
+            public.division_pinned = bool(pin and pin.division_pinned)
+            public.seed_pinned = bool(pin and pin.seed_pinned)
+    return publics
+
+
+def _teams_of(
+    session: OrmSession, rows: Sequence[EventEntrant]
+) -> dict[int, TeamSummaryPublic]:
+    """The team behind every team entrant, keyed by the entrant: a league
+    team, or a team made for one cup. A read a kind, and none without teams."""
+    found: dict[int, TeamSummaryPublic] = {}
+    league = {row.team_id for row in rows if row.team_id}
+    if league:
+        by_id = {
+            ident(team): TeamSummaryPublic.from_team(team)
+            for team in session.scalars(select(Team).where(col(Team.id).in_(league)))
+        }
+        found |= {
+            ident(row): by_id[row.team_id] for row in rows if row.team_id in by_id
+        }
+    cup = {row.cup_team_id for row in rows if row.cup_team_id}
+    if cup:
+        by_cup = {
+            ident(team): team_summary(team)
+            for team in session.scalars(select(CupTeam).where(col(CupTeam.id).in_(cup)))
+        }
+        found |= {
+            ident(row): by_cup[row.cup_team_id]
+            for row in rows
+            if row.cup_team_id in by_cup
+        }
+    return found
+
+
+def _cup_rosters(
+    session: OrmSession, event: Season, rows: Sequence[EventEntrant], season: int
+) -> dict[int, tuple[list[TeamMemberPublic], list[UserSummaryPublic]]]:
+    """The roster and the open invites of every team of a team cup, in three reads.
+
+    Each player carries the rating the cup checks them on: the best race with
+    enough lifetime games where the cup counts races, else their main race.
+    """
+    teams = {row.cup_team_id for row in rows if row.cup_team_id is not None}
+    if not teams or not event.team_size:
+        return {}
+    members = session.execute(
+        select(
+            col(CupTeamMember.team_id),
+            col(CupTeamMember.user_id),
+            col(CupTeamMember.captain),
+        )
+        .where(col(CupTeamMember.team_id).in_(teams))
+        .order_by(col(CupTeamMember.user_id))
+    ).all()
+    roster = [(team_id, user_id) for team_id, user_id, _ in members]
+    captains = {(team_id, user_id) for team_id, user_id, captain in members if captain}
+    invites = session.execute(
+        select(col(CupTeamInvite.team_id), col(CupTeamInvite.user_id))
+        .where(col(CupTeamInvite.team_id).in_(teams))
+        .order_by(col(CupTeamInvite.invited_at))
+    ).all()
+    ids = {user_id for _, user_id in roster} | {user_id for _, user_id in invites}
+    users = {
+        ident(user): user
+        for user in session.scalars(
+            select(User)
+            .options(*summary_loads(ident(event), window=season))
+            .where(col(User.id).in_(ids))
+        )
     }
-    means = _team_mmrs(session, rows, season)
-    return [_entrant_public(event, row, users, teams, means, season) for row in rows]
+    lifetime = _lifetime_games(session, ids) if event.race_games_min else {}
+
+    def rating(user: User) -> int | None:
+        if event.race_games_min:
+            return _rated(
+                user, lifetime.get(ident(user), {}), event.race_games_min, season
+            ).mmr
+        return _stats_for(user, user.race, season)[0]
+
+    found: dict[int, tuple[list[TeamMemberPublic], list[UserSummaryPublic]]] = {
+        team_id: ([], []) for team_id in teams
+    }
+    for team_id, user_id in roster:
+        user = users.get(user_id)
+        summary = _summarized(user, season, ident(event))
+        if user is None or summary is None:
+            continue
+        # the captain leads the roster
+        members = found[team_id][0]
+        member = TeamMemberPublic(
+            user=summary, captain=(team_id, user_id) in captains, mmr=rating(user)
+        )
+        members.insert(0, member) if member.captain else members.append(member)
+    for team_id, user_id in invites:
+        summary = _summarized(users.get(user_id), season, ident(event))
+        if summary is not None:
+            found[team_id][1].append(summary)
+    return found
 
 
 def _users_for(
@@ -1742,7 +2537,10 @@ def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | 
     """
     season = w3c_season(session)
     users = _users_for(session, rows, season)
-    teams = _team_mmrs(session, rows, season)
+    event = session.get(Season, rows[0].event_id) if rows else None
+    teams = _team_mmrs(
+        session, rows, season, event.race_games_min if event is not None else None
+    )
     return {ident(row): _entrant_mmr(row, users, teams, season) for row in rows}
 
 
@@ -1753,60 +2551,82 @@ def _entrant_mmr(
     season: int,
 ) -> int | None:
     """The rating of one entrant: the team mean, or the player on its signup race."""
-    if row.team_id is not None:
-        return teams.get(row.team_id)
+    if row.team_id is not None or row.cup_team_id is not None:
+        return teams.get(ident(row))
     if row.user_id not in users:
         return None
     return _stats_for(users[row.user_id], row.race, season)[0]
 
 
 def _team_mmrs(
-    session: OrmSession, rows: Sequence[EventEntrant], season: int
+    session: OrmSession,
+    rows: Sequence[EventEntrant],
+    season: int,
+    race_games_min: int | None = None,
 ) -> dict[int, int | None]:
-    """Every team entrant against the mean rating of its live roster.
+    """Every team entrant, by entrant id, against the mean rating of its roster.
 
-    The list is read as a whole, never one read per team: the rosters through
-    user_team_season against the event the team entered, and the races those
-    members signed up on. A member is rated the way a solo entrant is, on his
-    signup race or on the race his profile names when he made no signup, and
-    a team no member of which is rated answers None, as an unrated player does.
+    The list is read as a whole, never one read per team: the rosters (a
+    league team's user_team_season against the event, a cup team's members)
+    and the races those members signed up on. A member is rated the way a solo
+    entrant is, on his signup race or on the race his profile names when he
+    made no signup, and a team no member of which is rated answers None, as an
+    unrated player does.
     """
-    teams = {row.team_id for row in rows if row.team_id is not None}
-    if not teams:
+    teamed = [row for row in rows if row.team_id is not None or row.cup_team_id]
+    if not teamed:
         return {}
-    events = {row.event_id for row in rows if row.team_id is not None}
-    members = session.scalars(
-        select(DBUserTeamSeason)
-        .options(
-            selectinload(rel(DBUserTeamSeason.user)).selectinload(
-                rel(User.w3c_stats).and_(in_window(season))
+    events = {row.event_id for row in teamed}
+    stats = rel(User.w3c_stats).and_(in_window(season))
+    # (entrant, user) pairs: the rows of each roster, read once per kind of team
+    seats: list[tuple[int, User]] = []
+    league = {(row.team_id, row.event_id): ident(row) for row in teamed if row.team_id}
+    if league:
+        for member in session.scalars(
+            select(DBUserTeamSeason)
+            .options(selectinload(rel(DBUserTeamSeason.user)).selectinload(stats))
+            .where(
+                col(DBUserTeamSeason.team_id).in_({team for team, _ in league}),
+                col(DBUserTeamSeason.season_id).in_(events),
             )
-        )
-        .where(
-            col(DBUserTeamSeason.team_id).in_(teams),
-            col(DBUserTeamSeason.season_id).in_(events),
-        )
-    ).all()
+        ):
+            entrant = league.get((member.team_id, member.season_id))
+            if entrant is not None:
+                seats.append((entrant, member.user))
+    cup = {row.cup_team_id: ident(row) for row in teamed if row.cup_team_id}
+    if cup:
+        for team_id, user in session.execute(
+            select(col(CupTeamMember.team_id), User)
+            .join(User, col(User.id) == col(CupTeamMember.user_id))
+            .options(selectinload(stats))
+            .where(col(CupTeamMember.team_id).in_(cup))
+        ):
+            seats.append((cup[team_id], user))
+    players = {ident(user) for _, user in seats}
     races = {
         user_id: race
         for user_id, race in session.execute(
             select(col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.race)).where(
                 col(DBUserSeasonSignup.season_id).in_(events),
-                col(DBUserSeasonSignup.user_id).in_(
-                    {member.user_id for member in members}
-                ),
+                col(DBUserSeasonSignup.user_id).in_(players),
             )
         ).all()
     }
-    rated: dict[int, list[int]] = {team_id: [] for team_id in teams}
-    for member in members:
-        race = races.get(member.user_id) or member.user.race
-        mmr = _stats_for(member.user, race, season)[0]
+    rated: dict[int, list[int]] = {ident(row): [] for row in teamed}
+    # a cup that counts races by their games rates each member on the best of them
+    lifetime = _lifetime_games(session, players) if race_games_min else {}
+    for entrant, user in seats:
+        race = races.get(ident(user)) or user.race
+        mmr = (
+            _rated(user, lifetime.get(ident(user), {}), race_games_min, season).mmr
+            if race_games_min
+            else _stats_for(user, race, season)[0]
+        )
         if mmr is not None:
-            rated[member.team_id].append(mmr)
+            rated[entrant].append(mmr)
     return {
-        team_id: round(sum(mmrs) / len(mmrs)) if mmrs else None
-        for team_id, mmrs in rated.items()
+        entrant: round(sum(mmrs) / len(mmrs)) if mmrs else None
+        for entrant, mmrs in rated.items()
     }
 
 
@@ -1864,13 +2684,13 @@ def _from_previous_stage(
     same, and `advancing` refuses both while that stage still owes a result.
     Nothing is generated here.
     """
-    before = stage_engine.previous_stage(session, event_id, stage)
+    before = cup_engine.previous_stage(session, event_id, stage)
     if before is None:
         raise BadRequestError("This stage is the first one of the event")
     by_id = {ident(row): row for row in rows}
     return [
         by_id[entrant_id]
-        for division in stage_engine.advancing(session, event_id, before)
+        for division in cup_engine.advancing(session, event_id, before)
         for entrant_id in division
         if entrant_id in by_id
     ]
@@ -1893,38 +2713,54 @@ def _entrant_public(
     event: Season,
     row: EventEntrant,
     users: dict[int | None, User],
-    teams: dict[int | None, Team],
+    teams: dict[int, TeamSummaryPublic],
     means: dict[int, int | None],
     season: int,
+    shown: bool = True,
+    lifetime: dict[int, dict[Race, int]] | None = None,
 ) -> EventEntrantPublic:
-    """One entrant payload: the identity, the rating it is seeded on, the warnings."""
+    """One entrant payload: the identity, the rating it is seeded on, the warnings.
+
+    An event that counts races by their games warns on the best of them; the
+    rating shown and seeded on stays the race the player entered with.
+    """
     user = users.get(row.user_id)
-    team = teams.get(row.team_id)
     mmr, games = (
         _stats_for(user, row.race, season, event.min_games_seasons)
         if user
         else (None, 0)
     )
-    if row.team_id is not None:
-        mmr = means.get(row.team_id)
+    if row.team_id is not None or row.cup_team_id is not None:
+        mmr = means.get(ident(row))
+    warn_mmr, warn_games = mmr, games
+    if user is not None and lifetime is not None and event.race_games_min is not None:
+        rated = _rated(
+            user,
+            lifetime.get(ident(user), {}),
+            event.race_games_min,
+            season,
+            event.min_games_seasons,
+        )
+        warn_mmr, warn_games = rated.mmr, rated.games
     return EventEntrantPublic(
         id=ident(row),
         event_id=row.event_id,
         user=_summarized(user, season, event.id),
-        team=TeamSummaryPublic.from_team(team) if team else None,
+        team=teams.get(ident(row)),
         race=row.race,
         note=row.note,
         channel=row.channel,
         mmr=mmr,
         mmr_synced_at=user.w3c_synced_at if user else None,
-        warnings=_warnings(event, user, mmr, games),
-        seed=row.seed,
-        seed_source=row.seed_source,
-        mmr_at_seed=row.mmr_at_seed,
+        warnings=_warnings(event, user, warn_mmr, warn_games),
+        seed=row.seed if shown else None,
+        seed_source=row.seed_source if shown else None,
+        mmr_at_seed=row.mmr_at_seed if shown else None,
         division_id=row.division_id,
         manual_placement=row.manual_placement,
         checked_in_at=row.checked_in_at,
         withdrawn_at=row.withdrawn_at,
+        waitlisted_at=row.waitlisted_at,
         qualified_from_event_id=row.qualified_from_event_id,
     )
 
@@ -1995,23 +2831,157 @@ def _named_user(session: OrmSession, data: EntrantAdd) -> User:
     raise BadRequestError("Name a user_id, a battle_tag or a team_id")
 
 
+RACE_NAMES = {
+    "HU": "Human",
+    "OC": "Orc",
+    "NE": "Night Elf",
+    "UD": "Undead",
+    "RANDOM": "Random",
+}
+
+
+def _hold_bounds(fields: dict[str, Any]) -> None:
+    """Refuse bounds that cannot hold together.
+
+    The Battle.net link is a part of the eligibility check, so it needs the
+    check on. A battle tag alone proves no Battle.net link, so an event that
+    asks for one takes members only. The lowest MMR is no higher than the
+    highest.
+    """
+    if fields.get("bnet_required") and not fields.get("eligibility_required"):
+        raise BadRequestError(
+            "The Battle.net link is part of the eligibility check; turn that on first"
+        )
+    if fields.get("bnet_required") and fields.get("signup_policy") in (
+        SignupPolicy.anyone,
+        SignupPolicy.anyone.value,
+    ):
+        raise BadRequestError(
+            "An event that asks for a Battle.net link takes members only: a battle tag alone proves none"
+        )
+    low, high = fields.get("mmr_min"), fields.get("mmr_max")
+    if low is not None and high is not None and low > high:
+        raise BadRequestError("The lowest MMR cannot be above the highest")
+
+
+def _refresh_for(
+    event_id: int, data: EntrantSignup, claims: dict[str, Any] | None
+) -> None:
+    """Ask W3Champions for the player's rating of the day before an event that
+    checks eligibility decides on it. Any other event reads nothing here."""
+    with Session.begin() as session:
+        event = _event(session, event_id)
+        if not event.eligibility_required or data.team_id is not None:
+            return
+        named = getattr(data, "user_id", None)
+        user = (
+            session.get(User, named) if named is not None else _caller(session, claims)
+        )
+        tag = active_row(session, ident(user)) if user is not None else None
+        target = (
+            (ident(user), tag.tag) if user is not None and tag is not None else None
+        )
+        # a race that counts by its lifetime games needs the seasons before the window
+        history = event.race_games_min is not None
+    if target is not None:
+        refresh_rating(*target, history)
+
+
+def _hold_eligible(
+    session: OrmSession, event: Season, user_id: int, race: Race
+) -> None:
+    """Refuse a player an event that checks eligibility does not take.
+
+    W3Champions rates the player's active battle tag on the race of the signup,
+    the rating sits inside the event's bounds, and the games on that race reach
+    the event's minimum; an event that asks for it also wants the tag verified
+    through Battle.net. The rule holds for a hand-added player as for a self
+    signup.
+    """
+    season = w3c_season(session)
+    user = session.scalars(
+        select(User)
+        .options(window_rows(season))
+        .where(col(User.id) == user_id)
+        .execution_options(populate_existing=True)
+    ).one()
+    tag = active_row(session, user_id)
+    if tag is None:
+        raise BadRequestError(
+            f"{user.name} has no battle tag, so this event cannot check the rating."
+        )
+    if event.bnet_required and tag.bnet_account_id is None:
+        raise BadRequestError(
+            f"{user.name} has no battle tag linked to Battle.net. Link it on the profile page first; this event takes linked players only."
+        )
+    if event.race_games_min is not None:
+        rated = _rated(
+            user,
+            _lifetime_games(session, [user_id]).get(user_id, {}),
+            event.race_games_min,
+            season,
+            event.min_games_seasons,
+        )
+        if not rated.counted:
+            raise BadRequestError(
+                f"No race of {tag.tag} has {event.race_games_min} games on W3Champions yet, so this event cannot rate them."
+            )
+        if rated.mmr is None or rated.race is None:
+            raise BadRequestError(
+                f"W3Champions has no current rating for {tag.tag} on a race with {event.race_games_min} games or more, so this event cannot take the signup."
+            )
+        mmr, games = rated.mmr, rated.games
+        name = RACE_NAMES.get(rated.race.value, rated.race.value)
+        played = f"{user.name} played {games} games recently"
+    else:
+        name = RACE_NAMES.get(race.value, race.value)
+        rating, games = _stats_for(user, race, season, event.min_games_seasons)
+        if rating is None:
+            raise BadRequestError(
+                f"W3Champions has no rating for {tag.tag} on {name}, so this event cannot take the signup."
+            )
+        mmr = rating
+        played = f"{user.name} played {games} games on {name} recently"
+    bounds = (
+        f"from {event.mmr_min} to {event.mmr_max}"
+        if event.mmr_min is not None and event.mmr_max is not None
+        else f"from {event.mmr_min}"
+        if event.mmr_min is not None
+        else f"up to {event.mmr_max}"
+    )
+    if (event.mmr_min is not None and mmr < event.mmr_min) or (
+        event.mmr_max is not None and mmr > event.mmr_max
+    ):
+        raise BadRequestError(
+            f"{user.name} is rated {mmr} on {name}; this event takes players rated {bounds}."
+        )
+    if event.min_games is not None and games < event.min_games:
+        raise BadRequestError(f"{played}; this event needs at least {event.min_games}.")
+
+
 def _enter(
     session: OrmSession,
     event: Season,
     data: EntrantSignup,
     user_id: int | None = None,
     team_id: int | None = None,
+    may_wait: bool = False,
+    cup_team_id: int | None = None,
 ) -> EventEntrant:
     """Write the entrant row, or reopen the one that withdrew.
 
     An event whose teams are drafted takes no direct entrant: its field is
-    drafted from the players who signed up to it. A full event refuses too:
-    no waiting list is kept.
+    drafted from the players who signed up to it. A full event refuses, unless
+    the signup `may_wait`: a cup puts a signup on its waitlist once it is
+    drawn or full. A row on the waitlist is let in by a write that may not
+    wait, a runner's hand-add or swap, which reuses it.
     """
     if event.entrant_kind is EntrantKind.drafted_teams:
         raise BadRequestError(
             "This event drafts its teams, so it takes no direct signup"
         )
+    if team_id is not None and event.kind is EventKind.cup:
+        raise BadRequestError("A cup enters the teams made for it, not a league team")
     if team_id is not None:
         team = session.get(Team, team_id)
         if team is None:
@@ -2021,23 +2991,37 @@ def _enter(
                 f"Team {team_id} belongs to league {team.league_id}, not event league {event.league_id}"
             )
     # A player plays one race; a team fields the races of its roster
-    race = data.race if team_id is not None else _signup_race(data)
+    teamed = team_id is not None or cup_team_id is not None
+    race = data.race if teamed else _signup_race(data)
     side = (
         col(EventEntrant.user_id) == user_id
         if user_id is not None
         else col(EventEntrant.team_id) == team_id
+        if team_id is not None
+        else col(EventEntrant.cup_team_id) == cup_team_id
     )
+    if event.eligibility_required and user_id is not None and race is not None:
+        _hold_eligible(session, event, user_id, race)
     statement = select(EventEntrant).where(col(EventEntrant.event_id) == event.id, side)
     if event.multi_entry and user_id is not None:
         # One row per race, so the second race of a player is a row of its own
         statement = statement.where(col(EventEntrant.race) == race)
     existing = session.scalars(statement).first()
-    if existing is not None and existing.withdrawn_at is None:
-        raise BadRequestError("This entrant is already signed up")
-    _room_for_one_more(session, event)
+    live = existing is not None and existing.withdrawn_at is None
+    waiting = live and existing is not None and existing.waitlisted_at is not None
+    if live and (not waiting or may_wait):
+        raise BadRequestError(
+            "This entrant is on the waitlist already"
+            if waiting
+            else "This entrant is already signed up"
+        )
+    waits = may_wait and _waits(session, event)
+    if not waits and not waiting:
+        _room_for_one_more(session, event)
     if existing is not None:
         # The unique key is one row per entrant, so a return signup reopens it
         existing.withdrawn_at = None
+        existing.waitlisted_at = utcnow() if waits else None
         # A player who left and comes back stands at the end of the line again
         existing.seed = None
         existing.race = race
@@ -2049,28 +3033,62 @@ def _enter(
         event_id=ident(event),
         user_id=user_id,
         team_id=team_id,
+        cup_team_id=cup_team_id,
         race=race,
         note=data.note,
         channel=data.channel,
+        waitlisted_at=utcnow() if waits else None,
     )
     session.add(row)
     session.flush()
     return row
 
 
+def _first_stage_drawn(session: OrmSession, event_id: int) -> bool:
+    """Whether the event's first stage holds its series: its field is set."""
+    first = session.scalar(
+        select(col(EventStage.id))
+        .where(col(EventStage.event_id) == event_id)
+        .order_by(col(EventStage.position))
+        .limit(1)
+    )
+    return first is not None and bool(cup_engine.stage_drawn(session, first))
+
+
+def _waits(session: OrmSession, event: Season) -> bool:
+    """Whether a new signup to this event goes on its waitlist: its first
+    stage is drawn, or it holds as many entrants as it takes."""
+    # a cup played over rounds takes a player for its later rounds after the first is drawn
+    drawn = _first_stage_drawn(session, ident(event)) and not cup_rounds.has_legs(
+        session, ident(event)
+    )
+    return drawn or _full(session, event)
+
+
 def _room_for_one_more(session: OrmSession, event: Season) -> None:
-    """Refuse the signup that would pass the entrant cap; nothing waits in line.
+    """Refuse the signup that would pass the entrant cap."""
+    if _full(session, event):
+        raise BadRequestError(f"The event is full at {event.entrant_cap} entrants")
+
+
+def _full(session: OrmSession, event: Season) -> bool:
+    """Whether the event holds as many entrants as its cap; no cap is never full.
 
     The cap counts entrants, not rows, so the second race of a player on an
-    event that takes one entry per race takes no second seat.
+    event that takes one entry per race takes no second seat, and an entrant
+    on the waitlist takes none either.
     """
     if event.entrant_cap is None:
-        return
+        return False
     taken = session.scalar(
         select(
             func.count(
                 func.distinct(
-                    func.coalesce(col(EventEntrant.user_id), -col(EventEntrant.team_id))
+                    func.coalesce(
+                        col(EventEntrant.user_id),
+                        -col(EventEntrant.team_id),
+                        -col(EventEntrant.cup_team_id),
+                    )
                 )
             )
         )
@@ -2078,7 +3096,7 @@ def _room_for_one_more(session: OrmSession, event: Season) -> None:
         .where(
             col(EventEntrant.event_id) == event.id,
             col(EventEntrant.withdrawn_at).is_(None),
+            col(EventEntrant.waitlisted_at).is_(None),
         )
     )
-    if taken is not None and taken >= event.entrant_cap:
-        raise BadRequestError(f"The event is full at {event.entrant_cap} entrants")
+    return taken is not None and taken >= event.entrant_cap

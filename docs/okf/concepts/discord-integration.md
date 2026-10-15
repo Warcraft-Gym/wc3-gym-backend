@@ -1,10 +1,10 @@
 ---
 type: Integration
 title: Discord integration
-description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, and season roles are mirrored to the guild on a button press.
+description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, cups announce themselves to the members who opt in, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T19:00:00Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -54,6 +54,16 @@ A reported result that a player or a captain changes through the report (`PUT /p
 Discord allows five edits per five seconds per channel. `discord_posts.refresh_series` claims an edit with one UPDATE, waits when the channel had an edit in the last second, and skips a post already edited after its latest change, so a burst collapses to the last state. `discord._channel_call` waits out one 429. Never loop edits per write, and never use an in-memory queue or lock: no process survives a request on Vercel. See [the decision](../decisions/discord-rate-limit.md).
 
 Card rules: a mention is a call to action, so `/upcoming` tags nobody and the reminder tags the casters and the players; the change note names its author inside the embed and allows no mention, so it notifies nobody; no database ids on a card; the round number, not the week; a player reads `{flag} {name} ({race} {mmr})` with the race played, else the signup race; every time is a Discord timestamp; the veto shows what the season's `map_rules` say.
+
+# Cup announcements
+
+A cup posts four messages in the channel the `announcement_channel_id` setting names, through `app/services/cup_announcements.py`:
+- **Open:** a cup that reads published with its signups open, after `POST /events`, `PUT /events/{id}` or a recurring cup made, with the event card's description and a link to sign up on the site.
+- **Reminder:** `GET /jobs/cast-reminders` also calls every cup that starts within the hour to check in. A cup played over rounds is called round by round, each round on its own start; a start that has passed is not called.
+- **Draw:** a stage's first draw and every later round of a stage that draws round by round, from the runner's draw, a result that draws the next round or stage, or a withdrawal. The engine marks each draw in the session, and the post goes out after the commit, so a refused draw posts nothing.
+- **Top three:** after `POST /events/{id}/finish`, per division, or from the overall table with its points for a cup played over rounds. A close after a reopen edits that card.
+
+Each message pings the role `announcement_role_id` names, in the message content with `allowed_mentions` naming that role alone; a missing channel posts nothing, and a missing role posts with no ping. Each is a `discord_post` row of its own kind and goes out once. A member takes or leaves the role on Home with `PUT /me/announcements`; see [the decision](../decisions/cup-announcements.md).
 
 # The guild read and the roles
 

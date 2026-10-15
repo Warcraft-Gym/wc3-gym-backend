@@ -21,8 +21,15 @@ SQLModel.metadata.naming_convention = {
 
 from app.models import (
     admin_grant,
+    announcement,
     base,
     clerk_account,
+    cup_overall,
+    cup_recurrence,
+    cup_rounds,
+    cup_series,
+    cup_settings,
+    cup_team,
     discord_post,
     discord_role_binding,
     draft_series,
@@ -45,6 +52,7 @@ from app.models import (
     match,
     match_draft,
     monitor_state,
+    organizer,
     player_career_stats,
     relationships,
     round_availability,

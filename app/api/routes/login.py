@@ -16,7 +16,7 @@ from app.api.deps import (
 from app.core.exceptions import ApiError
 from app.core.security import create_access_token
 from app.models.login import LoginRequest
-from app.services import discord, discord_roles
+from app.services import discord, discord_roles, organizers
 
 router = APIRouter(tags=["Authentication"])
 
@@ -82,6 +82,7 @@ def me(
     )
     captained_team = (seat_team, team_service.name(seat_team)) if seat_team else None
     roster = rosters.get(season_id) if season_id else None
+    organizer, requested = organizers.standing(claims)
     return {
         "discord_id": claims["sub"],
         "name": "Super Admin"
@@ -96,6 +97,10 @@ def me(
         "actual_role": claims.get("actual_role", claims.get("role", "admin")),
         "user": user,
         "superadmin": superadmin,
+        # A member with an organizer grant creates events; an admin always may
+        "organizer": organizer,
+        # A request for the grant waits for an admin's answer
+        "organizer_request": "pending" if requested and not organizer else None,
         "signed_up": season_id in signed_up,
         "season_id": season_id,
         "team": {"id": captained_team[0], "name": captained_team[1]}

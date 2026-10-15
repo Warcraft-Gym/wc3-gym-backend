@@ -4,7 +4,7 @@ title: discord_post
 description: One card the app posted in Discord and may edit later, with the two stamps that pace edits to the channel's rate limit.
 resource: ../../../../app/models/discord_post.py
 tags: [discord, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T13:05:43Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T19:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -20,8 +20,8 @@ sources:
 | Column | Type | Null | Meaning |
 |---|---|---|---|
 | `id` | INTEGER | no | Primary key. |
-| `kind` | VARCHAR | no | Which card built the post: `veto`, `announce`, `result`, `result_change` (the note that a reported result changed), `cast`, `reminder` or `event`. |
-| `subject_id` | INTEGER | no | The id of the row the card is about: the event for `event`, a series for every other kind. |
+| `kind` | VARCHAR | no | Which card built the post: `veto`, `announce`, `result`, `result_change` (the note that a reported result changed), `cast`, `reminder` or `event`; a cup's announcements are `cup_open`, `cup_remind`, `cup_leg_remind`, `cup_draw`, `cup_round` and `cup_result`. |
+| `subject_id` | INTEGER | no | The id of the row the card is about: the event for `event`, `cup_open`, `cup_remind` and `cup_result`, the round of a cup played over rounds (`cup_leg`) for `cup_leg_remind`, the stage for `cup_draw`, the stage's round (`event_round`) for `cup_round`, and a series for every other kind. |
 | `channel_id` | VARCHAR | no | The Discord channel the card is in. |
 | `message_id` | VARCHAR | no | The Discord message id. Unique. |
 | `changed_at` | TIMESTAMP | yes | When the subject last changed. An edit is due while it is after `edited_at`. |

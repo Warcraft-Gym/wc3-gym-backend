@@ -19,7 +19,8 @@ class TeamSummaryPublic(SQLModel):
     """A team inside another object: its name, league and logo."""
 
     id: int
-    league_id: int
+    # null on a team made for one cup
+    league_id: int | None = None
     # name and long_name also receive numeric cells from the xlsx import.
     name: str | None = None
     long_name: str | None = None

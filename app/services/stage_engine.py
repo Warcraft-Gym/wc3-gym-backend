@@ -1,15 +1,16 @@
-"""Generate the series of a stage, follow its results and rank its entrants.
+"""Follow the results of the `series` table into its stage: KOTH and GNL.
 
-The engine reads the shared rows only and never branches on the kind of an
-event. A GNL stage is drafted by its admin and its captains, so it refuses to
-generate one, and a series with no feeders answers nothing when it is scored
-or reopened: every GNL payload holds.
-
-A round robin over team entrants writes a fixture per pair, which the series
-of that pair hang under, so a team league is read exactly as GNL is read.
+A cup draws, plays and ranks its stages on its own tables in
+app.services.cup_engine; this engine keeps what a KOTH night and a GNL season
+reach on `series`. A result moves the KOTH crown and fills a chain the admin
+grows one challenger at a time, and a stage read answers the night's series
+and its table. A series with no feeders answers nothing when it is scored or
+reopened, so every GNL payload holds, and the engine never branches on the
+kind of an event.
 """
 
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session as OrmSession
@@ -17,7 +18,8 @@ from sqlmodel import col
 
 from app.core import brackets
 from app.core.db import Session
-from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.outcome import entrant_of, scored, side_user, stands_on_side, won_slot
 from app.core.scoring import wins_of
 from app.models.base import ident
 from app.models.enums import StageFormat
@@ -31,265 +33,35 @@ from app.models.event_stage import (
     StandingRow,
 )
 from app.models.koth_crown_event import KothCrownEvent
-from app.models.match import Match
-from app.models.relationships import DBEventRound, EventRoundPublic, round_row
+from app.models.relationships import DBEventRound, EventRoundPublic
 from app.models.season import Season
 from app.models.series import (
     ResultKindWrite,
     Series,
     StageSeriesPublic,
     StageSeriesRow,
-    TemplateSeries,
 )
 from app.models.series_game import DBSeriesGame
-from app.models.series_side import (
-    LobbySidesWrite,
-    PlacesWrite,
-    SeriesSide,
-    SeriesSidePublic,
-    SideRoster,
-)
+from app.models.series_side import SeriesSide, SeriesSidePublic
 from app.models.team import Team
 from app.models.team_summary import TeamSummaryPublic
 from app.models.user import User, UserSummaryPublic
-from app.models.user_team_season import DBUserTeamSeason
-from app.services import derived, draft_series
-from app.services.series_rules import acts_for_side, series_rules, stands_on_side
+from app.services import derived, organizers
+from app.services.series_rules import series_rules
 
 # The formats whose last round is the final, so every division ends together
-BRACKETS = (StageFormat.single_elimination, StageFormat.double_elimination)
+BRACKETS = (
+    StageFormat.single_elimination,
+    StageFormat.double_elimination,
+    StageFormat.placement,
+)
 # The formats that draw one round at a time, from the table as it stands
 BY_ROUND = (StageFormat.swiss,)
-
-
-def scored(row: Series) -> bool:
-    """Whether the series carries a result."""
-    return row.player1_score is not None or row.player2_score is not None
-
-
-def winner_of(row: Series) -> int | None:
-    """The user the series sends on: nobody while it is unscored or drawn."""
-    return _side(row, takes_loser=False)
-
-
-def won_slot(row: Series) -> int | None:
-    """The side the series sends on, 1 or 2, which a team side carries too."""
-    return _won_slot(row, takes_loser=False)
-
-
-def entrant_of(row: Series, takes_loser: bool = False) -> int | None:
-    """The entrant the series sends on, which is what a team side carries."""
-    slot = _won_slot(row, takes_loser)
-    if slot is None:
-        return None
-    return row.entrant1_id if slot == 1 else row.entrant2_id
 
 
 def series_wins(session: OrmSession, row: Series) -> int:
     """The maps a win takes, from the best-of the series plays under."""
     return wins_of(series_rules(session, row).best_of)
-
-
-def generate(
-    event_id: int, stage_id: int, division_id: int | None = None
-) -> dict[str, int]:
-    """Create every series of the stage from the locked seeds, per division.
-
-    Each bracket column is one round under the stage, and the divisions share
-    those rounds: a bracket aligns on its final, a table on its first round. A
-    named division draws alone into the rounds the stage already holds, so a
-    stage whose divisions fill one at a time opens each as it is ready.
-    """
-    with Session.begin() as session:
-        stage = _stage(session, event_id, stage_id)
-        if stage.format is StageFormat.gnl:
-            raise BadRequestError(
-                "A GNL stage is drafted by its admin and its captains, not generated"
-            )
-        if stage.format is StageFormat.koth:
-            raise BadRequestError(
-                "A KOTH stage is paired by its admin during the event, not generated"
-            )
-        drawn = _series_of(session, stage_id)
-        if division_id is None and drawn:
-            raise BadRequestError("This stage already holds series")
-        if any(row.division_id == division_id for row in drawn):
-            raise BadRequestError("This division already holds series")
-        if division_id is not None and stage.format in BRACKETS:
-            raise BadRequestError("A bracket stage draws every division together")
-        fields = _fields(_entrants(session, event_id))
-        if division_id is not None:
-            fields = {division_id: fields.get(division_id, [])}
-        for field in fields.values():
-            if len(field) < 2:
-                raise BadRequestError("A division needs two entrants to generate")
-        sizes = _side_sizes(
-            session, [entrant for field in fields.values() for entrant in field]
-        )
-        # The largest roster stands in while a bracket pair is not drawn yet
-        size = max(sizes.values(), default=1)
-        draws = _draws(session, stage, list(fields.items()))
-        if any(len(field) < 2 for _, field in draws):
-            raise BadRequestError("A group needs two entrants; the group size is small")
-        plans = [_plan(stage, len(field)) for _, field in draws]
-        depth = max(len(plan.rounds) for plan in plans)
-        held = {row.number: row for row in _rounds_of(session, stage_id)}
-        first = min(held) if held else _next_number(session, event_id)
-        rounds: dict[int, DBEventRound] = {
-            number - first: row for number, row in held.items()
-        }
-        per_fixture = _series_per_fixture(session, event_id)
-        made: list[Series] = []
-        # The groups of a division write into one run of sequences per round
-        counts: dict[tuple[int | None, int], int] = {}
-        for (division, field), plan in zip(draws, plans, strict=True):
-            shift = depth - len(plan.rounds) if stage.format in BRACKETS else 0
-            # A round robin over a field of teams pairs them into fixtures
-            pairs = stage.format is StageFormat.round_robin and all(
-                entrant.team_id for entrant in field
-            )
-            rows: list[Series] = []
-            for planned in plan.series:
-                place = planned.round + shift
-                round_row = rounds.get(place)
-                if round_row is None:
-                    round_row = DBEventRound(
-                        stage_id=stage_id,
-                        season_id=event_id,
-                        number=first + place,
-                        name=plan.rounds[planned.round],
-                    )
-                    session.add(round_row)
-                    session.flush()
-                    rounds[place] = round_row
-                teams = _team_pair(field, planned) if pairs else None
-                if teams is None:
-                    counts[division, place] = counts.get((division, place), 0) + 1
-                    rows.append(
-                        _row(
-                            session,
-                            stage,
-                            round_row,
-                            division,
-                            field,
-                            rows,
-                            planned,
-                            size,
-                            sizes,
-                        )
-                    )
-                    rows[-1].sequence = counts[division, place]
-                    continue
-                fixture = _fixture(session, event_id, round_row, division, teams)
-                for sequence in range(1, per_fixture + 1):
-                    row = _row(
-                        session,
-                        stage,
-                        round_row,
-                        division,
-                        field,
-                        rows,
-                        planned,
-                        size,
-                        sizes,
-                    )
-                    row.match_id = ident(fixture)
-                    row.sequence = sequence
-                    rows.append(row)
-            made += rows
-        session.flush()
-        # A padded pair was written as a walkover; its winner moves on now
-        for row in made:
-            if scored(row):
-                on_scored(session, row)
-        return {"series": len(made), "rounds": len(rounds) - len(held)}
-
-
-def generate_next_round(
-    event_id: int, stage_id: int, division_id: int | None = None
-) -> StageSeriesPublic:
-    """Draw one more round of a stage that pairs a round at a time, per division.
-
-    The pairing reads the table as it stands, so every series already drawn
-    needs a result first. Each entrant takes the best-placed opponent he has
-    not met, which keeps a pair inside its score group while one is free
-    there, and an odd field gives the bye to the lowest entrant without one,
-    as a walkover series holding a single side. The first call on an empty
-    stage pairs round 1 from the seeds.
-    """
-    with Session.begin() as session:
-        stage = _stage(session, event_id, stage_id)
-        if not _draws_by_round(stage):
-            raise BadRequestError(
-                "This stage draws every round at once, not one by one"
-            )
-        drawn = _series_of(session, stage_id)
-        held = list(_rounds_of(session, stage_id))
-        fields = _fields(_entrants(session, event_id))
-        if division_id is not None:
-            fields = {division_id: fields.get(division_id, [])}
-        sizes = _side_sizes(
-            session, [entrant for field in fields.values() for entrant in field]
-        )
-        # The largest roster stands in while a bracket pair is not drawn yet
-        size = max(sizes.values(), default=1)
-        made: list[Series] = []
-        drew: dict[int, DBEventRound] = {}
-        for division, field in fields.items():
-            played = [row for row in drawn if row.division_id == division]
-            if len(field) < 2:
-                raise BadRequestError("A division needs two entrants to draw a round")
-            if any(not scored(row) for row in played):
-                raise BadRequestError(
-                    "Every series of the round before needs a result first"
-                )
-            place = len({row.round_id for row in played})
-            if stage.swiss_rounds is not None and place >= stage.swiss_rounds:
-                raise BadRequestError(
-                    f"This stage plays {stage.swiss_rounds} rounds and has drawn them"
-                )
-            order = [line.entrant_id for line in _table(session, stage, field, played)]
-            pairs = brackets.swiss_pairs(
-                order, [(row.entrant1_id, row.entrant2_id) for row in played]
-            )
-            if pairs is None:
-                raise BadRequestError("This division has played every pairing it has")
-            round_row = held[place] if place < len(held) else None
-            if round_row is None:
-                round_row = DBEventRound(
-                    stage_id=stage_id,
-                    season_id=event_id,
-                    number=_next_number(session, event_id),
-                    name=f"Round {place + 1}",
-                )
-                session.add(round_row)
-                session.flush()
-                held.append(round_row)
-            drew[place] = round_row
-            entrants = {ident(entrant): entrant for entrant in field}
-            for sequence, (top, bottom) in enumerate(pairs, start=1):
-                sides = [entrants[top]] + ([] if bottom is None else [entrants[bottom]])
-                planned = brackets.PlannedSeries(
-                    0,
-                    0,
-                    brackets.Slot(seed=1),
-                    brackets.Slot() if bottom is None else brackets.Slot(seed=2),
-                )
-                row = _row(
-                    session, stage, round_row, division, sides, [], planned, size, sizes
-                )
-                row.sequence = sequence
-                made.append(row)
-        session.flush()
-        rows = [StageSeriesRow.from_series(row) for row in _stage_rows(session, made)]
-        events = derived.fill_series(session, rows)
-        _fill_teams(session, rows)
-        derived.fill_mmrs(session, rows, events)
-        _fill_sides(session, rows)
-        return StageSeriesPublic(
-            rounds=[EventRoundPublic.from_row(row) for row in drew.values()],
-            series=rows,
-        )
 
 
 def append_to_chain(
@@ -369,20 +141,31 @@ def add_challenger(event_id: int, stage_id: int, entrant_id: int) -> StageSeries
 
 def on_scored(session: OrmSession, row: Series) -> None:
     """Fill every slot that feeds from this series, and follow the chain down."""
-    for other in _downstream(session, ident(row)):
+    for other in _fill_below(session, row):
+        _settle(session, other)
+
+
+def _fill_below(session: OrmSession, row: Series) -> Sequence[Series]:
+    """Fill every open slot that feeds from this series; answer the series below.
+
+    Every slot below is filled before any series below settles, so a settle
+    never reads a slot this series still has to fill as empty.
+    """
+    below = _downstream(session, ident(row))
+    for other in below:
         filled = False
         if other.slot1_from_series_id == row.id and _open(other, 1):
             other.entrant1_id = entrant_of(row, other.slot1_takes_loser)
-            other.player1_id = _side(row, other.slot1_takes_loser)
+            other.player1_id = side_user(row, other.slot1_takes_loser)
             filled = not _open(other, 1)
         if other.slot2_from_series_id == row.id and _open(other, 2):
             other.entrant2_id = entrant_of(row, other.slot2_takes_loser)
-            other.player2_id = _side(row, other.slot2_takes_loser)
+            other.player2_id = side_user(row, other.slot2_takes_loser)
             filled = filled or not _open(other, 2)
         if filled and other.host_player_id == 0:
             other.host_player_id = other.player1_id or 0
-        session.flush()
-        _settle(session, other)
+    session.flush()
+    return below
 
 
 def _open(row: Series, slot: int) -> bool:
@@ -539,13 +322,11 @@ def _follow_score(
             return
         on_reopened(session, row, force)
         on_scored(session, row)
-        _auto_advance(session, row)
         return
     if now == was_scored:
         return
     if now:
         on_scored(session, row)
-        _auto_advance(session, row)
     else:
         on_reopened(session, row, force)
 
@@ -560,134 +341,22 @@ def set_result_kind(series_id: int, data: ResultKindWrite) -> None:
             raise BadRequestError("This series already carries a result")
         _award(session, row, data.winner == 1, data.result_kind)
         on_scored(session, row)
-        _auto_advance(session, row)
         crown(session, row)
-
-
-def set_places(series_id: int, data: PlacesWrite) -> StageSeriesRow:
-    """Write where every side of a lobby finished, and score it as played.
-
-    A lobby plays one game, so its places are its whole result. Once every
-    lobby of a round carries places, the round seats the lobbies of the round
-    after it from the places that went through.
-    """
-    with Session.begin() as session:
-        row = _series(session, series_id)
-        seats = {side.side_no: side for side in _seats(session, series_id)}
-        if not seats:
-            raise BadRequestError("This series seats no lobby, so it takes no places")
-        for entry in data.places:
-            side = seats.get(entry.side_no)
-            if side is None:
-                raise BadRequestError(f"This lobby seats no side {entry.side_no}")
-            side.place = entry.place
-        if any(side.place is None for side in seats.values()):
-            raise BadRequestError("Every side of the lobby needs a place")
-        # A lobby plays one game and its places settle it, so the score only
-        # says it was played; the seats carry who finished where
-        row.player1_score, row.player2_score = 1, 0
-        row.result_kind = "played"
-        session.flush()
-        _fill_lobbies(session, row)
-        _auto_advance(session, row)
-        return _lobby_read(session, row)
-
-
-def set_sides(
-    series_id: int,
-    data: LobbySidesWrite,
-    admin: bool,
-    user_id: int | None = None,
-) -> StageSeriesRow:
-    """Seat a lobby again before it is played, or name the roster of a side.
-
-    A body naming `sides` writes the roster each side of a fixture series
-    fields, which a captain of that side writes and an admin writes for
-    either. A body naming `entrant_ids` seats a free for all lobby again.
-    """
-    with Session.begin() as session:
-        row = _series(session, series_id)
-        if data.sides:
-            return _set_rosters(session, row, data.sides, admin, user_id)
-        if scored(row):
-            raise BadRequestError("This lobby is played, so its seats are settled")
-        if not _seats(session, series_id):
-            raise BadRequestError("This series seats no lobby, so it takes no sides")
-        if len(set(data.entrant_ids)) != len(data.entrant_ids):
-            raise BadRequestError("An entrant takes one seat of a lobby, not two")
-        if len(data.entrant_ids) < 2:
-            raise BadRequestError("A lobby seats two entrants or more")
-        stage = _stage_of(session, row)
-        entrants = _entrants_by_id(session, data.entrant_ids)
-        for entrant_id in data.entrant_ids:
-            entrant = entrants.get(entrant_id)
-            if entrant is None:
-                raise NotFoundError(f"Entrant not found by id: {entrant_id}")
-            if stage is not None and entrant.event_id != stage.event_id:
-                raise BadRequestError("This entrant does not play in that event")
-        _seat(session, row, [entrants[entrant_id] for entrant_id in data.entrant_ids])
-        return _lobby_read(session, row)
-
-
-def set_fixture_template(
-    event_id: int, stage_id: int, fixture_id: int, template: Sequence[TemplateSeries]
-) -> list[StageSeriesRow]:
-    """Write the ordered series one fixture of a stage holds.
-
-    Each row carries its sequence, its side size and its pick rule, names the
-    two team entrants the fixture pairs and holds no side: the captains name
-    the rosters through PUT /series/{id}/sides, and the draft tool serves the
-    drafted 1v1 rows.
-    """
-    with Session.begin() as session:
-        stage = _stage(session, event_id, stage_id)
-        fixture = session.get(Match, fixture_id)
-        if fixture is None or fixture.season_id != event_id:
-            raise NotFoundError(f"Fixture not found by id: {fixture_id}")
-        if not template:
-            raise BadRequestError("A fixture template names one series or more")
-        if _fixture_series(session, fixture_id):
-            raise BadRequestError("This fixture already holds series")
-        held = (
-            session.get(DBEventRound, fixture.round_id)
-            if fixture.round_id
-            else round_row(session, event_id, fixture.playday)
-        )
-        if held is None or held.stage_id != ident(stage):
-            raise BadRequestError("This fixture plays no round of that stage")
-        first, second = _entrant_sides(session, event_id, fixture)
-        rows = [
-            Series(
-                match_id=fixture_id,
-                round_id=ident(held),
-                division_id=fixture.division_id,
-                host_player_id=0,
-                entrant1_id=first,
-                entrant2_id=second,
-                sequence=sequence,
-                side_size=one.side_size,
-                pick_rule=one.pick_rule,
-            )
-            for sequence, one in enumerate(template, start=1)
-        ]
-        session.add_all(rows)
-        session.flush()
-        public = [StageSeriesRow.from_series(row) for row in _stage_rows(session, rows)]
-        events = derived.fill_series(session, public)
-        _fill_teams(session, public)
-        derived.fill_mmrs(session, public, events)
-        _fill_sides(session, public)
-        return public
 
 
 def standings_of(event_id: int, stage_id: int) -> list[DivisionStandings]:
     """The table of every division of the stage, from its points and its format."""
     with Session.begin() as session:
-        return _tables(session, event_id, _stage(session, event_id, stage_id))
+        return tables(session, event_id, _stage(session, event_id, stage_id))
 
 
-def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
-    """The rounds of the stage and every series it holds, in drawing order."""
+def series_of(
+    event_id: int, stage_id: int, claims: dict[str, Any] | None = None
+) -> StageSeriesPublic:
+    """The rounds of the stage and every series it holds, in drawing order.
+
+    The seed of each side reads null when the event hides its seeds from the caller.
+    """
     with Session.begin() as session:
         stage = _stage(session, event_id, stage_id)
         rounds = session.scalars(
@@ -703,45 +372,21 @@ def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
             .options(*Series._list_eager_options())
             .where(col(Series.round_id).in_(numbers))
         ).all()
-        rows = [
-            StageSeriesRow.from_series(row)
-            for row in sorted(held, key=lambda row: _drawn(numbers, row))
-        ]
+        ordered = sorted(held, key=lambda row: _drawn(numbers, row))
+        rows = [StageSeriesRow.from_series(row) for row in ordered]
         events = derived.fill_series(session, rows)
         _fill_teams(session, rows)
         derived.fill_mmrs(session, rows, events)
         _fill_sides(session, rows)
+        _fill_sources(
+            rows, {ident(row): row.name or f"Round {row.number}" for row in rounds}
+        )
+        event = session.get(Season, event_id)
+        if event is not None and organizers.shows_seeds(claims, event):
+            _fill_seeds(rows, ordered)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
         )
-
-
-def advance(event_id: int, stage_id: int) -> dict[str, int]:
-    """Seed the next stage from the top places of every division's table."""
-    with Session.begin() as session:
-        stage = _stage(session, event_id, stage_id)
-        following = _next_stage(session, event_id, stage)
-        if following is None:
-            raise BadRequestError("This stage is the last one of the event")
-        return {"seeded": _advance(session, event_id, stage)}
-
-
-def _series(session: OrmSession, series_id: int) -> Series:
-    row = session.get(Series, series_id)
-    if row is None:
-        raise NotFoundError(f"Series not found by id: {series_id}")
-    return row
-
-
-def _seats(session: OrmSession, series_id: int) -> list[SeriesSide]:
-    """Every seat of one lobby, in seat order."""
-    return list(
-        session.scalars(
-            select(SeriesSide)
-            .where(col(SeriesSide.series_id) == series_id)
-            .order_by(col(SeriesSide.side_no))
-        )
-    )
 
 
 def _seats_of(
@@ -760,130 +405,6 @@ def _seats_of(
     return found
 
 
-def _seat(session: OrmSession, row: Series, entrants: Sequence[EventEntrant]) -> None:
-    """Write the seats of one lobby from scratch, in the order they are given."""
-    for side in _seats(session, ident(row)):
-        session.delete(side)
-    session.flush()
-    for side_no, entrant in enumerate(entrants, start=1):
-        session.add(
-            SeriesSide(
-                series_id=ident(row),
-                side_no=side_no,
-                user_id=entrant.user_id or 0,
-                entrant_id=ident(entrant),
-            )
-        )
-    session.flush()
-
-
-def _fixture_series(session: OrmSession, fixture_id: int) -> Sequence[Series]:
-    """Every series one fixture holds, in the order they are played."""
-    return session.scalars(
-        select(Series)
-        .where(col(Series.match_id) == fixture_id)
-        .order_by(col(Series.sequence), col(Series.id))
-    ).all()
-
-
-def _entrant_sides(
-    session: OrmSession, event_id: int, fixture: Match
-) -> tuple[int, int]:
-    """The two team entrants a fixture pairs, so its series name their sides."""
-    by_team = {
-        entrant.team_id: ident(entrant)
-        for entrant in session.scalars(
-            select(EventEntrant).where(
-                col(EventEntrant.event_id) == event_id,
-                col(EventEntrant.team_id).in_([fixture.team1_id, fixture.team2_id]),
-            )
-        )
-    }
-    if fixture.team1_id not in by_team or fixture.team2_id not in by_team:
-        raise BadRequestError("Both teams of the fixture enter the event first")
-    return by_team[fixture.team1_id], by_team[fixture.team2_id]
-
-
-def _set_rosters(
-    session: OrmSession,
-    row: Series,
-    sides: Sequence[SideRoster],
-    admin: bool,
-    user_id: int | None,
-) -> StageSeriesRow:
-    """Name the players each side of a fixture series fields.
-
-    A side fields `side_size` players of the roster its team holds for the
-    event, and a drafted series takes a player no sibling drafted series of
-    the fixture holds.
-    """
-    if row.match_id is None:
-        raise BadRequestError("This series plays no fixture, so it takes no roster")
-    if scored(row):
-        raise BadRequestError("This series is played, so its sides are settled")
-    acts = None if admin else acts_for_side(session, row, user_id)
-    for side in sides:
-        if not admin and acts != side.side_no:
-            raise ApiError(403, {"error": "not_authorized_for_this_series"})
-        if len(set(side.user_ids)) != row.side_size:
-            raise BadRequestError(
-                f"A side of this series fields {row.side_size} players"
-            )
-        entrant = _side_entrant(session, row, side.side_no)
-        for player in side.user_ids:
-            key = (player, entrant.team_id, entrant.event_id)
-            if session.get(DBUserTeamSeason, key) is None:
-                raise BadRequestError("A side fields the players on its team roster")
-        if row.pick_rule == "drafted":
-            draft_series.refuse_repeat(session, row.match_id, side.user_ids, ident(row))
-        _write_side(session, row, side.side_no, side.user_ids, ident(entrant))
-    return _lobby_read(session, row)
-
-
-def _side_entrant(session: OrmSession, row: Series, side_no: int) -> EventEntrant:
-    """The team entrant standing on one side of a fixture series."""
-    entrant_id = row.entrant1_id if side_no == 1 else row.entrant2_id
-    entrant = session.get(EventEntrant, entrant_id) if entrant_id else None
-    if entrant is None or entrant.team_id is None:
-        raise BadRequestError("This side fields no team, so it takes no roster")
-    return entrant
-
-
-def _write_side(
-    session: OrmSession,
-    row: Series,
-    side_no: int,
-    user_ids: Sequence[int],
-    entrant_id: int,
-) -> None:
-    """Write the roster of one side of a series from scratch."""
-    for side in _seats(session, ident(row)):
-        if side.side_no == side_no:
-            session.delete(side)
-    session.flush()
-    for player in user_ids:
-        session.add(
-            SeriesSide(
-                series_id=ident(row),
-                side_no=side_no,
-                user_id=player,
-                entrant_id=entrant_id,
-            )
-        )
-    session.flush()
-
-
-def _entrants_by_id(
-    session: OrmSession, entrant_ids: Sequence[int]
-) -> dict[int, EventEntrant]:
-    return {
-        ident(entrant): entrant
-        for entrant in session.scalars(
-            select(EventEntrant).where(col(EventEntrant.id).in_(entrant_ids))
-        )
-    }
-
-
 def _stage_rows(session: OrmSession, rows: Sequence[Series]) -> list[Series]:
     """Those series read again with the loads of a stage row, in the order
     given: a write answers what the stage read answers."""
@@ -898,16 +419,6 @@ def _stage_rows(session: OrmSession, rows: Sequence[Series]) -> list[Series]:
         )
     }
     return [read[series_id] for series_id in ids]
-
-
-def _lobby_read(session: OrmSession, row: Series) -> StageSeriesRow:
-    """One lobby as its box reads it: the series, its seats and their places."""
-    public = StageSeriesRow.from_series(_stage_rows(session, [row])[0])
-    events = derived.fill_series(session, [public])
-    _fill_teams(session, [public])
-    derived.fill_mmrs(session, [public], events)
-    _fill_sides(session, [public])
-    return public
 
 
 def _fill_sides(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
@@ -935,74 +446,34 @@ def _fill_sides(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
         row.sides = found.get(row.id, [])
 
 
-def _fill_lobbies(session: OrmSession, row: Series) -> None:
-    """Seat the next round's lobbies once every lobby of this one has places.
-
-    The places that go through rank on the place first and the lobby second,
-    so every lobby winner sits above every runner-up, and the snake deals them
-    over the lobbies of the round after this one.
-    """
-    stage = _stage_of(session, row)
-    if stage is None or stage.format is not StageFormat.ffa:
-        return
-    rounds = {
-        ident(held): place for place, held in enumerate(_rounds_of(session, stage.id))
-    }
-    place = rounds.get(row.round_id or 0)
-    if place is None:
-        return
-    held = [
-        other
-        for other in _series_of(session, stage.id)
-        if other.division_id == row.division_id
-    ]
-    done = [other for other in held if rounds.get(other.round_id or 0) == place]
-    following = [
-        other for other in held if rounds.get(other.round_id or 0) == place + 1
-    ]
-    if not following or any(not scored(other) for other in done):
-        return
-    seats = _seats_of(session, [ident(other) for other in following])
-    # A round already seated is left alone; only an empty one fills from below
-    if any(side.entrant_id for sides in seats.values() for side in sides):
-        return
-    through = _through(session, stage, done)
-    dealt = brackets.snake(len(through), len(following))
-    for lobby, taking in zip(following, dealt, strict=True):
-        _seat(session, lobby, [through[seed - 1] for seed in taking])
+def _fill_seeds(rows: Sequence[StageSeriesRow], held: Sequence[Series]) -> None:
+    """Copy the seed of each side from the entrants the series read loaded."""
+    for row, series in zip(rows, held, strict=True):
+        row.entrant1_seed = series.entrant1.seed if series.entrant1 else None
+        row.entrant2_seed = series.entrant2.seed if series.entrant2 else None
 
 
-def _through(
-    session: OrmSession, stage: EventStage, lobbies: Sequence[Series]
-) -> list[EventEntrant]:
-    """The entrants the lobbies of one round send on, best place first."""
-    top = _lobby_advance(stage, stage.lobby_size or 2)
-    seats = _seats_of(session, [ident(lobby) for lobby in lobbies])
-    taking = sorted(
-        (side.place, order, side.entrant_id)
-        for order, lobby in enumerate(lobbies)
-        for side in seats.get(ident(lobby), [])
-        if side.entrant_id is not None and side.place is not None and side.place <= top
-    )
-    found = _entrants_by_id(session, [entrant_id for _, _, entrant_id in taking])
-    return [found[entrant_id] for _, _, entrant_id in taking if entrant_id in found]
+def _fill_sources(rows: Sequence[StageSeriesRow], names: Mapping[int, str]) -> None:
+    """Name the series each fed side comes from, such as "Loser of UB R1 M3"."""
+    by_id = {row.id: row for row in rows}
 
+    def source(feeder_id: int | None, takes_loser: bool) -> str | None:
+        """The label of one side, or None when no series of the read feeds it."""
+        feeder = by_id.get(feeder_id or 0)
+        if feeder is None:
+            return None
+        name = (
+            names.get(feeder.round_id or 0, "")
+            .replace("Upper bracket", "UB")
+            .replace("Lower bracket", "LB")
+            .replace(" round ", " R")
+        )
+        label = f"{'Loser' if takes_loser else 'Winner'} of {name}"
+        return label if feeder.sequence is None else f"{label} M{feeder.sequence}"
 
-def _lobby_advance(stage: EventStage, seats: int) -> int:
-    """How many places of one lobby play on: the stage's `group_advance`, or
-    half its seats. `advance_count` stays what the stage carries to the next."""
-    return stage.group_advance or max(seats // 2, 1)
-
-
-def _pay(stage: EventStage) -> list[int]:
-    """What each place of a lobby pays, best place first.
-
-    A stage that names no scale counts its seats down, so a lobby of four
-    pays 4, 3, 2, 1.
-    """
-    if stage.points_by_place:
-        return [int(word) for word in stage.points_by_place.split(",") if word.strip()]
-    return list(range(stage.lobby_size or 1, 0, -1))
+    for row in rows:
+        row.slot1_source = source(row.slot1_from_series_id, row.slot1_takes_loser)
+        row.slot2_source = source(row.slot2_from_series_id, row.slot2_takes_loser)
 
 
 def _fill_teams(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
@@ -1036,44 +507,6 @@ def _drawn(numbers: dict[int, int], row: Series) -> tuple[int, int, int, int, in
     )
 
 
-def _series_per_fixture(session: OrmSession, event_id: int) -> int:
-    """How many series one fixture of the event holds, at least one."""
-    event = session.get(Season, event_id)
-    return max(event.series_per_round if event else 1, 1)
-
-
-def _team_pair(
-    field: Sequence[EventEntrant], planned: brackets.PlannedSeries
-) -> tuple[int, int] | None:
-    """The two teams a planned pair names, or nothing when a side is a player."""
-    if planned.slot1.seed is None or planned.slot2.seed is None:
-        return None
-    first = field[planned.slot1.seed - 1].team_id
-    second = field[planned.slot2.seed - 1].team_id
-    return (first, second) if first and second else None
-
-
-def _fixture(
-    session: OrmSession,
-    event_id: int,
-    round_row: DBEventRound,
-    division_id: int | None,
-    teams: tuple[int, int],
-) -> Match:
-    """Write the fixture two teams play in a round; its series hang under it."""
-    row = Match(
-        season_id=event_id,
-        playday=round_row.number,
-        round_id=ident(round_row),
-        division_id=division_id,
-        team1_id=teams[0],
-        team2_id=teams[1],
-    )
-    session.add(row)
-    session.flush()
-    return row
-
-
 def _row(
     session: OrmSession,
     stage: EventStage,
@@ -1086,8 +519,6 @@ def _row(
     sizes: Mapping[int, int] | None = None,
 ) -> Series:
     """Write one planned series; a padded pair is a walkover for the side it has."""
-    if len(planned.slots) > 2:
-        return _lobby(session, round_row, division_id, field, planned)
     entrant1, user1, feeder1 = _slot(field, rows, planned.slot1)
     entrant2, user2, feeder2 = _slot(field, rows, planned.slot2)
     # The rosters of this series' own two sides; an undrawn pair takes side_size
@@ -1114,36 +545,6 @@ def _row(
     return row
 
 
-def _lobby(
-    session: OrmSession,
-    round_row: DBEventRound,
-    division_id: int | None,
-    field: Sequence[EventEntrant],
-    planned: brackets.PlannedSeries,
-) -> Series:
-    """Write one free for all lobby: one series, one `series_side` row a seat.
-
-    The player columns stay null, so nothing that reads a two-sided series
-    reads a lobby by mistake; the seats name who plays it. A seat the plan
-    leaves empty waits for the round before it to send its places through.
-    """
-    row = Series(round_id=ident(round_row), division_id=division_id, host_player_id=0)
-    session.add(row)
-    session.flush()
-    for side_no, slot in enumerate(planned.slots, start=1):
-        entrant, user, _ = _slot(field, [], slot)
-        session.add(
-            SeriesSide(
-                series_id=ident(row),
-                side_no=side_no,
-                user_id=user or 0,
-                entrant_id=entrant,
-            )
-        )
-    session.flush()
-    return row
-
-
 def _slot(
     field: Sequence[EventEntrant], rows: Sequence[Series], slot: brackets.Slot
 ) -> tuple[int | None, int | None, int | None]:
@@ -1157,67 +558,9 @@ def _slot(
     return None, None, None
 
 
-def _side_sizes(session: OrmSession, field: Sequence[EventEntrant]) -> dict[int, int]:
-    """How many players each team entrant of the field fields for the event.
-
-    A field of players answers nothing: a player side holds one. The map is
-    keyed by entrant, so each series reads the rosters of its own two sides.
-    """
-    teams = {entrant.team_id for entrant in field if entrant.team_id}
-    if not teams or not field:
-        return {}
-    rosters = {
-        team_id: total
-        for team_id, total in session.execute(
-            select(col(DBUserTeamSeason.team_id), func.count())
-            .where(
-                col(DBUserTeamSeason.team_id).in_(teams),
-                col(DBUserTeamSeason.season_id) == field[0].event_id,
-            )
-            .group_by(col(DBUserTeamSeason.team_id))
-        )
-    }
-    return {
-        ident(entrant): rosters[entrant.team_id]
-        for entrant in field
-        if entrant.team_id in rosters
-    }
-
-
-def _award(
-    session: OrmSession,
-    row: Series,
-    to_first: bool,
-    kind: str,
-    wins: int | None = None,
-) -> None:
-    """Write a result no game was played for, to one side of the series."""
-    maps = wins if wins is not None else series_wins(session, row)
-    row.player1_score, row.player2_score = (maps, 0) if to_first else (0, maps)
-    row.result_kind = kind
-    session.flush()
-
-
-def _won_slot(row: Series, takes_loser: bool) -> int | None:
-    """The slot the series sends on, 1 or 2; a draw sends neither on."""
-    if row.player1_score is None or row.player2_score is None:
-        return None
-    if row.player1_score == row.player2_score:
-        return None
-    first = row.player1_score > row.player2_score
-    return 2 if first == takes_loser else 1
-
-
-def _side(row: Series, takes_loser: bool) -> int | None:
-    """The user of the winning side, or of the losing one; a team side has none."""
-    slot = _won_slot(row, takes_loser)
-    if slot is None:
-        return None
-    return row.player1_id if slot == 1 else row.player2_id
-
-
 def _settle(session: OrmSession, row: Series) -> None:
-    """A series nobody plays is a walkover: a bye, or a reset the final settled."""
+    """A series nobody plays is a walkover: a bye, a double bye, or a reset the
+    final settled."""
     if scored(row):
         return
     final = _reset_final(session, row)
@@ -1229,9 +572,17 @@ def _settle(session: OrmSession, row: Series) -> None:
         return
     first, first_known = _resolved(session, row, 1)
     second, second_known = _resolved(session, row, 2)
-    if not (first_known and second_known) or (first is None) == (second is None):
+    if not (first_known and second_known):
         return
-    _award(session, row, first is not None, "walkover")
+    if first is not None and second is not None:
+        return
+    if first is None and second is None:
+        # Two empty sides: a walkover nobody wins; the series below gets an empty side
+        row.player1_score = row.player2_score = 0
+        row.result_kind = "walkover"
+        session.flush()
+    else:
+        _award(session, row, first is not None, "walkover")
     on_scored(session, row)
 
 
@@ -1307,64 +658,6 @@ def _stage_of(session: OrmSession, row: Series) -> EventStage | None:
     return session.get(EventStage, round_row.stage_id)
 
 
-def previous_stage(
-    session: OrmSession, event_id: int, stage: EventStage
-) -> EventStage | None:
-    """The stage before this one: the table `previous_stage` seeding reads."""
-    return session.scalars(
-        select(EventStage)
-        .where(
-            col(EventStage.event_id) == event_id,
-            col(EventStage.position) < stage.position,
-        )
-        .order_by(col(EventStage.position).desc())
-    ).first()
-
-
-def advancing(session: OrmSession, event_id: int, stage: EventStage) -> list[list[int]]:
-    """The entrant ids every division of the stage sends on, in its table order.
-
-    The top `advance_count` places go through, or the whole table when the
-    stage names no count. A stage that plays groups takes `group_advance` from
-    each of them and merges the groups of a division by place, so the winners
-    head the list and the draw of the next stage holds them apart. Both
-    `advance` and a `previous_stage` seed write read this one order, so the
-    unplayed stage is refused here for both of them.
-    """
-    rows = _series_of(session, stage.id)
-    if not rows or any(not scored(row) for row in rows):
-        raise BadRequestError("Every series of the stage needs a result first")
-    through: dict[int | None, list[tuple[int, int, int]]] = {}
-    for table in _tables(session, event_id, stage):
-        take = (
-            stage.group_advance or stage.advance_count
-            if table.group_no
-            else stage.advance_count
-        )
-        for place, line in enumerate(
-            table.rows[:take] if take else table.rows, start=1
-        ):
-            through.setdefault(table.division_id, []).append(
-                (place, table.group_no or 0, line.entrant_id)
-            )
-    return [
-        [entrant_id for _, _, entrant_id in sorted(lines)] for lines in through.values()
-    ]
-
-
-def _next_stage(
-    session: OrmSession, event_id: int, stage: EventStage
-) -> EventStage | None:
-    return session.scalars(
-        select(EventStage)
-        .where(
-            col(EventStage.event_id) == event_id,
-            col(EventStage.position) > stage.position,
-        )
-        .order_by(col(EventStage.position))
-    ).first()
-
-
 def _series_of(session: OrmSession, stage_id: int | None) -> Sequence[Series]:
     """Every series the stage holds, in play order, through its rounds."""
     return session.scalars(
@@ -1384,20 +677,11 @@ def _rounds_of(session: OrmSession, stage_id: int | None) -> Sequence[DBEventRou
     ).all()
 
 
-def _next_number(session: OrmSession, event_id: int) -> int:
-    """The round number the stage starts at; the rounds of one event are one run."""
-    highest = session.scalar(
-        select(func.max(col(DBEventRound.number))).where(
-            col(DBEventRound.season_id) == event_id
-        )
-    )
-    return (highest or 0) + 1
-
-
 def _entrants(
     session: OrmSession, event_id: int
 ) -> dict[int | None, list[EventEntrant]]:
-    """Every entrant of every division in seed order; one field without divisions."""
+    """Every entrant of every division in seed order; one field without divisions.
+    An entrant on a cup's waitlist stands in no field until it is let in."""
     divisions = session.scalars(
         select(EventDivision)
         .where(col(EventDivision.event_id) == event_id)
@@ -1408,6 +692,7 @@ def _entrants(
         .where(
             col(EventEntrant.event_id) == event_id,
             col(EventEntrant.withdrawn_at).is_(None),
+            col(EventEntrant.waitlisted_at).is_(None),
         )
         .order_by(
             col(EventEntrant.seed).is_(None),
@@ -1468,17 +753,12 @@ def _plan(stage: EventStage, size: int) -> brackets.Plan:
             return brackets.double_elimination_plan(
                 size, grand_final=stage.grand_final_modifier
             )
+        case StageFormat.placement:
+            return brackets.placement_plan(size, stage.placement_lives)
         case StageFormat.round_robin:
             return brackets.round_robin_plan(size, stage.series_per_entrant_per_round)
         case StageFormat.koth:
             return brackets.koth_chain(size)
-        case StageFormat.ffa:
-            # One lobby that seats the whole field is a league of N series;
-            # a field that needs several lobbies plays them off round by round
-            seats = stage.lobby_size or size
-            if seats >= size:
-                return brackets.ffa_league_plan(size, stage.swiss_rounds or 1)
-            return brackets.ffa_bracket_plan(size, seats, _lobby_advance(stage, seats))
         case _:
             raise BadRequestError(
                 f"This stage plays no format the engine draws: {stage.format.value}"
@@ -1527,7 +807,7 @@ def _ranking(stage: EventStage) -> list[str]:
     return [word.strip() for word in rule.split(",") if word.strip()]
 
 
-def _tables(
+def tables(
     session: OrmSession, event_id: int, stage: EventStage
 ) -> list[DivisionStandings]:
     """One table per division, from the series the stage holds.
@@ -1563,30 +843,6 @@ def _tables(
                 )
             )
     return tables
-
-
-def _draws(
-    session: OrmSession,
-    stage: EventStage,
-    fields: Sequence[tuple[int | None, list[EventEntrant]]],
-) -> list[tuple[int | None, list[EventEntrant]]]:
-    """The fields a generate draws, in order: one per division, or one per group.
-
-    A group is stamped on its entrants, so the tables, the advance and the
-    entrants page read the split off the rows and no series carries a group.
-    """
-    if not _has_groups(stage):
-        return list(fields)
-    draws: list[tuple[int | None, list[EventEntrant]]] = []
-    for division_id, field in fields:
-        for number, group in enumerate(
-            brackets.snake_groups(field, stage.group_size or 2), start=1
-        ):
-            for entrant in group:
-                entrant.group_no = number
-            draws.append((division_id, group))
-    session.flush()
-    return draws
 
 
 def _split(
@@ -1647,8 +903,6 @@ def _table(
         entrants.setdefault(ident(king), king)
     order = list(entrants)
     first = 1
-    if stage.format is StageFormat.ffa:
-        return _place_table(session, stage, entrants, series, seats or {})
     results = [
         (
             row.entrant1_id,
@@ -1706,51 +960,6 @@ def _table(
         )
         for place, line in enumerate(table, start=first)
     ]
-
-
-def _place_table(
-    session: OrmSession,
-    stage: EventStage,
-    entrants: dict[int, EventEntrant],
-    series: Sequence[Series],
-    seats: dict[int, list[SeriesSide]],
-) -> list[StandingRow]:
-    """A free for all table: the place points every entrant took, best first."""
-    placings = [
-        (side.entrant_id, side.place)
-        for row in series
-        for side in seats.get(ident(row), [])
-        if side.entrant_id in entrants and side.place is not None
-    ]
-    table = brackets.place_standings(list(entrants), placings, _pay(stage))
-    counted = _counted_places(list(entrants), placings)
-    names = _names(session, list(entrants.values()))
-    return [
-        StandingRow(
-            position=place,
-            entrant_id=line.entrant,
-            user_id=entrants[line.entrant].user_id,
-            team_id=entrants[line.entrant].team_id,
-            name=names.get(line.entrant),
-            points=line.points,
-            **counted[line.entrant],
-        )
-        for place, line in enumerate(table, start=1)
-    ]
-
-
-def _counted_places(
-    order: Sequence[int], placings: Sequence[tuple[int, int]]
-) -> dict[int, dict[str, int]]:
-    """Lobbies played and lobbies won per entrant; a lobby counts no games."""
-    tally = {
-        entrant: {"played": 0, "won": 0, "lost": 0, "games_won": 0, "games_lost": 0}
-        for entrant in order
-    }
-    for entrant, place in placings:
-        tally[entrant]["played"] += 1
-        tally[entrant]["won" if place == 1 else "lost"] += 1
-    return tally
 
 
 def _reached(
@@ -1896,33 +1105,15 @@ def _names(session: OrmSession, field: Sequence[EventEntrant]) -> dict[int, str 
     }
 
 
-def _auto_advance(session: OrmSession, row: Series) -> None:
-    """A stage that carries its places forward does it on the last result."""
-    stage = _stage_of(session, row)
-    if stage is None or not stage.auto_advance:
-        return
-    if _next_stage(session, stage.event_id, stage) is None:
-        return
-    if any(not scored(other) for other in _series_of(session, stage.id)):
-        return
-    _advance(session, stage.event_id, stage)
-
-
-def _advance(session: OrmSession, event_id: int, stage: EventStage) -> int:
-    """Seed the top places of every division; the rest lose their seed."""
-    carried: set[int] = set()
-    for division in advancing(session, event_id, stage):
-        for place, entrant_id in enumerate(division, start=1):
-            entrant = session.get(EventEntrant, entrant_id)
-            if entrant is None:
-                continue
-            entrant.seed = place
-            entrant.seed_source = "previous_stage"
-            carried.add(entrant_id)
-    for entrant in session.scalars(
-        select(EventEntrant).where(col(EventEntrant.event_id) == event_id)
-    ):
-        if ident(entrant) not in carried:
-            entrant.seed = None
+def _award(
+    session: OrmSession,
+    row: Series,
+    to_first: bool,
+    kind: str,
+    wins: int | None = None,
+) -> None:
+    """Write a result no game was played for, to one side of the series."""
+    maps = wins if wins is not None else series_wins(session, row)
+    row.player1_score, row.player2_score = (maps, 0) if to_first else (0, maps)
+    row.result_kind = kind
     session.flush()
-    return len(carried)

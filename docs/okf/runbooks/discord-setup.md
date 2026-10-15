@@ -4,7 +4,7 @@ title: Set up the Discord side
 description: Register the slash commands, upload the emojis, place the bot role, and point the channel settings rows at the right channels.
 resource: ../../../justfile
 tags: [discord]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T19:00:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:
   - id: justfile
@@ -22,7 +22,8 @@ sources:
 3. Upload the app emojis: `uv run just discord-emojis`. `/stats` and the cards show race icons and the W3Champions crown once they exist.
 4. In the guild, place the bot's role directly above the season and team roles and below everything else, with Manage Roles. A bot manages only roles below its own; a role higher up is out of its reach on purpose.
 5. Set the `settings` rows `results_channel_id` and `content_channel_id` to the channels the cards go to. Before a write test against staging, point them at a test channel; a staging row may name a live channel.
-6. Add the Discord role bindings under Config > Discord roles. New bindings start ignored; mark one synced to let the button manage it.
+6. For cup announcements, set `announcement_channel_id` to the channel and `announcement_role_id` to the role members take on Home. Place the role below the bot's role, and bind it to no role kind, so the role sync leaves it alone.
+7. Add the Discord role bindings under Config > Discord roles. New bindings start ignored; mark one synced to let the button manage it.
 
 # Facts
 

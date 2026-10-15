@@ -98,6 +98,7 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
             "team_id": None,
             "team_name": None,
             "team_icon_url": None,
+            "member_ids": [],
         },
         "player2": {
             "id": seeded["player_ids"][3],
@@ -105,6 +106,7 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
             "team_id": None,
             "team_name": None,
             "team_icon_url": None,
+            "member_ids": [],
         },
     }
 
@@ -495,10 +497,12 @@ def test_a_team_side_names_its_team_and_carries_no_user_id(
     seeded: dict[str, Any],
     member: Callable[..., dict[str, str]],
 ) -> None:
-    """A fixture side fields a team, so the board names the team, its logo and
-    its id in its own fields, and leaves the user id empty to compare against."""
+    """A cup side fields a team, so the board names the team and its id in its
+    own fields, lists its players, and leaves the user id empty to compare against."""
+    from sqlmodel import col, select
+
     from app.core.db import Session
-    from app.models.team import Team
+    from app.models.cup_team import CupTeamMember
     from tests.test_stage_engine import generate, stage_series, team_cup
 
     event, stage, team_ids, tags = team_cup(client, auth_headers, member)
@@ -509,15 +513,25 @@ def test_a_team_side_names_its_team_and_carries_no_user_id(
         if row["entrant1_id"] is not None
     )
     with Session.begin() as session:
-        Team.update(session, series["team1"]["id"], icon_url="teams/1.png")
+        members = sorted(
+            session.scalars(
+                select(col(CupTeamMember.user_id)).where(
+                    col(CupTeamMember.team_id) == series["team1"]["id"]
+                )
+            ).all()
+        )
 
-    board = read(client, series["id"], member(tags[0][0]))
+    board = client.get(f"/cup-series/{series['id']}/veto", headers=member(tags[0][0]))
+    assert board.status_code == 200, board.text
+    board = board.json()
 
     assert board["player1"] == {
         "id": None,
         "name": series["team1"]["name"],
         "team_id": series["team1"]["id"],
         "team_name": series["team1"]["name"],
-        "team_icon_url": "teams/1.png",
+        "team_icon_url": None,
+        "member_ids": members,
     }
+    assert members
     assert board["player1"]["team_id"] in team_ids

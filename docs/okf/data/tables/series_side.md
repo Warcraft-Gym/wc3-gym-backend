@@ -4,15 +4,15 @@ title: series_side
 description: "One seat of a series that is not a plain 1v1: a player in an FFA lobby or on a team side, with the place that side finished."
 resource: ../../../../app/models/series_side.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T21:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/series_side.py
     title: SeriesSide
-  - id: engine
-    resource: ../../../../app/services/stage_engine.py
-    title: set_places, set_sides and the lobby seat writes
+  - id: import
+    resource: ../../../../app/services/season_import.py
+    title: The seats of an imported team series
 ---
 
 # Schema
@@ -31,4 +31,4 @@ Primary key (`series_id`, `side_no`, `user_id`). Foreign keys: `series_id` to [s
 
 # Rules
 
-A 1v1 series writes no row here, so every GNL read keeps its shape. An organiser seats a lobby before the round starts; a captain writes the roster of a fixture side. See [events module](../../concepts/events-module.md).
+A 1v1 series writes no row here, so every GNL read keeps its shape. The season import writes the seats of an imported team series. A cup's lobby seats live in [cup_series_side](cup_series_side.md). See [events module](../../concepts/events-module.md).

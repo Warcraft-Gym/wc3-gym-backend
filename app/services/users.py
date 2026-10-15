@@ -660,6 +660,46 @@ class UserService:
             col(W3CStats.wc3_season) == w3c_stats.wc3_season,
         )
 
+    def backfill_w3c_history(
+        self, user: UserReduced, timeout: float = REQUEST_TIMEOUT
+    ) -> None:
+        """Store the player's stats of every past W3C season the app lacks.
+
+        The sync reads the live window only, so the lifetime games of a race,
+        which an event's race_games_min reads, need the seasons before it. A
+        past season never changes, so this runs once per player and per season
+        that leaves the window; the stamp says how far the stored history goes.
+        """
+        if not user.battleTag:
+            return
+        w3c_service = W3CService(
+            settings_app_service=self.settings_app_service, timeout=timeout
+        )
+        through = w3c_service.current_season() - 2
+        with Session() as session:
+            row = session.get(User, user.id)
+            held = row.w3c_history_through if row is not None else None
+        if held is not None and held >= through:
+            return
+        seasons = [
+            season
+            for season in w3c_service.participated_seasons(user.battleTag)
+            if (held or 0) < season <= through
+        ]
+        stats = []
+        for season in seasons:
+            stats.extend(
+                w3c_service.get_player_stats(user.battleTag, season_override=season)
+            )
+        with Session.begin() as session:
+            for one in stats:
+                self._write_w3c_stats(session, user.id, one)
+            session.execute(
+                update(User)
+                .where(col(User.id) == user.id)
+                .values(w3c_history_through=through)
+            )
+
     def update_w3c_stats_by_id(self, user_id: int) -> UserPublic:
         self.update_w3c_stats(self.get(user_id))
         return self.get(user_id)

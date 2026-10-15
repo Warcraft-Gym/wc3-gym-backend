@@ -433,35 +433,24 @@ def test_a_cup_entrant_reads_the_cup_before_a_bracket_exists(
     assert (events[0]["team_id"], events[0]["place"]) == (None, None)
 
 
-def test_a_scored_bracket_series_pays_a_record_and_a_meeting(
+def test_a_scored_cup_series_pays_no_record_and_no_meeting(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    """A generated series has no fixture, so the event comes through its round."""
+    """A cup's series live in the cup's own tables, which the history reads
+    none of: the cup stays on the page through its entrant row, unplayed."""
     from tests.test_stage_engine import bracket, cup, generate, score
 
     event, (stage,) = cup(4)
     generate(client, auth_headers, event, stage)
     semi = bracket(stage)[0]
-    winner, loser = semi["sides"]
+    winner, _ = semi["sides"]
     assert score(client, auth_headers, semi["id"], 2, 0).status_code == 200
 
     history = client.get(f"/users/{winner}/history").json()
 
     row = history["events"][0]
-    assert (row["kind"], row["played"], row["won"], row["lost"]) == ("cup", 1, 1, 0)
-    opponent = history["opponents"][0]
-    assert opponent["id"] == loser
-    meeting = opponent["meetings"][0]
-    assert (meeting["kind"], meeting["my_score"], meeting["their_score"]) == (
-        "cup",
-        2,
-        0,
-    )
-    assert meeting["season_name"] == "Autumn Cup"
-    # The other side reads the same meeting turned around
-    mirror = client.get(f"/users/{loser}/history").json()
-    assert mirror["events"][0]["lost"] == 1
-    assert mirror["opponents"][0]["meetings"][0]["their_score"] == 2
+    assert (row["kind"], row["played"], row["won"], row["lost"]) == ("cup", 0, 0, 0)
+    assert history["opponents"] == []
 
 
 def test_a_running_cup_reads_as_running(

@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     battlenet,
     config,
+    cup_series,
     dev_login,
     discord,
     draft_series,
@@ -18,6 +19,7 @@ from app.api.routes import (
     login,
     maps,
     matches,
+    organizers,
     public,
     seasons,
     series,
@@ -35,11 +37,13 @@ api_router.include_router(teams.router)
 api_router.include_router(matches.router)
 api_router.include_router(seasons.router)
 api_router.include_router(events.router)
+api_router.include_router(organizers.router)
 api_router.include_router(leagues.router)
 api_router.include_router(import_export.router)
 api_router.include_router(public.router)
 api_router.include_router(home.router)
 api_router.include_router(series.router)
+api_router.include_router(cup_series.router)
 api_router.include_router(draft_series.router)
 api_router.include_router(maps.router)
 api_router.include_router(fantasy.router)

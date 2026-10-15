@@ -55,7 +55,11 @@ the signup race statement, at no statement more.
 The member home reads, GET /me/events and GET /me, keep the bearer and miss
 the edge on every visit. Each reads the columns its answer names, the rounds
 not over and the signup seasons as summaries, so its count is pinned for a
-player and for a captain.
+player and for a captain. A list that holds a cup reads the cups' formats in
+one statement more, and a cup team's player reads the team on the entrant
+statement. GET /me/cup-series reads every open series and lobby of the caller
+in one statement and fills their boxes as a stage read does, so its count does
+not grow with the number of series, lobbies or cups.
 
 A career list derives its totals, search, order and page in SQL. A single
 career row is the list's statement filtered to the user id. Neither statement
@@ -148,11 +152,6 @@ from app.services.users import UserService, summary_loads
 from tests.test_auth import PNG
 from tests.test_fantasy_locks import schedule, score
 from tests.test_ffa import ffa, lobbies, play
-from tests.test_mixed_fixture import (  # noqa: F401  # clan_war is a fixture
-    clan_war,
-    roster,
-    template,
-)
 from tests.test_player_session import member_session
 from tests.test_stage_engine import generate
 
@@ -1238,9 +1237,10 @@ MEMBER_READS = {
     ("/me/events", False): (11, 5),
     # The seat's event costs its rounds, its fixtures, their teams, two counts
     ("/me/events", True): (18, 17),
-    ("/me", False): (14, 10),
+    # The organizer grant and request answer in one statement of one row
+    ("/me", False): (15, 11),
     # The seat's season, and the team's name
-    ("/me", True): (17, 13),
+    ("/me", True): (18, 14),
 }
 
 
@@ -1282,6 +1282,70 @@ def test_a_member_read_costs_its_pinned_statements(
     statements, rows = MEMBER_READS[(path, captain)]
     assert tally[0] <= statements
     assert int(response.headers["X-DB-Rows"]) <= rows
+
+
+def test_the_home_cup_reads_do_not_grow_with_the_cups(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """GET /me/cup-series and GET /me/events of a player in a team free for all
+    league, whose two lobbies seat teams."""
+    from app.models.enums import StageFormat
+    from app.models.relationships import DBMapSeason
+    from tests.test_cup_best_of import maps
+    from tests.test_stage_engine import team_cup
+
+    event, stage, _, tags = team_cup(
+        client,
+        auth_headers,
+        member,
+        StageFormat.ffa,
+        lobby_size=4,
+        swiss_rounds=2,
+        points_by_place="3,2,1,0",
+    )
+    with Session.begin() as session:
+        session.add_all(
+            DBMapSeason(season_id=event, map_id=map_id, position=position)
+            for position, map_id in enumerate(maps(2))
+        )
+    generate(client, auth_headers, event, stage)
+    headers = member(tags[0][1])
+    costs = {}
+    for path in ("/me/cup-series", "/me/events"):
+        assert client.get(path, headers=headers).status_code == 200
+        with count_statements() as tally:
+            response = client.get(path, headers=headers)
+        assert response.status_code == 200, response.text
+        costs[path] = tally[0]
+    assert costs["/me/cup-series"] <= HOME_CUP_READS["/me/cup-series"]
+    assert costs["/me/events"] <= HOME_CUP_READS["/me/events"]
+
+
+# Statements of the home's cup reads for a player of a seated cup team
+HOME_CUP_READS = {"/me/cup-series": 12, "/me/events": 12}
+
+
+def test_the_announcement_switch_reads_in_fixed_statements(
+    client: Client, member: Callable[..., dict[str, str]]
+) -> None:
+    """GET /me/announcements reads the two settings and the caller's row."""
+    from app.models.settings import Settings
+
+    with Session.begin() as session:
+        session.add(Settings(key="announcement_channel_id", value="announce"))
+        session.add(Settings(key="announcement_role_id", value="role"))
+    headers = member("1")
+    assert client.get("/me/announcements", headers=headers).status_code == 200
+    with count_statements() as tally:
+        response = client.get("/me/announcements", headers=headers)
+    assert response.status_code == 200, response.text
+    assert tally[0] <= ANNOUNCEMENT_READ
+
+
+# Statements of one announcement switch read: the session's account, the settings, the row
+ANNOUNCEMENT_READ = 5
 
 
 def test_the_signups_read_costs_seven_statements(league: dict[str, Any]) -> None:
@@ -1539,7 +1603,8 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"accept": True},
             w.member(),
         ),
-        115,
+        # the merge behind an accepted prompt walks the cup tables and historical_participant too
+        131,
     ),
     "PUT /users/me/tags/{tag_id}/active": (
         lambda w: ("PUT", f"/users/me/tags/{w.tag()}/active", None, w.member()),
@@ -1565,7 +1630,8 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             {"into_user_id": w.p3},
             w.admin,
         ),
-        80,
+        # the merge walks every table that holds a user id, the cup tables and historical_participant among them
+        91,
     ),
     "PUT /users/{user_id}": (
         lambda w: ("PUT", f"/users/{w.p1}", {"country": "NL"}, w.admin),
@@ -1943,7 +2009,7 @@ def test_every_write_pins_its_statements(
 def test_a_lobby_place_write_pins_its_statements(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    """PUT /series/{id}/places on the first lobby of a four player FFA: the
+    """PUT /cup-series/{id}/places on the first lobby of a four player FFA: the
     write, the advance and the stage row it answers."""
     event, stage, _ = ffa(4)
     generate(client, auth_headers, event, stage)
@@ -1952,20 +2018,3 @@ def test_a_lobby_place_write_pins_its_statements(
         response = play(client, auth_headers, lobby, [1, 2, 3, 4])
     assert response.status_code == 200, response.text
     assert tally[0] <= 16
-
-
-def test_a_side_write_pins_its_statements(
-    client: Client,
-    auth_headers: dict[str, str],
-    member: Callable[..., dict[str, str]],
-    clan_war: dict[str, Any],  # noqa: F811  # the fixture imported above
-) -> None:
-    """PUT /series/{id}/sides by the captain of one clan, on the 2v2 of a
-    clan war: the roster checks, the write and the stage row it answers."""
-    pair = template(client, auth_headers, clan_war).json()[1]
-    first, _ = clan_war["rosters"]
-    captain = member(clan_war["captains"][0])
-    with count_statements() as tally:
-        response = roster(client, captain, pair["id"], 1, first[:2])
-    assert response.status_code == 200, response.text
-    assert tally[0] <= 33

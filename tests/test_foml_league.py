@@ -77,6 +77,8 @@ def open_the_season(
             "kind": "cup",
             "league_id": league.json()["id"],
             "signup_policy": "members",
+            # FOML splits its members into two divisions, a cup's choice at creation
+            "uses_divisions": True,
             "series_per_round": 2,
             "stages": [
                 {
@@ -118,7 +120,8 @@ def open_the_season(
 def cut_and_seed(
     client: Client, headers: dict[str, str], event: int, stage: int
 ) -> list[dict[str, Any]]:
-    """Two divisions cut from MMR, seeded from MMR inside each, then locked."""
+    """Two divisions cut from MMR, seeded from MMR inside each, then locked;
+    every member is checked in, as the draw takes the players who checked in."""
     bands = client.put(
         f"/events/{event}/divisions",
         json=[{"name": "Pro", "size": BAND}, {"name": "Open"}],
@@ -145,6 +148,8 @@ def cut_and_seed(
     locked = client.post(f"/events/{event}/stages/{stage}/seeds/lock", headers=headers)
     assert locked.status_code == 200, locked.text
     assert locked.json()["seeds_locked_at"] is not None
+    checked = client.post(f"/events/{event}/entrants/checkin-everyone", headers=headers)
+    assert checked.status_code == 200, checked.text
     return rows
 
 
@@ -178,7 +183,7 @@ def play(
         if given:
             given = False
             answer = client.put(
-                f"/series/{row['id']}/result-kind",
+                f"/cup-series/{row['id']}/result-kind",
                 json={"result_kind": "walkover", "winner": 1 if first else 2},
                 headers=headers,
             )
@@ -260,9 +265,8 @@ def test_the_run_page_reads_the_rounds_the_sequences_and_no_feeders(
         assert (row["slot1_takes_loser"], row["slot2_takes_loser"]) == (False, False)
         assert row["result_kind"] == "played"
         assert row["side_size"] == 1
-        assert row["pick_rule"] is None
-        # A stage series hangs off its round, not off a fixture
-        assert row["match"] is None
+        # A cup series hangs off its round, never off a fixture
+        assert not {"pick_rule", "match", "match_id"} & set(row)
 
 
 def test_the_season_plays_out_to_one_winner_in_each_division(
@@ -353,7 +357,7 @@ def test_the_season_plays_out_to_one_winner_in_each_division(
 
     last = finals[0]
     cleared = client.put(
-        f"/series/{last['id']}?force=true",
+        f"/cup-series/{last['id']}?force=true",
         json={"player1_score": None, "player2_score": None},
         headers=auth_headers,
     )

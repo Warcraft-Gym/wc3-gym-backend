@@ -21,6 +21,7 @@ from pydantic import BeforeValidator
 from sqlalchemy import DateTime, Dialect
 from sqlalchemy.types import TypeDecorator
 
+from app.core.best_of import ROLES as BEST_OF_ROLES
 from app.core.fantasy import race_value
 from app.core.scoring import SYSTEMS
 from app.models.enums import Race
@@ -133,6 +134,45 @@ def _map_rules[T](value: T) -> T | None:
     return value
 
 
+def _best_of_plan[T](value: T) -> T | str | None:
+    """The best-of of each bracket part, as "semifinal:3,final:5". A mapping
+    from part to best-of reads the same, so a client may send either."""
+    if value == "" or value is None:
+        return None
+    if isinstance(value, dict):
+        value = ",".join(f"{role}:{games}" for role, games in value.items())
+    if isinstance(value, str):
+        for token in value.split(","):
+            role, _, games = token.strip().partition(":")
+            if role not in BEST_OF_ROLES:
+                known = ", ".join(BEST_OF_ROLES)
+                raise ValueError(
+                    f"'{role}' is not a part of a bracket. Valid parts are {known}."
+                )
+            if not games.isdigit() or int(games) % 2 == 0 or not 1 <= int(games) <= 9:
+                raise ValueError(f"'{games}' is not a best-of: write 1, 3, 5, 7 or 9")
+    return value
+
+
+# The modes a map is played as, in the order a list reads them
+MAP_MODES = ("1v1", "2v2", "3v3", "4v4", "5v5", "6v6", "8v8", "ffa", "custom")
+
+
+def map_modes(value: object) -> str | None:
+    """The modes a map is played as, each once, in the order MAP_MODES names
+    them, as "1v1,2v2"; a list reads the same, and none is null."""
+    if value is None or value == "":
+        return None
+    tokens = value if isinstance(value, list) else str(value).split(",")
+    found = {str(token).strip().lower() for token in tokens if str(token).strip()}
+    unknown = sorted(found - set(MAP_MODES))
+    if unknown:
+        raise ValueError(
+            f"'{unknown[0]}' is not a map mode. Valid modes are {', '.join(MAP_MODES)}."
+        )
+    return ",".join(mode for mode in MAP_MODES if mode in found) or None
+
+
 def _place_points[T](value: T) -> T | None:
     """What each place of a free for all lobby pays, best place first."""
     if value == "" or value is None:
@@ -218,6 +258,10 @@ TwitchChannel = BeforeValidator(_twitch_channel)
 YouTubeChannel = BeforeValidator(_youtube_channel)
 # Input. The map rules of a season, which take the four rule names and nothing else.
 MapRules = BeforeValidator(_map_rules)
+# Input. The modes a map is played as, as "1v1,2v2" or a list of them.
+MapModes = BeforeValidator(map_modes)
+# Input. The best-of of each bracket part, as "semifinal:3,final:5".
+BestOfPlan = BeforeValidator(_best_of_plan)
 # Input. What each place of an FFA lobby pays, best place first, as "4,3,2,1".
 PlacePoints = BeforeValidator(_place_points)
 # Input. The score system of a season, which takes the systems the scoring rule knows.

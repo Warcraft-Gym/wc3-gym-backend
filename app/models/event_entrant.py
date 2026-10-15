@@ -1,4 +1,4 @@
-"""One entrant of an event: a player, a pre-made team, or an archival identity.
+"""One entrant of an event: a player, a pre-made team, a cup team, or an archival identity.
 
 Eligibility warns and never blocks (NE-8), so nothing here refuses a signup:
 a withdrawn or unchecked-in entrant keeps its row and its stamps say so. The
@@ -39,10 +39,11 @@ class EventEntrant(DBModel, table=True):
         UniqueConstraint(
             "event_id", "team_id", name="uq_event_entrant_event_id_team_id"
         ),
-        # A side names exactly one account, team or archival identity
+        # A side names exactly one account, team, cup team or archival identity
         CheckConstraint(
             "(CASE WHEN user_id IS NULL THEN 0 ELSE 1 END "
             "+ CASE WHEN team_id IS NULL THEN 0 ELSE 1 END "
+            "+ CASE WHEN cup_team_id IS NULL THEN 0 ELSE 1 END "
             "+ CASE WHEN historical_participant_id IS NULL THEN 0 ELSE 1 END) = 1",
             name="one_entrant",
         ),
@@ -56,6 +57,10 @@ class EventEntrant(DBModel, table=True):
     # A team event enters pre-made teams
     team_id: int | None = Field(
         default=None, index=True, foreign_key="teams.id", ondelete="CASCADE"
+    )
+    # A cup enters the teams made for it, one entrant each
+    cup_team_id: int | None = Field(
+        default=None, unique=True, foreign_key="cup_team.id", ondelete="CASCADE"
     )
     historical_participant_id: int | None = Field(
         default=None,
@@ -95,6 +100,11 @@ class EventEntrant(DBModel, table=True):
     withdrawn_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
+    # When a cup put the signup on its waitlist: it was drawn or full. A waiting
+    # entrant takes no place in the field until a runner lets it in
+    waitlisted_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
     created_at: datetime = Field(
         default_factory=utcnow,
         sa_type=UTCDateTime,
@@ -130,10 +140,20 @@ class EntrantPlacement(SQLModel):
 
 
 class SeedWrite(SQLModel):
+    # Named: only that division is seeded again, and every other one stays
     """What orders the seeds of one stage; `order` names the entrants by hand."""
 
     source: SeedSource = SeedSource.mmr
     order: list[int] | None = None
+    division_id: int | None = None
+
+
+class TeamMemberPublic(SQLModel):
+    """One player of a cup team, with the rating the cup checks them on."""
+
+    user: UserSummaryPublic
+    captain: bool = False
+    mmr: int | None = None
 
 
 class EventEntrantPublic(SQLModel):
@@ -160,6 +180,14 @@ class EventEntrantPublic(SQLModel):
     division_id: int | None = None
     group_no: int | None = None
     manual_placement: bool = False
+    # A cup's two pins: placed in its division by hand, and a seed a reshuffle
+    # keeps; null on any other kind
+    division_pinned: bool | None = None
+    seed_pinned: bool | None = None
     checked_in_at: Annotated[datetime | None, AwareUTC] = None
     withdrawn_at: Annotated[datetime | None, AwareUTC] = None
+    waitlisted_at: Annotated[datetime | None, AwareUTC] = None
     qualified_from_event_id: int | None = None
+    # A cup team: the confirmed players, and the players invited who have not answered
+    roster: list[TeamMemberPublic] = []
+    invited: list[UserSummaryPublic] = []

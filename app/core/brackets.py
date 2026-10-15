@@ -4,7 +4,7 @@ Entrants are passed in seed order, best seed first. None marks a bye.
 """
 
 from collections.abc import Hashable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import groupby
 from typing import NamedTuple
 
@@ -231,6 +231,24 @@ class Plan:
 
     rounds: list[str]
     series: list[PlannedSeries]
+    # The part of the bracket each round is, counted back from the end, which
+    # app.core.best_of names; a plan that has no parts leaves it empty
+    roles: list[str | None] = field(default_factory=list)
+    # A placement bracket: the places each series' group plays for, by series
+    # index, and the groups the bracket ends in, best first
+    places: list[tuple[int, int]] = field(default_factory=list)
+    finish: list["PlaceGroup"] = field(default_factory=list)
+
+    def role(self, index: int) -> str | None:
+        return self.roles[index] if index < len(self.roles) else None
+
+
+# The part a single elimination column plays, by the name it carries
+_SINGLE_ROLES = {
+    "Final": "final",
+    "Semifinals": "semifinal",
+    "Quarterfinals": "quarterfinal",
+}
 
 
 def _column_name(width: int) -> str:
@@ -290,17 +308,19 @@ def elimination_plan(field: int, *, third_place: bool = False) -> Plan:
                     Slot(feeder=semis[1].index, takes_loser=True),
                 )
             )
-    return Plan(rounds, series)
+    # The third-place series sits in the final's column, so it plays like the final
+    return Plan(rounds, series, [_SINGLE_ROLES.get(name) for name in rounds])
 
 
 def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
     """Every series of a double elimination bracket, upper then lower then final.
 
-    The field is padded to a power of two, and a padded pair is a walkover the
-    engine settles. `grand_final` is 'one', 'reset' for the second series the
-    lower bracket winner earns, or 'skip' for no final series at all.
+    The field is padded to a power of two of at least four, and a padded pair
+    is a walkover the engine settles. `grand_final` is 'one', 'reset' for the
+    second series the lower bracket winner earns, or 'skip' for no final series.
     """
-    size = _power_of_two(field)
+    # Two entrants pad to four, so the loser drops down and a grand final exists
+    size = max(_power_of_two(field), 4)
     seeds = [Slot(seed=seed) if seed <= field else None for seed in bracket_order(size)]
     rounds: list[str] = []
     series: list[PlannedSeries] = []
@@ -334,8 +354,7 @@ def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
         """The loser slot of every series a column holds."""
         return [Slot(feeder=slot.feeder, takes_loser=True) for slot in of]
 
-    # The lower bracket: a minor round pairs its own winners, a major round
-    # takes them against the losers the upper bracket has just sent down
+    # Losers drop in reversed, and halves shifted every second time, to delay rematches
     lower = column("Lower bracket round 1", _pairs(losers(upper[0])))
     number = 2
     for step in range(1, depth):
@@ -344,7 +363,10 @@ def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
             if step == depth - 1
             else f"Lower bracket round {number}"
         )
-        lower = column(name, list(zip(lower, losers(upper[step]), strict=True)))
+        dropped = losers(upper[step])[::-1]
+        if step % 2 == 0:
+            dropped = dropped[len(dropped) // 2 :] + dropped[: len(dropped) // 2]
+        lower = column(name, list(zip(lower, dropped, strict=True)))
         number += 1
         if step < depth - 1:
             lower = column(f"Lower bracket round {number}", _pairs(lower))
@@ -357,12 +379,129 @@ def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
                 "Grand final reset",
                 [(final[0], Slot(feeder=final[0].feeder, takes_loser=True))],
             )
-    return Plan(rounds, series)
+    return Plan(rounds, series, _double_roles(rounds))
+
+
+def _double_roles(rounds: list[str]) -> list[str | None]:
+    """The part each double elimination round plays: the final of each ladder,
+    the round before it, and the grand final, whose reset plays like it."""
+    roles: list[str | None] = [None] * len(rounds)
+    for ladder in ("upper", "lower"):
+        prefix = f"{ladder.capitalize()} bracket "
+        own = [index for index, name in enumerate(rounds) if name.startswith(prefix)]
+        if own and rounds[own[-1]] == f"{prefix}final":
+            roles[own[-1]] = f"{ladder}_final"
+            if len(own) > 1:
+                roles[own[-2]] = f"{ladder}_semifinal"
+    for index, name in enumerate(rounds):
+        if name.startswith("Grand final"):
+            roles[index] = "grand_final"
+    return roles
 
 
 def _pairs(column: list[Slot]) -> list[tuple[Slot, Slot]]:
     """The adjacent pairs of a bracket column."""
     return list(zip(column[::2], column[1::2], strict=True))
+
+
+@dataclass(frozen=True)
+class PlaceGroup:
+    """The places one group of a placement bracket ends on, and the slots in it.
+
+    A group of one slot holds one place; a group that stopped, because its
+    players reached the losses the stage allows, shares its range.
+    """
+
+    first: int
+    last: int
+    slots: tuple[Slot, ...]
+
+
+def placement_plan(field: int, lives: int | None = None) -> Plan:
+    """Every series of a placement bracket, round by round.
+
+    Every round splits each group into its winners and its losers, and a group
+    is the range of places it plays for, so the last round decides every place.
+    A group whose players have lost `lives` times stops there and shares its
+    places; None plays every place. The field is padded to a power of two: a
+    side facing an empty slot passes on unplayed, so no series waits for a side
+    that never comes, and the places close up over the padding. The series of
+    places 1 and 2 is a round of its own, the final, so it plays its own best-of.
+    """
+    size = _power_of_two(field)
+    depth = size.bit_length() - 1
+    start = [Slot(seed=seed) if seed <= field else None for seed in bracket_order(size)]
+    # A group: its first padded place, the slots standing in it, the losses they carry
+    groups: list[tuple[int, list[Slot | None], int]] = [(1, start, 0)]
+    # Each series as (step, slot1, slot2, its group's padded places)
+    made: list[tuple[int, Slot, Slot, tuple[int, int]]] = []
+    ends: list[tuple[int, list[Slot]]] = []
+    step = 0
+    while groups:
+        following: list[tuple[int, list[Slot | None], int]] = []
+        for first, slots, losses in groups:
+            real = [slot for slot in slots if slot is not None]
+            if not real:
+                continue
+            if len(slots) == 1 or (lives is not None and losses >= lives):
+                ends.append((first, real))
+                continue
+            winners: list[Slot | None] = []
+            losers: list[Slot | None] = []
+            for top, bottom in zip(slots[::2], slots[1::2], strict=True):
+                if top is None or bottom is None:
+                    winners.append(top or bottom)
+                    losers.append(None)
+                    continue
+                index = len(made)
+                made.append((step, top, bottom, (first, first + len(slots) - 1)))
+                winners.append(Slot(feeder=index))
+                losers.append(Slot(feeder=index, takes_loser=True))
+            half = len(slots) // 2
+            following += [(first, winners, losses), (first + half, losers, losses + 1)]
+        groups = following
+        step += 1
+
+    # The places close up over the padding: a padded place counts the real
+    # slots that end above it
+    ends.sort(key=lambda end: end[0])
+
+    def closed(first: int, last: int) -> tuple[int, int]:
+        above = sum(len(real) for start_at, real in ends if start_at < first)
+        inside = sum(len(real) for start_at, real in ends if first <= start_at <= last)
+        return above + 1, above + max(inside, 1)
+
+    # The last step is the final for places 1 and 2, and the last round for the rest
+    final_step = depth - 1
+    others = any(at == final_step and group[0] != 1 for at, _, _, group in made)
+    rounds = [f"Round {number}" for number in range(1, final_step + 1)]
+    if others:
+        rounds.append("Last round")
+    rounds.append("Final")
+
+    def round_of(at: int, group: tuple[int, int]) -> int:
+        if at < final_step:
+            return at
+        return len(rounds) - 1 if group[0] == 1 else len(rounds) - 2
+
+    series = [
+        PlannedSeries(index, round_of(at, group), top, bottom)
+        for index, (at, top, bottom, group) in enumerate(made)
+    ]
+    roles = [
+        {"Final": "final", "Last round": "last_round"}.get(name) for name in rounds
+    ]
+    finish = [
+        PlaceGroup(*closed(start_at, start_at + len(real) - 1), tuple(real))
+        for start_at, real in ends
+    ]
+    return Plan(
+        rounds,
+        series,
+        roles,
+        places=[closed(*group) for _, _, _, group in made],
+        finish=finish,
+    )
 
 
 def koth_chain(field: int) -> Plan:

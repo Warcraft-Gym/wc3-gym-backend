@@ -8,6 +8,7 @@ refuses here and names it.
 from collections.abc import Callable
 from typing import Any
 
+import pytest
 from httpx2 import Client, Response
 
 from app.core.db import Session
@@ -107,7 +108,8 @@ def test_a_members_event_refuses_a_caller_with_no_session(client: Client) -> Non
 def test_a_captain_enters_the_team_and_another_member_may_not(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
-    event = add_event(kind=EventKind.cup, league_id=seeded["league_id"])
+    event = add_event(kind=EventKind.signup, league_id=seeded["league_id"])
+    cup = add_event(kind=EventKind.cup, league_id=seeded["league_id"], name="Team Cup")
     with Session.begin() as session:
         session.add(
             DBTeamSeasonCaptain(
@@ -125,13 +127,20 @@ def test_a_captain_enters_the_team_and_another_member_may_not(
     refused = sign_up(client, event, member("2"), team_id=seeded["team_b_id"])
     assert refused.status_code == 403
     assert refused.json() == {"error": "Only a captain of the team enters it"}
+    # a cup enters the teams made for it, and refuses a league team
+    league_team = sign_up(client, cup, member("1"), team_id=seeded["team_a_id"])
+    assert league_team.status_code == 400
+    assert league_team.json() == {
+        "error": "A cup enters the teams made for it, not a league team"
+    }
 
 
 def test_the_signup_refuses_when_it_is_closed_full_or_already_taken(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
-    """No waiting list is built: a full event refuses and says so."""
-    event = add_event(kind=EventKind.cup, entrant_cap=1)
+    """A sign-up list keeps no waiting list: a full one refuses and says so.
+    A full cup takes the signup onto its waitlist instead."""
+    event = add_event(kind=EventKind.signup, entrant_cap=1)
     assert sign_up(client, event, member("1")).status_code == 201
 
     full = sign_up(client, event, member("2"))
@@ -139,6 +148,14 @@ def test_the_signup_refuses_when_it_is_closed_full_or_already_taken(
     assert full.json() == {"error": "The event is full at 1 entrants"}
     twice = sign_up(client, event, member("1"))
     assert twice.json() == {"error": "This entrant is already signed up"}
+
+    cup = add_event(kind=EventKind.cup, entrant_cap=1, name="Full Cup")
+    assert sign_up(client, cup, member("1")).status_code == 201
+    waits = sign_up(client, cup, member("2"))
+    assert waits.status_code == 201, waits.text
+    assert waits.json()["waitlisted_at"] is not None
+    again = sign_up(client, cup, member("2"))
+    assert again.json() == {"error": "This entrant is on the waitlist already"}
 
     set_fields(event, signups_open=False)
     closed = sign_up(client, event, member("3"))
@@ -326,7 +343,7 @@ def test_a_team_enters_on_no_race_and_carries_its_note(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
     """A team fields the races of its roster, so its row names none of them."""
-    event = add_event(kind=EventKind.cup, league_id=seeded["league_id"])
+    event = add_event(kind=EventKind.signup, league_id=seeded["league_id"])
     with Session.begin() as session:
         session.add(
             DBTeamSeasonCaptain(
@@ -419,3 +436,286 @@ def test_the_games_warning_counts_only_the_seasons_the_window_names(
 
     set_fields(event, min_games_seasons=3)
     assert entrants(client, event)[0]["warnings"] == []
+
+
+def eligible_cup(**fields: Any) -> int:  # noqa: ANN401
+    """A cup that refuses a signup outside its bounds."""
+    return add_event(kind=EventKind.cup, eligibility_required=True, **fields)
+
+
+def link_battle_net(user_id: int) -> None:
+    """The player's active battle tag, verified through Battle.net."""
+    from app.services.battle_tags import active_row
+
+    with Session.begin() as session:
+        row = active_row(session, user_id)
+        assert row is not None
+        row.bnet_account_id = f"acc-{user_id}"
+
+
+def rate(user_id: int, mmr: int, games: int = 40, race: Race = Race.HU) -> None:
+    with Session.begin() as session:
+        session.add(
+            W3CStats(user_id=user_id, race=race, wc3_season=22, games=games, mmr=mmr)
+        )
+
+
+def no_refresh(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str]]:
+    """Record the W3Champions asks a signup makes, and make none."""
+    from app.services import events
+
+    asked: list[tuple[int, str]] = []
+    monkeypatch.setattr(
+        events,
+        "refresh_rating",
+        lambda user_id, tag, *rest: asked.append((user_id, tag)),
+    )
+    return asked
+
+
+def test_an_eligible_cup_takes_a_linked_player_rated_inside_its_bounds(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked = no_refresh(monkeypatch)
+    event = eligible_cup(mmr_min=1400, mmr_max=1800, min_games=20)
+    player = seeded["player_ids"][0]
+    link_battle_net(player)
+    rate(player, 1600)
+
+    created = sign_up(client, event, member("1"))
+
+    assert created.status_code == 201, created.text
+    assert created.json()["warnings"] == []
+    # the rating of the day was asked for once, for that player
+    assert [user_id for user_id, _ in asked] == [player]
+
+
+def test_an_eligible_cup_refuses_each_rule_it_names(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    no_refresh(monkeypatch)
+    player = seeded["player_ids"][0]
+    headers = member("1")
+
+    unrated = sign_up(client, eligible_cup(name="Unrated"), headers)
+    assert unrated.status_code == 400
+    assert "no rating" in unrated.json()["error"]
+
+    rate(player, 1300, games=10)
+    low = sign_up(client, eligible_cup(name="Low", mmr_min=1400), headers)
+    assert low.status_code == 400
+    assert "rated 1300 on Human" in low.json()["error"]
+    high = sign_up(client, eligible_cup(name="High", mmr_max=1200), headers)
+    assert high.status_code == 400
+    games = sign_up(client, eligible_cup(name="Games", min_games=20), headers)
+    assert games.status_code == 400
+    assert "10 games on Human" in games.json()["error"]
+
+
+def test_the_battle_net_link_is_asked_for_only_where_the_event_turns_it_on(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rated player with no Battle.net link enters a checked cup, and is
+    refused by one that also asks for the link."""
+    no_refresh(monkeypatch)
+    player = seeded["player_ids"][0]
+    headers = member("1")
+    rate(player, 1600)
+
+    taken = sign_up(client, eligible_cup(name="Rated only"), headers)
+    assert taken.status_code == 201, taken.text
+
+    linked_cup = eligible_cup(name="Linked only", bnet_required=True)
+    refused = sign_up(client, linked_cup, headers)
+    assert refused.status_code == 400
+    assert "linked to Battle.net" in refused.json()["error"]
+    link_battle_net(player)
+    assert sign_up(client, linked_cup, headers).status_code == 201
+
+
+def test_a_hand_added_player_is_held_to_the_same_rules(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    no_refresh(monkeypatch)
+    event = eligible_cup(mmr_min=1400)
+    player = seeded["player_ids"][0]
+    link_battle_net(player)
+    rate(player, 1300)
+
+    refused = client.post(
+        f"/events/{event}/entrants/admin",
+        json={"user_id": player, "race": "HU"},
+        headers=auth_headers,
+    )
+    assert refused.status_code == 400
+    assert "rated 1300" in refused.json()["error"]
+
+
+def test_an_event_without_the_switch_still_only_warns_and_asks_nothing(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked = no_refresh(monkeypatch)
+    event = add_event(kind=EventKind.cup, mmr_min=1400)
+    rate(seeded["player_ids"][0], 1300)
+
+    created = sign_up(client, event, member("1"))
+
+    assert created.status_code == 201, created.text
+    assert created.json()["warnings"] == ["under_mmr_min"]
+    assert asked == []
+
+
+def test_the_bounds_must_hold_together(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    body = {"name": "Bounds Cup", "kind": "cup", "stages": []}
+    anyone = client.post(
+        "/events",
+        json=body
+        | {
+            "eligibility_required": True,
+            "bnet_required": True,
+            "signup_policy": "anyone",
+        },
+        headers=auth_headers,
+    )
+    assert anyone.status_code == 400
+    assert "members only" in anyone.json()["error"]
+    # the Battle.net link is a part of the check, so it needs the check on
+    alone = client.post(
+        "/events", json=body | {"bnet_required": True}, headers=auth_headers
+    )
+    assert alone.status_code == 400
+    # without the link, a battle tag is enough for the rating, so anyone may sign up
+    rated = client.post(
+        "/events",
+        json=body
+        | {
+            "name": "Rated Cup",
+            "eligibility_required": True,
+            "signup_policy": "anyone",
+        },
+        headers=auth_headers,
+    )
+    assert rated.status_code == 201, rated.text
+    upside = client.post(
+        "/events", json=body | {"mmr_min": 1800, "mmr_max": 1400}, headers=auth_headers
+    )
+    assert upside.status_code == 400
+    made = client.post(
+        "/events",
+        json=body
+        | {
+            "eligibility_required": True,
+            "bnet_required": True,
+            "mmr_min": 1400,
+            "mmr_max": 1800,
+        },
+        headers=auth_headers,
+    )
+    assert made.status_code == 201, made.text
+    switched = client.put(
+        f"/events/{made.json()['id']}",
+        json={"signup_policy": "anyone"},
+        headers=auth_headers,
+    )
+    assert switched.status_code == 400
+
+
+def test_a_cup_rates_a_player_on_the_races_they_have_really_played(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rating from a handful of games on another race never stands for the
+    player: the best rating among the races with enough lifetime games does."""
+    no_refresh(monkeypatch)
+    player = seeded["player_ids"][0]
+    headers = member("1")
+    # three games of Undead at 1300, a career of Night Elf at 800
+    rate(player, 1300, games=3, race=Race.UD)
+    rate(player, 800, games=15, race=Race.NE)
+    with Session.begin() as session:
+        session.add(
+            W3CStats(user_id=player, race=Race.NE, wc3_season=15, games=30, mmr=900)
+        )
+
+    capped = eligible_cup(name="Capped", mmr_max=1000, race_games_min=20)
+    taken = sign_up(client, capped, headers)
+    assert taken.status_code == 201, taken.text
+    floor = eligible_cup(name="Floor", mmr_min=1000, race_games_min=20)
+    refused = sign_up(client, floor, headers)
+    assert refused.status_code == 400
+    assert "rated 800 on Night Elf" in refused.json()["error"]
+
+
+def test_a_cup_refuses_a_player_with_no_race_over_its_games(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    no_refresh(monkeypatch)
+    rate(seeded["player_ids"][0], 1500, games=5)
+    refused = sign_up(client, eligible_cup(race_games_min=20), member("1"))
+    assert refused.status_code == 400
+    assert "No race of P1#1111 has 20 games" in refused.json()["error"]
+
+
+def test_a_players_past_seasons_are_read_once_and_kept(
+    seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seasons before the window are read once; the stamp spares the next ask."""
+    from app.models.user import User, UserReduced
+    from app.models.w3c_stats import W3CStatsCreate
+    from app.services.settings import SettingsService
+    from app.services.users import UserService
+    from app.services.w3c import W3CService
+
+    asked: list[int | None] = []
+
+    def stats(
+        self: W3CService, tag: str, season_override: int | None = None
+    ) -> list[W3CStatsCreate]:
+        asked.append(season_override)
+        return [
+            W3CStatsCreate(
+                wc3_season=season_override or 0, race=Race.NE, games=10, mmr=900
+            )
+        ]
+
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 22)
+    monkeypatch.setattr(
+        W3CService, "participated_seasons", lambda self, tag: [15, 18, 21, 22]
+    )
+    monkeypatch.setattr(W3CService, "get_player_stats", stats)
+    player = seeded["player_ids"][0]
+    service = UserService(settings_app_service=SettingsService())
+
+    service.backfill_w3c_history(UserReduced(id=player, battleTag="P1#1111"))
+    # the window is 22 and 21, so the history reaches 20
+    assert asked == [15, 18]
+    with Session.begin() as session:
+        user = session.get(User, player)
+        assert user is not None
+        assert user.w3c_history_through == 20
+
+    asked.clear()
+    service.backfill_w3c_history(UserReduced(id=player, battleTag="P1#1111"))
+    assert asked == []

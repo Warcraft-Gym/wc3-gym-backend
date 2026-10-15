@@ -882,7 +882,7 @@ def test_a_bracket_series_holds_its_feeders_and_no_sides_until_they_are_scored(
 ) -> None:
     """A generated series names the two it takes its sides from; the sides
     stay null until those are played."""
-    from app.models.series import Series, SeriesFeedersPublic
+    from app.models.series import Series
 
     with Session.begin() as session:
         played = session.query(Series).order_by(col(Series.id)).first()
@@ -901,14 +901,13 @@ def test_a_bracket_series_holds_its_feeders_and_no_sides_until_they_are_scored(
         session.add(final)
         session.flush()
         assert (final.player1_id, final.player2_id) == (None, None)
-        assert SeriesFeedersPublic.from_series(final).to_dict() == {
-            "id": final.id,
-            "result_kind": "walkover",
-            "slot1_from_series_id": played.id,
-            "slot1_takes_loser": False,
-            "slot2_from_series_id": played.id,
-            "slot2_takes_loser": True,
-        }
+        assert (
+            final.result_kind,
+            final.slot1_from_series_id,
+            final.slot1_takes_loser,
+            final.slot2_from_series_id,
+            final.slot2_takes_loser,
+        ) == ("walkover", played.id, False, played.id, True)
         # Every series that already exists is played and carries no feeder
         assert (played.result_kind, played.sequence, played.side_size) == (
             "played",
