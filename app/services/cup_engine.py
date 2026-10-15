@@ -2058,12 +2058,17 @@ def _reached(
     stage: EventStage,
     order: Sequence[int],
     series: Sequence[CupSeries],
-) -> dict[int, tuple[int, int]]:
-    """How far each entrant went: the last round he stood in, then his wins.
+) -> dict[int, tuple[int, int, int]]:
+    """How far each entrant went: the last round he stood in, whether he won
+    there, then his wins.
 
-    The third place series is drawn in the final round but decides places 3
-    and 4, so it counts as a win and never as depth: the two it sends down
-    stay at the semi-final they lost, below the runner up.
+    The winner of a series stands one step past its loser, which decides a
+    final no later series holds. A series whose loser plays on while its
+    winner goes no further, the upper bracket final of a double elimination
+    with no grand final, crowns its winner past every round. The third place
+    series is drawn in the final round but decides places 3 and 4, so it
+    counts as a win and never as depth: the two it sends down stay at the
+    semi-final they lost, below the runner up.
     """
     numbers = {
         round_row.id: round_row.number
@@ -2074,17 +2079,31 @@ def _reached(
         )
     }
     third = _third_place(stage, numbers, series)
-    depth = dict.fromkeys(order, 0)
+    fed = {
+        (feeder, takes_loser)
+        for row in series
+        for feeder, takes_loser in (
+            (row.slot1_from_series_id, row.slot1_takes_loser),
+            (row.slot2_from_series_id, row.slot2_takes_loser),
+        )
+        if feeder is not None
+    }
+    past = max(numbers.values(), default=0) + 1
+    depth = dict.fromkeys(order, (0, 0))
     won = dict.fromkeys(order, 0)
     for row in series:
+        winner = entrant_of(row)
         if row is not third:
+            number = numbers.get(row.round_id, 0)
+            crowns = (ident(row), True) in fed and (ident(row), False) not in fed
             for side in (row.entrant1_id, row.entrant2_id):
                 if side in depth:
-                    depth[side] = max(depth[side], numbers.get(row.round_id, 0))
-        winner = entrant_of(row)
+                    step = int(side == winner)
+                    held = (past if crowns and step else number, step)
+                    depth[side] = max(depth[side], held)
         if winner in won:
             won[winner] += 1
-    return {entrant: (depth[entrant], won[entrant]) for entrant in order}
+    return {entrant: (*depth[entrant], won[entrant]) for entrant in order}
 
 
 def placement_places(

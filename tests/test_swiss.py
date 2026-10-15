@@ -206,6 +206,22 @@ def test_an_odd_field_gives_the_bye_to_the_lowest_entrant_without_one(
     assert (line["points"], line["won"], line["game_diff"]) == (9, 3, 6)
 
 
+def test_a_runner_scores_a_bye_again_after_clearing_it(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A bye names one side only, and still takes a runner's result."""
+    event, (stage,) = swiss(3)
+    draw(client, auth_headers, event, stage)
+    [bye] = [row for row in bracket(stage) if row["sides"][1] is None]
+    clear = {"player1_score": None, "player2_score": None}
+
+    cleared = client.put(f"/cup-series/{bye['id']}", json=clear, headers=auth_headers)
+    assert cleared.status_code == 200, cleared.text
+    assert score(client, auth_headers, bye["id"], 2, 0).status_code == 200
+    [bye] = [row for row in bracket(stage) if row["id"] == bye["id"]]
+    assert bye["score"] == (2, 0)
+
+
 def test_a_stage_ended_after_two_rounds_advances_the_table_as_it_stands(
     client: Client, auth_headers: dict[str, str]
 ) -> None:

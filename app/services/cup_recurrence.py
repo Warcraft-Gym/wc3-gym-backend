@@ -1,11 +1,13 @@
 """A cup that repeats on a rule, and the cups made from it.
 
-A runner of a cup sets up a rule from it: a weekday, every week or the nth of
-the month, a local start time and an optional last day. The cup becomes the
-rule's first occurrence. The rule's page lists its cups and its next days;
-"Create" on a day copies the latest occurrence onto that day as a cup of its
-own: its format and stages, its rounds shifted by the same days, its map pool,
-its sign-up rules, its divisions choice, its points table and its organizers.
+A runner of a cup who holds an organizer grant sets up a rule from it: a
+weekday, every week or the nth of the month, a local start time and an
+optional last day. The cup becomes the rule's first occurrence. The rule's
+page lists its cups and its next days; "Create" on a day copies the latest
+occurrence onto that day as a cup of its own: its format and stages, its
+rounds shifted by the same days, its map pool, its sign-up rules, its
+divisions choice, its points table and its organizers. Changing the rule and
+making a cup from it take a grant too; any runner of its latest cup stops it.
 No job makes a cup by itself.
 """
 
@@ -120,6 +122,7 @@ def create(
 ) -> CupRecurrencePublic:
     """Set up a rule from a cup, which becomes its first occurrence."""
     with Session.begin() as session:
+        _hold_grant(session, claims)
         rule = create_in(session, _cup(session, event_id), data, str(claims["sub"]))
         return _public(session, rule)
 
@@ -191,6 +194,7 @@ def update(
     with Session.begin() as session:
         rule = _rule(session, recurrence_id)
         _hold_runner(session, rule, claims)
+        _hold_grant(session, claims)
         changes = data.model_dump(exclude_unset=True)
         if changes.get("ends_on") is not None and changes["ends_on"] < rule.starts_on:
             raise BadRequestError("The last day comes after the first cup's day")
@@ -221,6 +225,7 @@ def create_occurrence(
     with Session.begin() as session:
         rule = _rule(session, recurrence_id)
         template = _hold_runner(session, rule, claims)
+        _hold_grant(session, claims)
         if not names_day(rule, day):
             raise BadRequestError("The rule plays on no such day")
         if day < _today(rule):
@@ -393,6 +398,13 @@ def _hold_runner(
     if not organizers.runs_in(session, claims, ident(template)):
         raise ApiError(403, {"error": "Only the cup's organizers"})
     return template
+
+
+def _hold_grant(session: OrmSession, claims: dict[str, Any]) -> None:
+    """Refuse a caller who may not create events: a rule makes cups, so it
+    needs an admin or a member with a grant, as POST /events does."""
+    if not organizers.is_organizer_in(session, claims):
+        raise ApiError(403, {"error": "Organizers only"})
 
 
 def _rule(session: OrmSession, recurrence_id: int) -> CupRecurrence:

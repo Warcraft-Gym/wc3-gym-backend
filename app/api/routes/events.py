@@ -604,7 +604,8 @@ def get_overall(event_id: int, response: Response) -> CupOverallPublic:
 def repeat_cup(
     event_id: int, data: CupRecurrenceWrite, claims: RequireEventRunner
 ) -> CupRecurrencePublic:
-    """Set up a rule that repeats the cup; the cup becomes its first occurrence."""
+    """Set up a rule that repeats the cup; the cup becomes its first occurrence.
+    A runner of the cup who holds an organizer grant alone."""
     return cup_recurrence.create(event_id, data, claims)
 
 
@@ -631,13 +632,14 @@ def update_cup_recurrence(
     recurrence_id: int, data: CupRecurrenceUpdate, claims: RequireLogin
 ) -> CupRecurrencePublic:
     """Rename the rule, move its start time or set its last day; a runner of
-    its latest cup alone."""
+    its latest cup who holds an organizer grant alone."""
     return cup_recurrence.update(recurrence_id, data, claims)
 
 
 @router.delete("/cup-recurrences/{recurrence_id}", status_code=204)
 def delete_cup_recurrence(recurrence_id: int, claims: RequireLogin) -> None:
-    """Stop repeating; every cup made from the rule stays."""
+    """Stop repeating, which any runner of its latest cup may do; every cup
+    made from the rule stays."""
     cup_recurrence.delete(recurrence_id, claims)
 
 
@@ -649,8 +651,8 @@ def create_cup_occurrence(
     background: BackgroundTasks,
 ) -> EventPublic:
     """Make the rule's cup on one of its coming days, a copy of the latest cup
-    with its organizers; a runner of that cup alone. A published copy with
-    its signups open is announced."""
+    with its organizers; a runner of that cup who holds an organizer grant
+    alone. A published copy with its signups open is announced."""
     made = cup_recurrence.create_occurrence(recurrence_id, data.on, claims)
     background.add_task(cup_announcements.announce_open, made.id)
     return made
