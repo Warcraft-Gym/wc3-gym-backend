@@ -559,24 +559,25 @@ NOT_CHECKED_IN = (
 
 
 def seated_in(session: OrmSession, row: CupSeries, user_id: int) -> bool:
-    """Whether the player sits in the lobby: in a seat of their own, or as a
-    player of the cup team a seat holds."""
-    seats = _seats(session, ident(row))
-    if any(side.user_id == user_id for side in seats):
-        return True
-    entrant_ids = [side.entrant_id for side in seats if side.entrant_id is not None]
-    if not entrant_ids:
-        return False
+    """Whether the player sits in the lobby for an entrant still in the cup: in
+    a seat of their own, or as a player of the cup team a seat holds."""
     return (
         session.scalar(
-            select(col(CupTeamMember.user_id))
-            .join(
-                EventEntrant,
-                col(EventEntrant.cup_team_id) == col(CupTeamMember.team_id),
+            select(col(CupSeriesSide.side_no))
+            .outerjoin(
+                EventEntrant, col(EventEntrant.id) == col(CupSeriesSide.entrant_id)
+            )
+            .outerjoin(
+                CupTeamMember,
+                col(CupTeamMember.team_id) == col(EventEntrant.cup_team_id),
             )
             .where(
-                col(EventEntrant.id).in_(entrant_ids),
-                col(CupTeamMember.user_id) == user_id,
+                col(CupSeriesSide.series_id) == ident(row),
+                col(EventEntrant.withdrawn_at).is_(None),
+                or_(
+                    col(CupSeriesSide.user_id) == user_id,
+                    col(CupTeamMember.user_id) == user_id,
+                ),
             )
             .limit(1)
         )

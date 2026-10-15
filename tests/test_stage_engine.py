@@ -715,6 +715,63 @@ def test_a_result_needs_both_sides_of_the_series(
     assert bracket(stage)[2]["score"] == (None, None)
 
 
+def award(client: Client, headers: dict[str, str], series_id: int, winner: int) -> Any:  # noqa: ANN401
+    """A runner's walkover on a cup series, to the side `winner` names."""
+    return client.put(
+        f"/cup-series/{series_id}/result-kind",
+        json={"result_kind": "walkover", "winner": winner},
+        headers=headers,
+    )
+
+
+def test_a_walkover_waits_on_the_series_that_feeds_an_empty_side(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A final whose other semi-final is unplayed takes no walkover for either
+    side, and takes one once that semi-final fills it."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    first, second, final = bracket(stage)
+    assert score(client, auth_headers, first["id"], 2, 0).status_code == 200
+    [final] = [row for row in bracket(stage) if row["id"] == final["id"]]
+    empty = final["sides"].index(None) + 1
+
+    for winner in (1, 2):
+        refused = award(client, auth_headers, final["id"], winner)
+        assert refused.status_code == 400, refused.text
+        assert refused.json() == {
+            "error": "A side of the series waits on the series before it"
+        }
+    assert score(client, auth_headers, second["id"], 2, 0).status_code == 200
+    [final] = [row for row in bracket(stage) if row["id"] == final["id"]]
+    assert final["score"] == (None, None)
+    awarded = award(client, auth_headers, final["id"], empty)
+    assert awarded.status_code == 200, awarded.text
+
+
+def test_a_cleared_padded_walkover_goes_back_to_its_one_side(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A padded pair's walkover, once cleared, is awarded again to the side
+    that stands in it, and never to its empty side."""
+    event, (stage,) = cup(6, StageFormat.double_elimination)
+    generate(client, auth_headers, event, stage)
+    padded = next(row for row in bracket(stage) if row["result_kind"] == "walkover")
+    empty = padded["sides"].index(None) + 1
+    path = f"/cup-series/{padded['id']}"
+    assert client.delete(f"{path}/result", headers=auth_headers).status_code == 200
+
+    refused = award(client, auth_headers, padded["id"], empty)
+    assert refused.status_code == 400, refused.text
+    assert refused.json() == {
+        "error": "A walkover or a forfeit goes to a side that plays"
+    }
+    awarded = award(client, auth_headers, padded["id"], 3 - empty)
+    assert awarded.status_code == 200, awarded.text
+    [row] = [row for row in bracket(stage) if row["id"] == padded["id"]]
+    assert (row["score"], row["result_kind"]) == (padded["score"], "walkover")
+
+
 def test_the_standings_read_the_points_the_stage_pays(
     client: Client, auth_headers: dict[str, str]
 ) -> None:

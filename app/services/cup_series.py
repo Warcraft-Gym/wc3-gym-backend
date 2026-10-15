@@ -164,6 +164,8 @@ def report(
             played = series_games.parse(data.games)
             if played:
                 series_games.check(played, data.player1_score, data.player2_score)
+            # a reported score is a played result, even over a walkover or a forfeit
+            row.result_kind = "played"
         fields = data.model_fields_set
         races = {
             side: _race(getattr(data, side))
@@ -244,10 +246,12 @@ def clear(
 def award(
     series_id: int, data: ResultKindWrite, claims: dict[str, Any] | None
 ) -> CupSeriesPublic:
-    """A runner scores a series no game was played for: a walkover or a forfeit."""
+    """A runner scores a series no game was played for, a walkover or a
+    forfeit, once both its sides are known."""
     with Session.begin() as session:
         row = _open_series(session, series_id)
         Caller(session, claims, row).hold_runner()
+        _hold_known_sides(session, row, data.winner)
         cup_engine.set_result_kind(session, row, data)
         return cup_engine.read_one(session, row)
 
@@ -338,18 +342,38 @@ def _withdrawn(session: OrmSession, row: CupSeries, side: int | None) -> bool:
     return entrant is not None and entrant.withdrawn_at is not None
 
 
-def _hold_both_sides(session: OrmSession, row: CupSeries) -> None:
+def _hold_both_sides(
+    session: OrmSession, row: CupSeries, first: int, second: int
+) -> None:
     """Refuse a result for a series with an empty side. The bye of a stage
-    drawn round by round names its one entrant only, so it takes one."""
-    first, second = stands_on_side(row, 1), stands_on_side(row, 2)
-    if first is not None and second is not None:
+    drawn round by round names its one entrant only, so it takes a result
+    that entrant wins."""
+    side1, side2 = stands_on_side(row, 1), stands_on_side(row, 2)
+    if side1 is not None and side2 is not None:
         return
     round_row = session.get(DBEventRound, row.round_id)
     stage_id = round_row.stage_id if round_row is not None else None
     stage = session.get(EventStage, stage_id) if stage_id is not None else None
-    if first is not None and stage is not None and cup_engine.draws_by_round(stage):
-        return
+    if side1 is not None and stage is not None and cup_engine.draws_by_round(stage):
+        if first > second:
+            return
+        raise BadRequestError("A bye takes only a result its entrant wins")
     raise BadRequestError("A result needs both sides of the series")
+
+
+def _hold_known_sides(session: OrmSession, row: CupSeries, winner: int) -> None:
+    """Refuse a walkover or a forfeit while a side waits on the series that
+    feeds it, or one given to an empty side. An empty side nothing feeds, as
+    in a padded pair, stays empty."""
+    for side in (1, 2):
+        if stands_on_side(row, side) is not None:
+            continue
+        feeder_id = row.slot1_from_series_id if side == 1 else row.slot2_from_series_id
+        feeder = session.get(CupSeries, feeder_id) if feeder_id else None
+        if feeder is not None and not scored(feeder):
+            raise BadRequestError("A side of the series waits on the series before it")
+        if side == winner:
+            raise BadRequestError("A walkover or a forfeit goes to a side that plays")
 
 
 def _race(named: str | None) -> Race | None:
@@ -391,8 +415,8 @@ def _write(
                 f"A series of this cup ends at {wins} map wins, or 0-0 when it "
                 "was never played"
             )
-        if first is not None:
-            _hold_both_sides(session, row)
+        if first is not None and second is not None:
+            _hold_both_sides(session, row, first, second)
         row.player1_score, row.player2_score = first, second
     for side, race in races.items():
         setattr(row, side, race)

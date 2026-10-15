@@ -158,6 +158,32 @@ def test_a_side_cannot_report_over_a_walkover_or_a_forfeit(
     assert corrected.status_code == 200, corrected.text
 
 
+def test_a_runner_report_over_a_walkover_is_a_played_result(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A runner who reports the games of a walkover makes it a played series."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    semi = bracket(stage)[0]
+    path = f"/cup-series/{semi['id']}"
+    awarded = client.put(
+        f"{path}/result-kind",
+        json={"result_kind": "walkover", "winner": 1},
+        headers=auth_headers,
+    )
+    assert awarded.status_code == 200, awarded.text
+
+    reported = client.put(
+        f"{path}/report",
+        json={"player1_score": 2, "player2_score": 1},
+        headers=auth_headers,
+    )
+    assert reported.status_code == 200, reported.text
+    assert reported.json()["result_kind"] == "played"
+    [row] = [row for row in bracket(stage) if row["id"] == semi["id"]]
+    assert (row["score"], row["result_kind"]) == ((2, 1), "played")
+
+
 def test_a_withdrawn_player_acts_for_no_side(
     client: Client, auth_headers: dict[str, str], member: Member
 ) -> None:
