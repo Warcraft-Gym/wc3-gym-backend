@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, cups announce themselves to the members who opt in, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T19:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T09:45:00Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py

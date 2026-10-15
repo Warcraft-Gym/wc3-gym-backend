@@ -4,7 +4,7 @@ title: Testing
 description: The suite migrates a temporary SQLite file with Alembic, opens no socket, and holds guard tests that pin contracts, statement counts and memory.
 resource: ../../../tests/conftest.py
 tags: [testing]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T14:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T09:45:00Z }
 sources:
   - id: conftest
     resource: ../../../tests/conftest.py

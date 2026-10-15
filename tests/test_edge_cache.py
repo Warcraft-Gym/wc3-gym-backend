@@ -22,6 +22,7 @@ ROUTES = [
     ("/config/w3c", SETTLED),
     ("/config/settings/score_system", SETTLED),
     ("/koth/winners", SETTLED),
+    ("/cup-recurrences", RUNNING),
     ("/users/{player}", RUNNING),
     ("/users/{player}/summary", RUNNING),
     ("/users/{player}/ladder", RUNNING),
@@ -180,6 +181,29 @@ def test_an_event_is_not_cached_for_a_signed_in_caller(
     resp = client.get(f"/events/{event_id}", headers=auth_headers)
     assert resp.status_code == 200
     assert "public" not in resp.headers.get("cache-control", "")
+
+
+def test_a_cups_overall_table_is_cached_by_its_phase(client: Client) -> None:
+    from app.models.enums import EventKind
+
+    event_id, _ = staged_event(kind=EventKind.cup)
+    resp = client.get(f"/events/{event_id}/overall")
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["cache-control"] == RUNNING
+
+
+def test_a_rule_page_is_cached_for_an_anonymous_caller_only(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    # a runner makes the next cup from this page, so only the anonymous answer is shared
+    from tests.test_cup_recurrence import repeat
+
+    _, made = repeat(client, auth_headers)
+    resp = client.get(f"/cup-recurrences/{made['id']}")
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["cache-control"] == RUNNING
+    signed_in = client.get(f"/cup-recurrences/{made['id']}", headers=auth_headers)
+    assert "public" not in signed_in.headers.get("cache-control", "")
 
 
 def test_events_is_not_cached_for_an_admin(

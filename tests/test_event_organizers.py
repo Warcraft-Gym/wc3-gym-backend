@@ -19,6 +19,7 @@ from app.models.cup_series import CupSeries
 from app.models.enums import LeagueKind
 from app.models.league import League
 from app.models.season import Season
+from app.models.user import User
 from app.services import organizers
 from tests.test_stage_engine import cup, players
 
@@ -474,3 +475,52 @@ def test_a_cancel_closes_without_places_and_a_reopen_takes_it_back(
     assert reopened.status_code == 200, reopened.text
     assert reopened.json()["cancelled_at"] is None
     assert reopened.json()["closed_at"] is None
+
+
+def test_a_finished_cup_takes_no_series_write_until_it_is_reopened(
+    client: Client, auth_headers: Headers, member: Member
+) -> None:
+    """Every write on a series of a finished or called off cup answers 400,
+    to its runner and its players alike; its reads still answer, and a reopen
+    takes writes again."""
+    grant(client, auth_headers, "50")
+    headers = member("50")
+    event = create(client, headers)
+    enter(client, headers, event["id"], players(2))
+    assert draw(client, headers, event).status_code == 200
+    with Session.begin() as session:
+        series = session.scalars(select(CupSeries)).one()
+        series_id = series.id
+        loser = member(session.get_one(User, series.player2_id).discordId)
+    path = f"/cup-series/{series_id}"
+    won = {"player1_score": 2, "player2_score": 0}
+    turned = {"player1_score": 0, "player2_score": 2}
+    assert client.put(path, json=won, headers=headers).status_code == 200
+    writes = [
+        ("PUT", f"{path}/report", turned),
+        ("PUT", path, won),
+        ("DELETE", f"{path}/result", None),
+        ("PUT", f"{path}/result-kind", {"result_kind": "walkover", "winner": 1}),
+        ("PUT", f"{path}/places", {"places": []}),
+        ("PUT", f"{path}/lobby-map", {"map_id": 1}),
+        ("PUT", f"{path}/sides", {"entrant_ids": []}),
+        ("PUT", f"{path}/veto", {"action": "undo"}),
+    ]
+
+    for close in ("finish", "cancel"):
+        closed = client.post(f"/events/{event['id']}/{close}", headers=headers)
+        assert closed.status_code == 200, closed.text
+        for caller in (headers, loser):
+            for method, url, body in writes:
+                refused = client.request(method, url, json=body, headers=caller)
+                assert refused.status_code == 400, (url, refused.text)
+                assert refused.json() == {
+                    "error": "The cup is finished; reopen it first"
+                }
+        for url in (path, f"{path}/games"):
+            assert client.get(url).status_code == 200
+        reopened = client.post(f"/events/{event['id']}/reopen", headers=headers)
+        assert reopened.status_code == 200, reopened.text
+
+    flipped = client.put(f"{path}/report", json=turned, headers=loser)
+    assert flipped.status_code == 200, flipped.text

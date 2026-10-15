@@ -17,6 +17,7 @@ from app.models.event_stage import EventStage
 from app.models.relationships import DBMapSeason
 from app.models.season import Season
 from tests.test_cup_best_of import maps
+from tests.test_cup_withdraw import entrant_of, withdraw
 from tests.test_stage_engine import generate, players, players_of
 
 # What every lobby of this event pays its places, best place first
@@ -330,6 +331,26 @@ def test_a_player_of_the_lobby_reports_its_places_and_an_outsider_cannot(
     reported = play(client, inside, first, by_seed(first, seeds))
     assert reported.status_code == 200, reported.text
     assert sorted(side["place"] for side in reported.json()["sides"]) == [1, 2, 3, 4]
+
+
+def test_a_withdrawn_player_of_the_lobby_enters_no_places(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+) -> None:
+    """A player who left the cup no longer enters the places of their lobby;
+    a runner still does."""
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    [lobby, *_] = lobbies(client, event, bracket, "Round 1")
+    left = lobby["sides"][0]["user_id"]
+    withdraw(client, auth_headers, event, entrant_of(event, left))
+
+    refused = play(client, member(discord_of(left)), lobby, by_seed(lobby, seeds))
+    assert refused.status_code == 403, refused.text
+    placed = play(client, auth_headers, lobby, by_seed(lobby, seeds))
+    assert placed.status_code == 200, placed.text
 
 
 def test_places_name_every_seat_once_from_one_to_the_seat_count(

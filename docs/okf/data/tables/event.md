@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T17:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T11:30:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -58,7 +58,7 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `description` | VARCHAR | yes | Free text shown on the event page. |
 | `starts_at` | TIMESTAMP | yes | When a cup or a KOTH night starts. A GNL season leaves it null and keeps its dates. |
 | `min_games` | INTEGER | yes | The ladder games an entrant should have on its signup race. Warns on the entrant row; refuses only where `eligibility_required` is on. |
-| `race_games_min` | INTEGER | yes | The lifetime W3Champions games a race needs before its rating counts for eligibility; the best rating among those races is checked, and a player with no such race is refused. Null checks the race of the signup alone. Every cup takes 20. |
+| `race_games_min` | INTEGER | yes | The lifetime W3Champions games a race needs before its rating counts for eligibility; the best rating among those races is checked, and a player with no such race is refused. Null checks the race of the signup alone. |
 | `min_games_seasons` | INTEGER | yes | Narrows the live W3C window `min_games` counts over (the current season and the one before it), 1 or more: 1 counts the current season alone; null, 2 and more count the window. |
 | `mmr_min` | INTEGER | yes | The MMR an entrant should be at or above on its signup race, no higher than `mmr_max`. Warns on the entrant row (`under_mmr_min`); refuses only where `eligibility_required` is on. |
 | `mmr_max` | INTEGER | yes | The MMR an entrant should be under. Warns on the entrant row; refuses only where `eligibility_required` is on. |

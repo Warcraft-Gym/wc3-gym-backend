@@ -1,10 +1,11 @@
 """A cup that repeats on a rule, and the cups made from it.
 
-A runner sets a rule up from a cup, which becomes its first occurrence. The
-rule names its days, every week or the nth weekday of the month, and a runner
-of the latest cup makes the next one on a day the rule names: a copy with its
-own name, its own start, its stages, its rounds moved by the same days and
-its organizers. Stopping the rule keeps every cup it made.
+A runner with a grant sets a rule up from a cup, which becomes its first
+occurrence. The rule names its days, every week or the nth weekday of the
+month, and a runner of the latest cup with a grant makes the next one on a
+day the rule names: a copy with its own name, its own start, its stages, its
+rounds moved by the same days and its organizers. Stopping the rule keeps
+every cup it made.
 """
 
 from datetime import date
@@ -179,6 +180,50 @@ def test_only_a_runner_of_the_latest_cup_makes_the_next(
     assert copy.status_code == 201, copy.text
     runners = client.get(f"/events/{copy.json()['id']}/organizers").json()
     assert [row["discord_id"] for row in runners] == ["60"]
+
+
+def test_a_co_organizer_without_a_grant_sets_up_no_rule_and_makes_no_cup(
+    client: Client,
+    auth_headers: Headers,
+    member: Any,  # noqa: ANN401
+) -> None:
+    """A rule makes cups, so it takes a grant as POST /events does; running
+    the cup is not enough."""
+    grant(client, auth_headers, "60")
+    organizer = member("60")
+    cup = make_cup(client, organizer, name="Cup Co", starts_at=FRIDAY)
+    added = client.post(
+        f"/events/{cup['id']}/organizers", json={"discord_id": "62"}, headers=organizer
+    )
+    assert added.status_code == 201, added.text
+    co = member("62")
+
+    path = f"/events/{cup['id']}/recurrence"
+    refused = client.post(path, json=WEEKLY, headers=co)
+    assert refused.status_code == 403, refused.text
+    made = client.post(path, json=WEEKLY, headers=organizer)
+    assert made.status_code == 201, made.text
+    rule = made.json()["id"]
+    assert occur(client, co, rule, "2030-01-11").status_code == 403
+    renamed = client.put(f"/cup-recurrences/{rule}", json={"name": "Co"}, headers=co)
+    assert renamed.status_code == 403, renamed.text
+
+
+def test_a_revoked_organizer_stops_its_rule_but_changes_and_makes_nothing(
+    client: Client,
+    auth_headers: Headers,
+    member: Any,  # noqa: ANN401
+) -> None:
+    grant(client, auth_headers, "60")
+    organizer = member("60")
+    _, made = repeat(client, organizer, tag="Revoked")
+    assert client.delete("/organizers/60", headers=auth_headers).status_code == 204
+
+    assert occur(client, organizer, made["id"], "2030-01-11").status_code == 403
+    path = f"/cup-recurrences/{made['id']}"
+    renamed = client.put(path, json={"name": "Mine"}, headers=organizer)
+    assert renamed.status_code == 403, renamed.text
+    assert client.delete(path, headers=organizer).status_code == 204
 
 
 def test_stopping_the_rule_keeps_its_cups(

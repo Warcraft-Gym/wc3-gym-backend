@@ -125,6 +125,94 @@ def test_a_series_both_sides_left_is_a_forfeit_nobody_wins(
     assert (final["score"], final["result_kind"]) == ((0, 0), "forfeit")
 
 
+def test_a_side_cannot_report_over_a_walkover_or_a_forfeit(
+    client: Client, auth_headers: dict[str, str], member: Member
+) -> None:
+    """A walkover and a forfeit are a runner's: neither side reports over one,
+    as neither side clears one, and a runner still does."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    semis = [row for row in bracket(stage) if row["round"] == "Semifinals"]
+    for semi, kind in zip(semis, ("walkover", "forfeit"), strict=True):
+        awarded = client.put(
+            f"/cup-series/{semi['id']}/result-kind",
+            json={"result_kind": kind, "winner": 1},
+            headers=auth_headers,
+        )
+        assert awarded.status_code == 200, awarded.text
+        for side, (first, second) in zip(semi["sides"], ((2, 0), (0, 2)), strict=True):
+            refused = client.put(
+                f"/cup-series/{semi['id']}/report",
+                json={"player1_score": first, "player2_score": second},
+                headers=headers_of(member, side),
+            )
+            assert refused.status_code == 403, refused.text
+        [row] = [row for row in bracket(stage) if row["id"] == semi["id"]]
+        assert (row["score"], row["result_kind"]) == ((2, 0), kind)
+
+    corrected = client.put(
+        f"/cup-series/{semis[0]['id']}/report",
+        json={"player1_score": 2, "player2_score": 1},
+        headers=auth_headers,
+    )
+    assert corrected.status_code == 200, corrected.text
+
+
+def test_a_runner_report_over_a_walkover_is_a_played_result(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A runner who reports the games of a walkover makes it a played series."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    semi = bracket(stage)[0]
+    path = f"/cup-series/{semi['id']}"
+    awarded = client.put(
+        f"{path}/result-kind",
+        json={"result_kind": "walkover", "winner": 1},
+        headers=auth_headers,
+    )
+    assert awarded.status_code == 200, awarded.text
+
+    reported = client.put(
+        f"{path}/report",
+        json={"player1_score": 2, "player2_score": 1},
+        headers=auth_headers,
+    )
+    assert reported.status_code == 200, reported.text
+    assert reported.json()["result_kind"] == "played"
+    [row] = [row for row in bracket(stage) if row["id"] == semi["id"]]
+    assert (row["score"], row["result_kind"]) == ((2, 1), "played")
+
+
+def test_a_withdrawn_player_acts_for_no_side(
+    client: Client, auth_headers: dict[str, str], member: Member
+) -> None:
+    """A player who left reports, clears and vetoes for nobody, even on a
+    result played before they left; they still read the board, and a runner
+    still writes."""
+    event, (stage,) = cup(2)
+    generate(client, auth_headers, event, stage)
+    [final] = bracket(stage)
+    assert score(client, auth_headers, final["id"], 2, 0).status_code == 200
+    loser = final["sides"][1]
+    withdraw(client, auth_headers, event, entrant_of(event, loser))
+    headers = headers_of(member, loser)
+    path = f"/cup-series/{final['id']}"
+
+    flipped = client.put(
+        f"{path}/report", json={"player1_score": 0, "player2_score": 2}, headers=headers
+    )
+    assert flipped.status_code == 403, flipped.text
+    assert client.delete(f"{path}/result", headers=headers).status_code == 403
+    vetoed = client.put(f"{path}/veto", json={"action": "undo"}, headers=headers)
+    assert vetoed.status_code == 403, vetoed.text
+    assert bracket(stage)[0]["score"] == (2, 0)
+    read = client.get(f"{path}/veto", headers=headers)
+    assert read.status_code == 200, read.text
+
+    assert client.delete(f"{path}/result", headers=auth_headers).status_code == 200
+
+
 def test_a_withdrawn_player_loses_every_lower_bracket_series_on_the_way(
     client: Client, auth_headers: dict[str, str]
 ) -> None:

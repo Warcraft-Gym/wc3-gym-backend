@@ -3,8 +3,9 @@
 One rule decides every write: a player acts for the side they play (the
 player a 1v1 side names, or a member of the team a team side fields), and a
 runner of the cup (an admin, or one of its organizers) acts for either side.
-A side reports and takes back its own played result; a walkover, a forfeit,
-a forced reopen, lobby places and seats are a runner's.
+A side whose entrant withdrew acts for nobody. A side reports and takes back
+its own played result; a walkover, a forfeit, a forced reopen, lobby places
+and seats are a runner's. A finished cup takes no write until it is reopened.
 
 Nothing here posts to Discord, uploads a replay or reads a GNL fixture.
 """
@@ -18,7 +19,7 @@ from sqlmodel import col
 from app.core import map_order
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.core.outcome import scored, won_slot
+from app.core.outcome import scored, stands_on_side, won_slot
 from app.core.scoring import decided, recordable
 from app.core.security import is_admin
 from app.models.base import ident
@@ -32,6 +33,9 @@ from app.models.cup_series import (
 )
 from app.models.enums import Race
 from app.models.event_entrant import EventEntrant
+from app.models.event_stage import EventStage
+from app.models.relationships import DBEventRound
+from app.models.season import Season
 from app.models.series import ResultKindWrite
 from app.models.series_game import SeriesGamePublic
 from app.models.series_side import LobbySidesWrite, PlacesWrite
@@ -58,8 +62,9 @@ class CupReportPublic(CupSeriesPublic):
 
 
 class Caller:
-    """Who calls a cup series route: the player behind the account, and
-    whether they run the cup the series is played in."""
+    """Who calls a cup series route: the player behind the account, the side
+    they play and the side they act for, and whether they run the cup the
+    series is played in."""
 
     def __init__(
         self, session: OrmSession, claims: dict[str, Any] | None, row: CupSeries
@@ -70,9 +75,11 @@ class Caller:
             if sub and sub != "admin"
             else None
         )
-        self.side: Literal[1, 2] | None = cup_reads.acts_for_side(
+        self.plays: Literal[1, 2] | None = cup_reads.acts_for_side(
             session, row, self.user_id
         )
+        # a side whose entrant withdrew acts as no side
+        self.side = None if _withdrawn(session, row, self.plays) else self.plays
         self._claims = claims
         self._row = row
         self._session = session
@@ -137,11 +144,15 @@ def report(
     series_id: int, data: CupReportWrite, claims: dict[str, Any] | None
 ) -> CupReportPublic:
     """Report the result of a series for a side, with its games and the races
-    played. A runner reports for either side."""
+    played. A runner reports for either side; a walkover and a forfeit are a
+    runner's."""
     with Session.begin() as session:
-        row = _series(session, series_id)
+        row = _open_series(session, series_id)
         caller = Caller(session, claims, row)
-        caller.hold_side_or_runner()
+        if row.result_kind != "played":
+            caller.hold_runner()
+        else:
+            caller.hold_side_or_runner()
         wins = cup_engine.series_wins(session, row)
         reporting = data.player1_score is not None or data.player2_score is not None
         played: list[dict[str, Any]] = []
@@ -153,6 +164,8 @@ def report(
             played = series_games.parse(data.games)
             if played:
                 series_games.check(played, data.player1_score, data.player2_score)
+            # a reported score is a played result, even over a walkover or a forfeit
+            row.result_kind = "played"
         fields = data.model_fields_set
         races = {
             side: _race(getattr(data, side))
@@ -191,7 +204,7 @@ def score(
     """A runner writes or clears a result. Clearing reopens the series below;
     `force` allows it when a later series already carries a result."""
     with Session.begin() as session:
-        row = _series(session, series_id)
+        row = _open_series(session, series_id)
         Caller(session, claims, row).hold_runner()
         fields = data.model_fields_set
         races = {
@@ -211,7 +224,7 @@ def clear(
     side takes back its own played result; a walkover, a forfeit and `force`
     are a runner's."""
     with Session.begin() as session:
-        row = _series(session, series_id)
+        row = _open_series(session, series_id)
         caller = Caller(session, claims, row)
         if cup_engine.lobby_seats(session, row):
             # a lobby's places are taken back by a runner, with the seats they sent on
@@ -233,10 +246,12 @@ def clear(
 def award(
     series_id: int, data: ResultKindWrite, claims: dict[str, Any] | None
 ) -> CupSeriesPublic:
-    """A runner scores a series no game was played for: a walkover or a forfeit."""
+    """A runner scores a series no game was played for, a walkover or a
+    forfeit, once both its sides are known."""
     with Session.begin() as session:
-        row = _series(session, series_id)
+        row = _open_series(session, series_id)
         Caller(session, claims, row).hold_runner()
+        _hold_known_sides(session, row, data.winner)
         cup_engine.set_result_kind(session, row, data)
         return cup_engine.read_one(session, row)
 
@@ -248,7 +263,7 @@ def places(
     finished; a lobby played already is corrected while the round after it is
     unplayed."""
     with Session.begin() as session:
-        row = _series(session, series_id)
+        row = _open_series(session, series_id)
         Caller(session, claims, row).hold_seat_or_runner()
         cup_engine.set_places(session, row, data)
         return cup_engine.read_one(session, row)
@@ -259,7 +274,7 @@ def lobby_map(
 ) -> CupSeriesPublic:
     """A runner plays a lobby on another map of the cup's pool."""
     with Session.begin() as session:
-        row = _series(session, series_id)
+        row = _open_series(session, series_id)
         Caller(session, claims, row).hold_runner()
         cup_engine.set_lobby_map(session, row, data.map_id)
         return cup_engine.read_one(session, row)
@@ -270,7 +285,7 @@ def sides(
 ) -> CupSeriesPublic:
     """A runner seats a free for all lobby again before it is played."""
     with Session.begin() as session:
-        row = _series(session, series_id)
+        row = _open_series(session, series_id)
         Caller(session, claims, row).hold_runner()
         cup_engine.set_sides(session, row, data)
         return cup_engine.read_one(session, row)
@@ -281,7 +296,8 @@ def veto_board(series_id: int, claims: dict[str, Any] | None) -> SeriesVetoPubli
     with Session.begin() as session:
         row = _series(session, series_id)
         caller = Caller(session, claims, row)
-        caller.hold_side_or_runner()
+        if caller.plays is None:
+            caller.hold_runner()
         return cup_veto.board(session, row, caller.user_id)
 
 
@@ -290,7 +306,7 @@ def veto_take(
 ) -> SeriesVetoPublic:
     """Take, record or take back a step of the veto."""
     with Session.begin() as session:
-        row = _series(session, series_id)
+        row = _open_series(session, series_id)
         caller = Caller(session, claims, row)
         caller.hold_side_or_runner()
         runner = caller.side is None or (data.action != "step" and caller.runs)
@@ -303,6 +319,61 @@ def _series(session: OrmSession, series_id: int) -> CupSeries:
     if row is None:
         raise NotFoundError(f"Series not found by id: {series_id}")
     return row
+
+
+def _open_series(session: OrmSession, series_id: int) -> CupSeries:
+    """A series of a cup that still takes writes: a finished or called off
+    cup takes none until it is reopened."""
+    row = _series(session, series_id)
+    closed_at = session.scalar(
+        select(col(Season.closed_at))
+        .join(DBEventRound, col(DBEventRound.season_id) == col(Season.id))
+        .where(col(DBEventRound.id) == row.round_id)
+    )
+    if closed_at is not None:
+        raise BadRequestError("The cup is finished; reopen it first")
+    return row
+
+
+def _withdrawn(session: OrmSession, row: CupSeries, side: int | None) -> bool:
+    """Whether the entrant on that side of the series has withdrawn."""
+    entrant_id = row.entrant1_id if side == 1 else row.entrant2_id
+    entrant = session.get(EventEntrant, entrant_id) if side and entrant_id else None
+    return entrant is not None and entrant.withdrawn_at is not None
+
+
+def _hold_both_sides(
+    session: OrmSession, row: CupSeries, first: int, second: int
+) -> None:
+    """Refuse a result for a series with an empty side. The bye of a stage
+    drawn round by round names its one entrant only, so it takes a result
+    that entrant wins."""
+    side1, side2 = stands_on_side(row, 1), stands_on_side(row, 2)
+    if side1 is not None and side2 is not None:
+        return
+    round_row = session.get(DBEventRound, row.round_id)
+    stage_id = round_row.stage_id if round_row is not None else None
+    stage = session.get(EventStage, stage_id) if stage_id is not None else None
+    if side1 is not None and stage is not None and cup_engine.draws_by_round(stage):
+        if first > second:
+            return
+        raise BadRequestError("A bye takes only a result its entrant wins")
+    raise BadRequestError("A result needs both sides of the series")
+
+
+def _hold_known_sides(session: OrmSession, row: CupSeries, winner: int) -> None:
+    """Refuse a walkover or a forfeit while a side waits on the series that
+    feeds it, or one given to an empty side. An empty side nothing feeds, as
+    in a padded pair, stays empty."""
+    for side in (1, 2):
+        if stands_on_side(row, side) is not None:
+            continue
+        feeder_id = row.slot1_from_series_id if side == 1 else row.slot2_from_series_id
+        feeder = session.get(CupSeries, feeder_id) if feeder_id else None
+        if feeder is not None and not scored(feeder):
+            raise BadRequestError("A side of the series waits on the series before it")
+        if side == winner:
+            raise BadRequestError("A walkover or a forfeit goes to a side that plays")
 
 
 def _race(named: str | None) -> Race | None:
@@ -324,9 +395,10 @@ def _write(
     force: bool,
 ) -> None:
     """Write a result and the races played, and follow the result through the
-    bracket. A cleared result takes its games and its kind with it, so the
-    series reads as never reported. An off race that names the race the side
-    entered on is no off race, so it is dropped."""
+    bracket. A result needs both sides of the series; a cleared result takes
+    its games and its kind with it, so the series reads as never reported. An
+    off race that names the race the side entered on is no off race, so it is
+    dropped."""
     was_scored = scored(row)
     was_slot = won_slot(row)
     if result is not None:
@@ -343,6 +415,8 @@ def _write(
                 f"A series of this cup ends at {wins} map wins, or 0-0 when it "
                 "was never played"
             )
+        if first is not None and second is not None:
+            _hold_both_sides(session, row, first, second)
         row.player1_score, row.player2_score = first, second
     for side, race in races.items():
         setattr(row, side, race)

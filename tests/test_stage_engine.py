@@ -4,6 +4,7 @@ Every test drives the routes an admin drives, so the rounds, the sequences
 and the feeder graph read back the way the run page reads them.
 """
 
+import random
 from collections.abc import Callable
 from typing import Any
 
@@ -686,6 +687,91 @@ def test_a_corrected_score_with_the_same_winner_leaves_the_final_alone(
     assert final["score"] == (2, 0)
 
 
+def test_a_result_needs_both_sides_of_the_series(
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
+) -> None:
+    """A final that waits on its other semi-final takes no result from its
+    player or from a runner, and a clear still passes."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    assert score(client, auth_headers, bracket(stage)[0]["id"], 2, 0).status_code == 200
+    final = bracket(stage)[2]
+    assert None in final["sides"]
+    finalist = next(side for side in final["sides"] if side is not None)
+    with Session.begin() as session:
+        discord_id = session.get_one(User, finalist).discordId
+    clear = {"player1_score": None, "player2_score": None}
+
+    reported = client.put(
+        f"/cup-series/{final['id']}/report",
+        json={"player1_score": 2, "player2_score": 0},
+        headers=member(discord_id),
+    )
+    assert reported.status_code == 400, reported.text
+    assert reported.json() == {"error": "A result needs both sides of the series"}
+    assert score(client, auth_headers, final["id"], 2, 0).status_code == 400
+    cleared = client.put(f"/cup-series/{final['id']}", json=clear, headers=auth_headers)
+    assert cleared.status_code == 200, cleared.text
+    assert bracket(stage)[2]["score"] == (None, None)
+
+
+def award(client: Client, headers: dict[str, str], series_id: int, winner: int) -> Any:  # noqa: ANN401
+    """A runner's walkover on a cup series, to the side `winner` names."""
+    return client.put(
+        f"/cup-series/{series_id}/result-kind",
+        json={"result_kind": "walkover", "winner": winner},
+        headers=headers,
+    )
+
+
+def test_a_walkover_waits_on_the_series_that_feeds_an_empty_side(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A final whose other semi-final is unplayed takes no walkover for either
+    side, and takes one once that semi-final fills it."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    first, second, final = bracket(stage)
+    assert score(client, auth_headers, first["id"], 2, 0).status_code == 200
+    [final] = [row for row in bracket(stage) if row["id"] == final["id"]]
+    empty = final["sides"].index(None) + 1
+
+    for winner in (1, 2):
+        refused = award(client, auth_headers, final["id"], winner)
+        assert refused.status_code == 400, refused.text
+        assert refused.json() == {
+            "error": "A side of the series waits on the series before it"
+        }
+    assert score(client, auth_headers, second["id"], 2, 0).status_code == 200
+    [final] = [row for row in bracket(stage) if row["id"] == final["id"]]
+    assert final["score"] == (None, None)
+    awarded = award(client, auth_headers, final["id"], empty)
+    assert awarded.status_code == 200, awarded.text
+
+
+def test_a_cleared_padded_walkover_goes_back_to_its_one_side(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A padded pair's walkover, once cleared, is awarded again to the side
+    that stands in it, and never to its empty side."""
+    event, (stage,) = cup(6, StageFormat.double_elimination)
+    generate(client, auth_headers, event, stage)
+    padded = next(row for row in bracket(stage) if row["result_kind"] == "walkover")
+    empty = padded["sides"].index(None) + 1
+    path = f"/cup-series/{padded['id']}"
+    assert client.delete(f"{path}/result", headers=auth_headers).status_code == 200
+
+    refused = award(client, auth_headers, padded["id"], empty)
+    assert refused.status_code == 400, refused.text
+    assert refused.json() == {
+        "error": "A walkover or a forfeit goes to a side that plays"
+    }
+    awarded = award(client, auth_headers, padded["id"], 3 - empty)
+    assert awarded.status_code == 200, awarded.text
+    [row] = [row for row in bracket(stage) if row["id"] == padded["id"]]
+    assert (row["score"], row["result_kind"]) == (padded["score"], "walkover")
+
+
 def test_the_standings_read_the_points_the_stage_pays(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
@@ -934,6 +1020,135 @@ def test_a_skipped_grand_final_ends_on_the_lower_bracket_final(
     )
     assert generate(client, auth_headers, event, stage) == {"series": 5, "rounds": 4}
     assert "Grand final" not in names(bracket(stage))
+
+
+def play_out(
+    client: Client,
+    headers: dict[str, str],
+    stage: int,
+    pick: Callable[[dict[str, Any]], int],
+) -> list[dict[str, Any]]:
+    """Score every series of the stage as it fills, 2-0 to the side `pick`
+    names, and answer the bracket once no series is left to play."""
+    rows = bracket(stage)
+    while ready := [
+        row for row in rows if row["score"] == (None, None) and None not in row["sides"]
+    ]:
+        row = ready[0]
+        result = (2, 0) if pick(row) == row["sides"][0] else (0, 2)
+        assert score(client, headers, row["id"], *result).status_code == 200
+        rows = bracket(stage)
+    assert all(row["score"] != (None, None) for row in rows), rows
+    return rows
+
+
+def winner(row: dict[str, Any]) -> int | None:
+    first, second = row["score"]
+    return row["sides"][0] if first > second else row["sides"][1]
+
+
+def table_of(client: Client, event: int, stage: int) -> list[int]:
+    """The users of the stage's table, first place first."""
+    rows = client.get(f"/events/{event}/stages/{stage}/standings").json()[0]["rows"]
+    return [row["user_id"] for row in rows]
+
+
+def test_a_double_elimination_table_puts_the_champion_first(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Seed 1 takes the grand final from a lower bracket side that won more
+    series on its way there; the table and the award still put seed 1 first."""
+    event, (stage,) = cup(16, StageFormat.double_elimination)
+    generate(client, auth_headers, event, stage)
+    seeds = players_of(event)
+
+    def pick(row: dict[str, Any]) -> int:
+        # the lower bracket goes to the weaker seed, every other series to the stronger
+        stronger, weaker = sorted(row["sides"], key=seeds.index)
+        return weaker if row["round"].startswith("Lower") else stronger
+
+    rows = play_out(client, auth_headers, stage, pick)
+    final = next(row for row in rows if row["round"] == "Grand final")
+    assert (final["sides"][0], final["score"]) == (seeds[0], (2, 0))
+
+    assert table_of(client, event, stage)[:2] == list(final["sides"])
+    finished = client.post(f"/events/{event}/finish", headers=auth_headers)
+    assert finished.status_code == 200, finished.text
+    champion = next(row for row in finished.json() if row["place"] == 1)
+    assert champion["user_id"] == seeds[0]
+
+
+def test_a_skipped_grand_final_crowns_the_upper_bracket_final_winner(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """With no grand final the unbeaten side of the upper bracket final is the
+    champion, and the winner of the lower bracket final is second."""
+    event, (stage,) = cup(
+        8, StageFormat.double_elimination, grand_final_modifier="skip"
+    )
+    generate(client, auth_headers, event, stage)
+    seeds = players_of(event)
+    rows = play_out(
+        client, auth_headers, stage, lambda row: min(row["sides"], key=seeds.index)
+    )
+    upper = next(row for row in rows if row["round"] == "Upper bracket final")
+    lower = next(row for row in rows if row["round"] == "Lower bracket final")
+
+    assert (winner(upper), winner(lower)) == (seeds[0], seeds[1])
+    assert table_of(client, event, stage)[:3] == [seeds[0], seeds[1], seeds[2]]
+
+
+@pytest.mark.parametrize("strategy", ["top", "bottom", "random"])
+@pytest.mark.parametrize("mode", ["one", "reset"])
+@pytest.mark.parametrize("field", [2, 3, 5, 8, 9, 16, 17, 33])
+def test_double_elimination_ranks_its_champion_first_at_every_field_size(
+    client: Client, auth_headers: dict[str, str], field: int, mode: str, strategy: str
+) -> None:
+    """Whoever takes the last series, the grand final or its reset, tops the table."""
+    event, (stage,) = cup(
+        field, StageFormat.double_elimination, grand_final_modifier=mode
+    )
+    generate(client, auth_headers, event, stage)
+    seeds = players_of(event)
+    rng = random.Random(field)
+    picks: dict[str, Callable[[dict[str, Any]], int]] = {
+        "top": lambda row: min(row["sides"], key=seeds.index),
+        "bottom": lambda row: max(row["sides"], key=seeds.index),
+        "random": lambda row: rng.choice(row["sides"]),
+    }
+    rows = play_out(client, auth_headers, stage, picks[strategy])
+
+    assert rows[-1]["round"].startswith("Grand final")
+    table = table_of(client, event, stage)
+    assert len(table) == field
+    assert table[0] == winner(rows[-1])
+
+
+@pytest.mark.parametrize("strategy", ["top", "bottom", "random"])
+@pytest.mark.parametrize("field", [2, 5, 9, 16])
+def test_a_skipped_grand_final_ranks_the_two_finals_first_at_every_field_size(
+    client: Client, auth_headers: dict[str, str], field: int, strategy: str
+) -> None:
+    """With no grand final the upper bracket final's winner is first and the
+    lower bracket final's winner second."""
+    event, (stage,) = cup(
+        field, StageFormat.double_elimination, grand_final_modifier="skip"
+    )
+    generate(client, auth_headers, event, stage)
+    seeds = players_of(event)
+    rng = random.Random(field)
+    picks: dict[str, Callable[[dict[str, Any]], int]] = {
+        "top": lambda row: min(row["sides"], key=seeds.index),
+        "bottom": lambda row: max(row["sides"], key=seeds.index),
+        "random": lambda row: rng.choice(row["sides"]),
+    }
+    rows = play_out(client, auth_headers, stage, picks[strategy])
+    upper = next(row for row in rows if row["round"] == "Upper bracket final")
+    lower = next(row for row in rows if row["round"] == "Lower bracket final")
+
+    table = table_of(client, event, stage)
+    assert len(table) == field
+    assert table[:2] == [winner(upper), winner(lower)]
 
 
 def test_an_admin_writes_the_switches_the_engine_reads(

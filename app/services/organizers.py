@@ -64,6 +64,20 @@ def is_organizer(claims: dict[str, Any] | None) -> bool:
     return is_admin(claims) or standing(claims)[0]
 
 
+def is_organizer_in(session: OrmSession, claims: dict[str, Any] | None) -> bool:
+    """`is_organizer`, inside the caller's session: an admin reads nothing."""
+    if is_admin(claims):
+        return True
+    if not _member(claims):
+        return False
+    discord_id = str(claims["sub"])
+    return bool(
+        session.scalar(
+            select(exists().where(col(OrganizerGrant.discord_id) == discord_id))
+        )
+    )
+
+
 def runs(claims: dict[str, Any] | None, event_id: int) -> bool:
     """Whether the caller runs that event: an admin, or a member holding its row."""
     with Session.begin() as session:

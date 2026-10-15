@@ -158,3 +158,20 @@ def test_the_waiting_player_reads_waitlisted_as_their_action(
     assert mine.status_code == 200, mine.text
     [row] = [one for one in mine.json() if one["id"] == event]
     assert row["action"] == "waitlisted"
+
+
+def test_a_waiting_team_reads_waitlisted_not_check_in() -> None:
+    from app.models.enums import EventKind
+    from app.services.events import _member_action
+
+    event = Season(kind=EventKind.cup, signups_open=False)
+    action = _member_action(
+        "checkin",
+        event,
+        joined=True,
+        checked_in_at=None,
+        checkin_open_now=True,
+        waiting=True,
+        team=True,
+    )
+    assert action == "waitlisted"
