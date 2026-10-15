@@ -2005,13 +2005,14 @@ def _member_action(
     )
     if phase == "finished":
         return "view"
+    # A signup on the waitlist checks in once it is let in, a team's too
+    if waiting:
+        return "waitlisted"
     if team:
         if checked_in_at is not None:
             return "checked_in"
         open_now = checkin_open_now and phase != "running" and not short
         return "check_in" if open_now else "view"
-    if waiting:
-        return "waitlisted"
     if phase == "running" and not open_door:
         return "view"
     if joined:
