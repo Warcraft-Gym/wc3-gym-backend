@@ -120,7 +120,8 @@ def open_the_season(
 def cut_and_seed(
     client: Client, headers: dict[str, str], event: int, stage: int
 ) -> list[dict[str, Any]]:
-    """Two divisions cut from MMR, seeded from MMR inside each, then locked."""
+    """Two divisions cut from MMR, seeded from MMR inside each, then locked;
+    every member is checked in, as the draw takes the players who checked in."""
     bands = client.put(
         f"/events/{event}/divisions",
         json=[{"name": "Pro", "size": BAND}, {"name": "Open"}],
@@ -147,6 +148,8 @@ def cut_and_seed(
     locked = client.post(f"/events/{event}/stages/{stage}/seeds/lock", headers=headers)
     assert locked.status_code == 200, locked.text
     assert locked.json()["seeds_locked_at"] is not None
+    checked = client.post(f"/events/{event}/entrants/checkin-everyone", headers=headers)
+    assert checked.status_code == 200, checked.text
     return rows
 
 
