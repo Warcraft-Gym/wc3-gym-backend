@@ -3,7 +3,7 @@ type: Decision
 title: Cups announce to members who opt in
 description: A cup posts four messages in one announcement channel, each pinging one announcement role; members take or leave that role on Home, and no role binding or sync touches it.
 tags: [discord, events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T11:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T11:57:00Z }
 sources:
   - id: source
     resource: Maintainers' decisions, 2026-10-14
@@ -15,7 +15,7 @@ sources:
 
 # Decision
 
-Since 2026-10-15, a cup posts four messages in the channel the `announcement_channel_id` setting names, and each pings the role `announcement_role_id` names:
+Since 2026-10-14, a cup posts four messages in the channel the `announcement_channel_id` setting names, and each pings the role `announcement_role_id` names:
 
 1. the cup takes signups;
 2. the cup, or a round of a cup played over rounds, starts within the hour: check in;

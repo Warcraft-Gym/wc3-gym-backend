@@ -4,7 +4,7 @@ title: cup_series
 description: One series a cup plays, drawn by the cup engine into a round of a stage, with its two sides, its result and the feeders it takes its sides from.
 resource: ../../../../app/models/cup_series.py
 tags: [events, series, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-14T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T11:57:00Z }
 sources:
   - id: model
     resource: ../../../../app/models/cup_series.py
@@ -49,5 +49,6 @@ Primary key `id`. Foreign keys: `round_id` to [event_round](event_round.md), cas
 
 - Only a cup writes here, and a cup writes nowhere else: GNL and KOTH keep [series](series.md). See [cups keep their own tables](../../decisions/cups-own-tables.md).
 - A result is both scores or neither, and finishes the series at the wins its best-of takes, or reads 0-0 for a series never played. A cleared result takes its games along and reads `played` again.
+- A result needs both sides of the series, and a walkover or a forfeit waits while a side is still to come from an undecided series; the one-entrant bye of a Swiss round takes only a result its entrant wins. Once the cup is closed, no write reaches the row until the cup is reopened.
 - A result fills every slot that feeds from the series and settles a bye or a forfeit below it; clearing it takes those sides back. See [events module](../../concepts/events-module.md#cup-series).
 - The payload `CupSeriesPublic` answers the same field names a stage series box reads, without a fixture, a host, a cast or a replay.
