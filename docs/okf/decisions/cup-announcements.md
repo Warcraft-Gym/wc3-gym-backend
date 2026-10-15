@@ -3,7 +3,7 @@ type: Decision
 title: Cups announce to members who opt in
 description: A cup posts four messages in one announcement channel, each pinging one announcement role; members take or leave that role on Home, and no role binding or sync touches it.
 tags: [discord, events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T19:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T11:30:00Z }
 sources:
   - id: source
     resource: Maintainers' decisions, 2026-10-14
@@ -15,7 +15,7 @@ sources:
 
 # Decision
 
-Since 2026-10-14, a cup posts four messages in the channel the `announcement_channel_id` setting names, and each pings the role `announcement_role_id` names:
+Since 2026-10-15, a cup posts four messages in the channel the `announcement_channel_id` setting names, and each pings the role `announcement_role_id` names:
 
 1. the cup takes signups;
 2. the cup, or a round of a cup played over rounds, starts within the hour: check in;
@@ -31,5 +31,5 @@ Members who want to hear about every cup opt in once, and the rest of the guild 
 # Consequences
 
 - Each message is a [discord_post](../data/tables/discord_post.md) row of its own kind, which is what makes it go out once. A redraw, a second publish and a second close post nothing new; a second close edits the top three card.
-- [announcement_subscriber](../data/tables/announcement_subscriber.md) records who opted in. The role is not a [role binding](app-managed-roles.md): no binding may name it, so the role sync never takes it back.
+- [announcement_subscriber](../data/tables/announcement_subscriber.md) records who opted in. The role is not a [role binding](app-managed-roles.md): the operator binds it to no role kind, as [Discord setup](../runbooks/discord-setup.md) says, so the role sync never takes it back.
 - A cup series still posts no card of its own; the messages are about the cup.

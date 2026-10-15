@@ -3,7 +3,7 @@ type: Decision
 title: Cup teams live for one cup
 description: A team of a team cup is made for that cup alone, signed up by its captain and confirmed by every player; it lives in the cup's own tables and no league reads it.
 tags: [events, teams]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T21:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T11:30:00Z }
 sources:
   - id: source
     resource: Maintainers' decisions, 2026-10-08
@@ -19,7 +19,7 @@ Since 2026-10-08, a team cup (`event.team_size` 2 to 4) plays real team games, a
 
 # Why
 
-Community team cups are played by pairs and fours who come together for an evening. A team kept beyond its cup would need a page of its own and rules for changing its players between cups, which nobody asked for. Since 2026-10-12 the team lives in the cup's own tables, so no GNL rule reaches it: see [cups keep their own tables](cups-own-tables.md).
+Community team cups are played by pairs and fours who come together for an evening. A team that lives only as long as its cup needs no page of its own and no rules for changing its players between cups. The team lives in the cup's own tables, so no GNL rule reaches it: see [cups keep their own tables](cups-own-tables.md).
 
 # Consequences
 

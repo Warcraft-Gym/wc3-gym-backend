@@ -4,7 +4,7 @@ title: Set up the Discord side
 description: Register the slash commands, upload the emojis, place the bot role, and point the channel settings rows at the right channels.
 resource: ../../../justfile
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T19:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T09:45:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:
   - id: justfile

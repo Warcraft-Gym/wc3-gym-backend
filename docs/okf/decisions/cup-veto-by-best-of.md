@@ -3,7 +3,7 @@ type: Decision
 title: A cup vetoes by the best-of of each series
 description: A cup names the best-of of each part of its bracket, and each series derives its veto from its own best-of and the pool; game 1 plays the map the veto leaves. GNL keeps its order and its fixed map.
 tags: [events, maps]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-07T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T11:30:00Z }
 sources:
   - id: source
     resource: Maintainers' decisions, 2026-10-07
@@ -28,5 +28,5 @@ A cup plays a short best-of early and a longer one in its finals, and its field 
 
 - The pool holds at least as many maps as the longest series of the event plays. The create, a stage write, a pool write and the draw refuse a smaller one and name the best-of that needs more.
 - `PUT /events/{id}/maps` replaces a pool and refuses once a series of the event holds a veto step, so a board never changes under a veto.
-- A GNL season leaves `veto_by_best_of` off and plays its `pick_ban` and its round map as before; with one pick a side, the pick queue offers what the single pick did.
+- A GNL season leaves `veto_by_best_of` off and plays its `pick_ban` and its round map; with one pick a side, the pick queue offers what the single pick did.
 - `decider` is never a stored map rule: a series answers it as its rules, derived on every read.
