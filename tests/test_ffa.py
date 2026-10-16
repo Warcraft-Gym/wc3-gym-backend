@@ -851,7 +851,7 @@ def test_a_placed_player_who_leaves_keeps_the_place_and_the_next_one_goes_throug
 
     first = lobbies(client, event, bracket, "Round 1")[0]
     assert [(side["place"], side["left"]) for side in first["sides"]] == [
-        (1, True),
+        (1, False),
         (2, False),
         (3, False),
     ]
@@ -865,3 +865,9 @@ def test_a_placed_player_who_leaves_keeps_the_place_and_the_next_one_goes_throug
         [8, 4, 9, 5],
         [2, 3, 7, 6],
     ]
+
+    # a correction of the played lobby places the player who left, whose place stands
+    again = play(client, auth_headers, first, by_seed(first, seeds))
+    assert again.status_code == 200, again.text
+    first = lobbies(client, event, bracket, "Round 1")[0]
+    assert [side["place"] for side in first["sides"]] == [1, 2, 3]

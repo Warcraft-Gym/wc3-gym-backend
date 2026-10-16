@@ -73,8 +73,8 @@ def place_cup_lobby(
     series_id: int, data: PlacesWrite, claims: RequireLogin
 ) -> CupSeriesPublic:
     """A player of a free for all lobby, or a runner, enters where every side
-    finished: every seat once, places 1 to the seat count, and no place for a
-    seat whose entrant withdrew. A round whose every lobby has places seats the
+    finished: every seat once, places 1 to the seats that play, and no place
+    for a Left seat (its entrant withdrew before the lobby was placed). A round whose every lobby has places seats the
     lobbies of the next round, and a correction seats it again while it is
     unplayed; once it has a result, 409."""
     return cup_series.places(series_id, data, claims)

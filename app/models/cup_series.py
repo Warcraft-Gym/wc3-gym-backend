@@ -192,7 +192,7 @@ class CupSeriesSidePublic(SeriesSidePublic):
 
     team: TeamSummaryPublic | None = None
     players: list[UserSummaryPublic] = []
-    # The seat's entrant withdrew: it takes no place and goes on to no round
+    # The seat's entrant withdrew before the lobby was placed: no place, no next round
     left: bool = False
 
 

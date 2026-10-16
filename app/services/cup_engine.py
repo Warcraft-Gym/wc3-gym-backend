@@ -494,7 +494,8 @@ def set_places(session: OrmSession, row: CupSeries, data: PlacesWrite) -> None:
         .where(col(CupSeriesSide.series_id) == ident(row))
     ):
         seats[side.side_no] = side
-        if withdrawn_at is not None:
+        # a seat placed before its entrant withdrew keeps its place
+        if withdrawn_at is not None and side.place is None:
             left.add(side.side_no)
     if not seats:
         raise BadRequestError("This series seats no lobby, so it takes no places")
@@ -991,7 +992,7 @@ def _fill_sides(session: OrmSession, rows: Sequence[CupSeriesPublic]) -> None:
                 user=UserSummaryPublic.from_user(user) if user else None,
                 entrant_id=side.entrant_id,
                 place=side.place,
-                left=withdrawn_at is not None,
+                left=withdrawn_at is not None and side.place is None,
             )
         )
     for row in rows:
