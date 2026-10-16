@@ -9,6 +9,7 @@ from app.models.cup_series import (
     CupScoreWrite,
     CupSeriesPublic,
     LobbyMapWrite,
+    LobbyMoveWrite,
 )
 from app.models.series import ResultKindWrite
 from app.models.series_game import SeriesGamePublic
@@ -72,9 +73,10 @@ def place_cup_lobby(
     series_id: int, data: PlacesWrite, claims: RequireLogin
 ) -> CupSeriesPublic:
     """A player of a free for all lobby, or a runner, enters where every side
-    finished: every seat once, places 1 to the seat count. A round whose every
-    lobby has places seats the lobbies of the next round, and a correction
-    seats it again while it is unplayed; once it has a result, 409."""
+    finished: every seat once, places 1 to the seat count, and no place for a
+    seat whose entrant withdrew. A round whose every lobby has places seats the
+    lobbies of the next round, and a correction seats it again while it is
+    unplayed; once it has a result, 409."""
     return cup_series.places(series_id, data, claims)
 
 
@@ -91,8 +93,18 @@ def map_cup_lobby(
 def seat_cup_lobby(
     series_id: int, data: LobbySidesWrite, claims: RequireLogin
 ) -> CupSeriesPublic:
-    """A runner seats a free for all lobby again before it is played."""
+    """A runner seats a free for all lobby again before it is played; an entrant
+    seated in another lobby of the round moves with POST .../move instead."""
     return cup_series.sides(series_id, data, claims)
+
+
+@router.post("/cup-series/{series_id}/move")
+def move_cup_seat(
+    series_id: int, data: LobbyMoveWrite, claims: RequireLogin
+) -> list[CupSeriesPublic]:
+    """A runner moves one entrant from this lobby to another of its round and
+    division, both unplayed, in one write: the lobby left, then the lobby joined."""
+    return cup_series.move(series_id, data, claims)
 
 
 @router.get("/cup-series/{series_id}/veto")

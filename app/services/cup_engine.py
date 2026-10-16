@@ -481,12 +481,21 @@ def set_result_kind(session: OrmSession, row: CupSeries, data: ResultKindWrite) 
 def set_places(session: OrmSession, row: CupSeries, data: PlacesWrite) -> None:
     """Write where every side of a lobby finished, and score it as played.
 
-    A lobby plays one game, so its places are its whole result. Once every
-    lobby of a round carries places, the round seats the lobbies of the round
-    after it from the places that went through.
+    A lobby plays one game, so its places are its whole result. A seat whose
+    entrant withdrew takes no place, and the other seats take 1 to their count.
+    Once every lobby of a round carries places, the round seats the lobbies of
+    the round after it from the places that went through.
     """
-    series_id = ident(row)
-    seats = {side.side_no: side for side in _seats(session, series_id)}
+    seats: dict[int, CupSeriesSide] = {}
+    left: set[int] = set()
+    for side, withdrawn_at in session.execute(
+        select(CupSeriesSide, col(EventEntrant.withdrawn_at))
+        .outerjoin(EventEntrant, col(EventEntrant.id) == col(CupSeriesSide.entrant_id))
+        .where(col(CupSeriesSide.series_id) == ident(row))
+    ):
+        seats[side.side_no] = side
+        if withdrawn_at is not None:
+            left.add(side.side_no)
     if not seats:
         raise BadRequestError("This series seats no lobby, so it takes no places")
     if any(side.entrant_id is None for side in seats.values()):
@@ -495,19 +504,24 @@ def set_places(session: OrmSession, row: CupSeries, data: PlacesWrite) -> None:
     for entry in data.places:
         if entry.side_no not in seats:
             raise BadRequestError(f"This lobby seats no side {entry.side_no}")
+        if entry.side_no in left:
+            raise BadRequestError(
+                f"Seat {entry.side_no} left the cup and takes no place"
+            )
         if entry.side_no in given:
             raise BadRequestError("Name the place of each seat once")
         given[entry.side_no] = entry.place
-    if set(given) != set(seats):
+    playing = set(seats) - left
+    if set(given) != playing:
         raise BadRequestError("Every side of the lobby needs a place")
-    if sorted(given.values()) != list(range(1, len(seats) + 1)):
-        raise BadRequestError(f"The places run from 1 to {len(seats)}, each once")
+    if sorted(given.values()) != list(range(1, len(playing) + 1)):
+        raise BadRequestError(f"The places run from 1 to {len(playing)}, each once")
     # a lobby played already is corrected: the round after follows while it is unplayed
     correcting = scored(row)
     split = _round_split(session, row)
     _hold_next_round_open(split)
-    for side_no, place in given.items():
-        seats[side_no].place = place
+    for side_no, side in seats.items():
+        side.place = given.get(side_no)
     # A lobby plays one game and its places settle it, so the score only
     # says it was played; the seats carry who finished where
     row.player1_score, row.player2_score = 1, 0
@@ -645,7 +659,50 @@ def set_sides(session: OrmSession, row: CupSeries, data: LobbySidesWrite) -> Non
             raise NotFoundError(f"Entrant not found by id: {entrant_id}")
         if stage is not None and entrant.event_id != stage.event_id:
             raise BadRequestError("This entrant does not play in that event")
+    elsewhere = session.scalar(
+        select(col(CupSeriesSide.entrant_id))
+        .join(CupSeries, col(CupSeries.id) == col(CupSeriesSide.series_id))
+        .where(
+            col(CupSeries.round_id) == row.round_id,
+            col(CupSeries.id) != series_id,
+            col(CupSeriesSide.entrant_id).in_(data.entrant_ids),
+        )
+        .limit(1)
+    )
+    if elsewhere is not None:
+        raise BadRequestError(
+            f"Entrant {elsewhere} sits in another lobby of this round; move them"
+        )
     _seat(session, row, [entrants[entrant_id] for entrant_id in data.entrant_ids])
+
+
+def move_seat(
+    session: OrmSession, row: CupSeries, target: CupSeries, entrant_id: int
+) -> None:
+    """Move one entrant from a lobby to the last seat of another lobby of its
+    round and division, both unplayed; nothing changes on a refusal."""
+    if (target.round_id, target.division_id) != (row.round_id, row.division_id):
+        raise BadRequestError("Move a player to a lobby of the same round and division")
+    seats, taken = _seats(session, ident(row)), _seats(session, ident(target))
+    if not seats or not taken:
+        raise BadRequestError("Only a lobby seats players to move")
+    if scored(row) or scored(target):
+        raise BadRequestError("A lobby that holds places keeps its seats")
+    staying = [side.entrant_id for side in seats if side.entrant_id != entrant_id]
+    if len(staying) == len(seats):
+        raise BadRequestError("This entrant sits in no seat of this lobby")
+    if any(side.entrant_id == entrant_id for side in taken):
+        raise BadRequestError("This entrant sits in that lobby already")
+    if len(staying) < 2:
+        raise BadRequestError("A lobby keeps two seats or more")
+    joining = [side.entrant_id for side in taken] + [entrant_id]
+    entrants = _entrants_by_id(
+        session, [held for held in staying + joining if held is not None]
+    )
+    if entrants[entrant_id].withdrawn_at is not None:
+        raise BadRequestError("A player who left the cup moves to no lobby")
+    _seat(session, row, [entrants[held] for held in staying if held is not None])
+    _seat(session, target, [entrants[held] for held in joining if held is not None])
 
 
 def standings_of(event_id: int, stage_id: int) -> list[DivisionStandings]:
@@ -920,9 +977,10 @@ def _fill_sides(session: OrmSession, rows: Sequence[CupSeriesPublic]) -> None:
     if not wanted:
         return
     found: dict[int, list[CupSeriesSidePublic]] = {}
-    for side, user in session.execute(
-        select(CupSeriesSide, User)
+    for side, user, withdrawn_at in session.execute(
+        select(CupSeriesSide, User, col(EventEntrant.withdrawn_at))
         .outerjoin(User, col(User.id) == col(CupSeriesSide.user_id))
+        .outerjoin(EventEntrant, col(EventEntrant.id) == col(CupSeriesSide.entrant_id))
         .where(col(CupSeriesSide.series_id).in_(wanted))
         .order_by(col(CupSeriesSide.series_id), col(CupSeriesSide.side_no))
     ):
@@ -933,6 +991,7 @@ def _fill_sides(session: OrmSession, rows: Sequence[CupSeriesPublic]) -> None:
                 user=UserSummaryPublic.from_user(user) if user else None,
                 entrant_id=side.entrant_id,
                 place=side.place,
+                left=withdrawn_at is not None,
             )
         )
     for row in rows:
@@ -1070,17 +1129,34 @@ def _fill_lobbies(
 def _through(
     session: OrmSession, stage: EventStage, lobbies: Sequence[CupSeries]
 ) -> list[EventEntrant]:
-    """The entrants the lobbies of one round send on, best place first."""
+    """The entrants the lobbies of one round send on, best place first: the top
+    places of each lobby taken by entrants that did not withdraw, so the next
+    place goes through for one that did."""
     top = _lobby_advance(stage, stage.lobby_size or 2)
     seats = _seats_of(session, [ident(lobby) for lobby in lobbies])
-    taking = sorted(
-        (side.place, order, side.entrant_id)
-        for order, lobby in enumerate(lobbies)
-        for side in seats.get(ident(lobby), [])
-        if side.entrant_id is not None and side.place is not None and side.place <= top
+    found = _entrants_by_id(
+        session,
+        [
+            side.entrant_id
+            for sides in seats.values()
+            for side in sides
+            if side.entrant_id is not None and side.place is not None
+        ],
     )
-    found = _entrants_by_id(session, [entrant_id for _, _, entrant_id in taking])
-    return [found[entrant_id] for _, _, entrant_id in taking if entrant_id in found]
+    taking: list[tuple[int, int, int]] = []
+    for order, lobby in enumerate(lobbies):
+        staying = sorted(
+            (side.place, side.entrant_id)
+            for side in seats.get(ident(lobby), [])
+            if side.place is not None
+            and side.entrant_id in found
+            and found[side.entrant_id].withdrawn_at is None
+        )
+        taking += [
+            (rank, order, entrant_id)
+            for rank, (_, entrant_id) in enumerate(staying[:top])
+        ]
+    return [found[entrant_id] for _, _, entrant_id in sorted(taking)]
 
 
 def _lobby_advance(stage: EventStage, seats: int) -> int:
