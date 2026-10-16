@@ -660,6 +660,8 @@ def set_sides(session: OrmSession, row: CupSeries, data: LobbySidesWrite) -> Non
             raise NotFoundError(f"Entrant not found by id: {entrant_id}")
         if stage is not None and entrant.event_id != stage.event_id:
             raise BadRequestError("This entrant does not play in that event")
+        if entrant.withdrawn_at is not None:
+            raise BadRequestError("A player who left the cup moves to no lobby")
     elsewhere = session.scalar(
         select(col(CupSeriesSide.entrant_id))
         .join(CupSeries, col(CupSeries.id) == col(CupSeriesSide.series_id))

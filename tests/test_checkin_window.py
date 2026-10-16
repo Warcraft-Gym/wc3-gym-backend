@@ -9,13 +9,14 @@ before the opening, and a runner is never held to the window.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.services import availability, awards, cup_rounds, events
 from app.services.availability import AvailabilityService
@@ -201,6 +202,30 @@ def test_a_zoned_round_is_the_round_to_check_in_to_until_its_zone_midnight(
             assert round_ is not None and round_.number == number
 
 
+def test_the_member_read_names_a_zoned_round_until_its_zone_midnight(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: Headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 2 ends on Sun 18 Jan 2026; in New York that is 05:00 UTC on
+    Mon 19 Jan, so the member home still names round 2 at 01:00 UTC."""
+    season = seeded["season_id"]
+    assert edit(
+        client, auth_headers, season, round_end_zone="America/New_York"
+    ).is_success
+    for moment, number in (
+        ("2026-01-19T01:00:00+00:00", 2),
+        ("2026-01-19T05:00:00+00:00", 3),
+    ):
+        at(monkeypatch, events, moment)
+        home = {
+            row["id"]: row
+            for row in client.get("/me/events", headers=auth_headers).json()
+        }
+        assert home[season]["next_round"]["number"] == number
+
+
 def test_a_cup_opens_two_hours_before_it_starts_and_closes_at_its_draw(
     client: Client,
     auth_headers: Headers,
@@ -284,6 +309,43 @@ def test_an_early_close_shuts_the_cup_for_a_player_and_not_for_a_runner(
         "Check-in closed on 30 Oct at 01:30 UTC."
     )
     assert check_in(client, auth_headers, cup["id"], other).status_code == 200
+
+
+def test_an_organizer_of_the_cup_checks_a_player_in_outside_the_window(
+    client: Client,
+    auth_headers: Headers,
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A member who holds an organizer row of the cup runs it, not only an
+    admin: it checks a player in after the cup's early close and before a
+    round of a cup opens."""
+    cup = made(client, auth_headers, starts_at=CUP_START, checkin_enabled=True)
+    assert edit(client, auth_headers, cup["id"], checkin_closes_minutes=30).is_success
+    rounds = made(
+        client, auth_headers, name="Round Cup", legs=LEGS, early_checkin=False
+    )
+    for event in (cup, rounds):
+        added = client.post(
+            f"/events/{event['id']}/organizers",
+            json={"discord_id": "80"},
+            headers=auth_headers,
+        )
+        assert added.status_code == 201, added.text
+    organizer = member("80")
+    player = players(1)[0]
+    entrant, leg_entrant = enter(cup["id"], player), enter(rounds["id"], player)
+    first = rounds["cup_legs"][0]["id"]
+
+    at(monkeypatch, events, "2026-10-30T01:31:00+00:00")
+    assert closed(check_in(client, member("90001"), cup["id"], entrant))
+    taken = check_in(client, organizer, cup["id"], entrant)
+    assert taken.status_code == 200, taken.text
+
+    at(monkeypatch, cup_rounds, "2026-11-06T16:59:00+00:00")
+    assert closed(leg_check_in(client, member("90001"), rounds["id"], first))
+    taken = leg_check_in(client, organizer, rounds["id"], first, leg_entrant)
+    assert taken.status_code == 200, taken.text
 
 
 def test_a_round_of_a_cup_follows_its_own_start(
@@ -542,19 +604,61 @@ def test_the_event_close_refuses_an_event_that_checks_in_per_round(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A cup over rounds closes each round on its own route, and a dated
-    round closes at its end or by checkin_closes_minutes."""
+    round closes at its end or by checkin_closes_minutes; the reopen still
+    clears the event's stamp."""
     cup = made(client, auth_headers, legs=LEGS)
     at(monkeypatch, events, "2026-01-10T00:00:00+00:00")
     for event, route in (
         (cup["id"], "/legs/{leg_id}/checkin/close"),
         (seeded["season_id"], "checkin_closes_minutes"),
     ):
-        for action in ("close", "reopen"):
-            response = client.post(
-                f"/events/{event}/checkin/{action}", headers=auth_headers
+        response = client.post(f"/events/{event}/checkin/close", headers=auth_headers)
+        assert response.status_code == 400, response.text
+        assert route in response.json()["error"]
+        opened = runner(client, auth_headers, f"/events/{event}/checkin/reopen")
+        assert opened["checkin_closed_at"] is None
+
+
+def test_the_reopen_clears_a_close_that_a_dated_round_added_later_reads(
+    client: Client, auth_headers: Headers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every dated round reads the event's close by hand, so a close stamped
+    while no dated round was next is cleared once a dated round is added."""
+    cup = made(client, auth_headers, starts_at=CUP_START, checkin_enabled=True)
+    at(monkeypatch, events, "2026-10-30T00:30:00+00:00")
+    runner(client, auth_headers, f"/events/{cup['id']}/checkin/close")
+    with Session.begin() as session:
+        session.add(
+            DBEventRound(
+                season_id=cup["id"],
+                stage_id=cup["stages"][0]["id"],
+                number=1,
+                start_date=date(2026, 11, 2),
             )
-            assert response.status_code == 400, response.text
-            assert route in response.json()["error"]
+        )
+
+    opened = runner(client, auth_headers, f"/events/{cup['id']}/checkin/reopen")
+
+    assert opened["checkin_closed_at"] is None
+
+
+def test_the_event_close_refuses_an_event_whose_check_in_is_off(
+    client: Client, auth_headers: Headers
+) -> None:
+    """Nothing reads a close on an event that takes no check-in; the reopen
+    still clears a stamp left from when it took one."""
+    cup = made(client, auth_headers, starts_at=CUP_START, checkin_enabled=False)
+
+    response = client.post(f"/events/{cup['id']}/checkin/close", headers=auth_headers)
+
+    assert response.status_code == 400, response.text
+    assert response.json() == {"error": "Check-in is off for this event"}
+    with Session.begin() as session:
+        session.get_one(Season, cup["id"]).checkin_closed_at = datetime(
+            2026, 10, 30, tzinfo=UTC
+        )
+    opened = runner(client, auth_headers, f"/events/{cup['id']}/checkin/reopen")
+    assert opened["checkin_closed_at"] is None
 
 
 def test_a_member_who_does_not_run_the_event_cannot_close_its_check_in(
