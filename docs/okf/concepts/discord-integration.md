@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, cups announce themselves to the members who opt in, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T09:45:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T12:00:00Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -59,7 +59,7 @@ Card rules: a mention is a call to action, so `/upcoming` tags nobody and the re
 
 A cup posts four messages in the channel the `announcement_channel_id` setting names, through `app/services/cup_announcements.py`:
 - **Open:** a cup that reads published with its signups open, after `POST /events`, `PUT /events/{id}` or a recurring cup made, with the event card's description and a link to sign up on the site.
-- **Reminder:** `GET /jobs/cast-reminders` also calls every cup that starts within the hour to check in. A cup played over rounds is called round by round, each round on its own start; a start that has passed is not called.
+- **Reminder:** `GET /jobs/cast-reminders` also calls every cup to check in, once: an hour before its check-in closes early (`checkin_closes_minutes`), else an hour before it starts, or when its check-in opens if that is later, and only while the check-in stands open and the cup is not drawn. A cup played over rounds is called round by round, each round on its own start and window; a start that has passed is not called. A cup that takes no check-in is called an hour before it starts.
 - **Draw:** a stage's first draw and every later round of a stage that draws round by round, from the runner's draw, a result that draws the next round or stage, or a withdrawal. The engine marks each draw in the session, and the post goes out after the commit, so a refused draw posts nothing.
 - **Top three:** after `POST /events/{id}/finish`, per division, or from the overall table with its points for a cup played over rounds. A close after a reopen edits that card.
 

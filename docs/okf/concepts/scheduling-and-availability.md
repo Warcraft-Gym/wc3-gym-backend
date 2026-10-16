@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time and each player's blocked time are read as intervals, for a series and before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-30T20:11:46Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T18:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -26,7 +26,7 @@ The question "can you play?" belongs to a round, never to "every week". A round 
 
 `GET /player-series` answers the player's own answers beside the rounds of the event. Each round carries its number, its date window, the fixed map of game 1 and the stage it sits in, as `stage_id` and `stage_name`, so the page groups the rounds under their stage. A round in no stage, and a stage with no name, answer null. One statement reads the rounds and their stage names together. The round rows of an event payload carry `stage_id` too; that read does not join the stage, so `stage_name` reads null on it.
 
-One write answers every round of the event that has not ended, for one player: `PUT /player-availability/all` for the player themselves, `PUT /events/{event_id}/teams/{team_id}/availability/all` for their captain or an admin. It takes the same permissions as the single-round writers, writes the rounds in one transaction, and a null answer clears those same rounds again. Both answer the player's rows for the event, as the single-round writers do.
+One write answers every round of the event that has not ended, for one player: `PUT /player-availability/all` for the player themselves, `PUT /events/{event_id}/teams/{team_id}/availability/all` for their captain or an admin. It takes the same permissions as the single-round writers, writes the rounds in one transaction, and a null answer clears those same rounds again. A player's own write leaves out the rounds whose check-in has closed to them, so an early close never refuses the whole write. Both answer the player's rows for the event, as the single-round writers do.
 
 # Ask when someone cannot play
 
@@ -53,11 +53,13 @@ Both reads share one helper, which takes two player ids and a window and answers
 
 # When a round ends
 
-A round ends at midnight after its last day, in the zone the event names (`round_end_zone`). One helper answers the instants a round runs between, and every reader of a round window takes it: the check-in refusal, the check-in hint, the free-time reads and the draft board. An event that names no zone leaves each reader its own fallback: the check-in refusal and the free-time reads stand at UTC midnights, and the check-in hint and the derived out-on-blocked-times flag read the round in the player's own zone. A player's blocks stand in the player's own zone, the round window in the event's, so a player in another zone still reads against the same round.
+A round ends at midnight after its last day, in the zone the event names (`round_end_zone`). One helper answers the instants a round runs between, and every reader of a round window takes it: the check-in window, the check-in hint, the free-time reads and the draft board. An event that names no zone leaves each reader its own fallback: the check-in window and the free-time reads stand at UTC midnights, and the check-in hint and the derived out-on-blocked-times flag read the round in the player's own zone. A player's blocks stand in the player's own zone, the round window in the event's, so a player in another zone still reads against the same round.
 
 # Check-in
 
-A season may open a check-in a number of days before each round (`checkin_days`), which is the day the app asks. A player's own write is refused before that day and after the round ends; a captain's and an admin's are not. With `early_checkin` on, the player may answer every round of the event that has not ended, and the refusal after a round's end still holds. `app/core/checkin_hint.py` computes what the check-in shows for one player and one round from their answer and their blocks; it writes nothing.
+The check-in of a dated round opens `checkin_opens_minutes` before the round starts, at midnight on its first day in the event's zone (UTC when the event names none), and closes when the round ends, or when the event is closed or cancelled before that. A blank `checkin_opens_minutes` opens it from sign-up. `checkin_closes_minutes` closes it that many minutes before the round starts instead, so 0 closes it at the start. `checkin_days` is the same opening in whole days, rounded down; a write that names only `checkin_days` sets the minutes from it.
+
+A player's own write is refused before the opening and after the close, with `403 {"error": "checkin_closed"}` and a message that names the time in UTC or says the round is over; a captain's and an admin's never are. With `early_checkin` on, the player may answer every round of the event that has not closed. Each dated round on `GET /player-series` and the event reads (`GET /events`, `GET /events/{id}`) carries `checkin_opens_at` and `checkin_closes_at`, aware UTC; a round with no dates, or an event that takes no check-in, carries null. One function, `checkin_window` in `app/core/checkin_hint.py`, answers the window of a dated round, a round of a cup and an event, and every check-in reader takes it; the same file computes what the check-in shows for one player and one round from their answer and their blocks, and writes nothing.
 
 # Out on blocked times
 

@@ -90,16 +90,17 @@ def test_the_phase_walks_the_signup_rungs(
 
 
 def test_the_check_in_rung_reads_the_first_round_window(client: Client) -> None:
-    """The window opens checkin_days before the round and a blank one is always open."""
+    """The window opens checkin_opens_minutes before the round and a blank one is
+    open from sign-up."""
     event = add_event(signups_open=False, checkin_days=3)
     add_round(event, TODAY + timedelta(days=10), TODAY + timedelta(days=11))
     assert phase(client, event) == "seeded"
 
-    set_fields(event, checkin_days=None)
+    set_fields(event, checkin_opens_minutes=None)
     assert phase(client, event) == "checkin"
 
     # Past the end of the round the window has closed again
-    set_fields(event, checkin_days=3)
+    set_fields(event, checkin_opens_minutes=3 * 1440)
     with Session.begin() as session:
         row = round_row(session, event, 1)
         assert row is not None
@@ -1329,13 +1330,15 @@ def test_the_hint_reads_the_round_in_the_events_zone(
     event = add_event(
         kind=EventKind.cup, checkin_days=3, round_end_zone="Pacific/Auckland"
     )
-    add_round(event, TODAY, TODAY)
+    # Tomorrow's round in Auckland ends after today ends in UTC, at any hour
+    day = TODAY + timedelta(days=1)
+    add_round(event, day, day)
     enter(event, player)
-    busy_days(player, "America/New_York", TODAY)
+    busy_days(player, "America/New_York", day)
 
     assert my_events(client, headers)[event]["availability_hint"] == "open"
 
-    busy_days(player, "America/New_York", TODAY - timedelta(days=1))
+    busy_days(player, "America/New_York", day - timedelta(days=1))
     assert my_events(client, headers)[event]["availability_hint"] == "blocked_by_blocks"
 
 

@@ -9,7 +9,7 @@ import random
 import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time
 from typing import Any, NamedTuple
 
 from sqlalchemy import (
@@ -31,7 +31,13 @@ from sqlalchemy.orm import aliased, load_only, noload, selectinload
 from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import col
 
-from app.core.checkin_hint import availability_hints
+from app.core.checkin_hint import (
+    availability_hints,
+    checkin_refusal,
+    checkin_window,
+    round_checkin,
+    round_window,
+)
 from app.core.db import Session, rel
 from app.core.divisions import cut
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
@@ -92,6 +98,7 @@ from app.models.season import (
     MemberCupTeam,
     MemberEventRow,
     Season,
+    checkin_fields,
     series_counts,
     series_counts_by_event,
     series_scored,
@@ -151,10 +158,14 @@ _MEMBER_COLUMNS = load_only(
     rel(Season.end_date),
     rel(Season.published),
     rel(Season.closed_at),
+    rel(Season.cancelled_at),
     rel(Season.entrant_kind),
     rel(Season.signups_open),
     rel(Season.checkin_enabled),
-    rel(Season.checkin_days),
+    rel(Season.checkin_opens_minutes),
+    rel(Season.checkin_closes_minutes),
+    rel(Season.checkin_closed_at),
+    rel(Season.early_checkin),
     rel(Season.series_per_round),
     rel(Season.page_url),
     rel(Season.round_end_zone),
@@ -164,6 +175,9 @@ _MEMBER_COLUMNS = load_only(
 
 # A player's own signup to a team cup, which takes a team instead
 TEAM_CUP_SIGNUP = "This cup signs teams up; sign a team up"
+
+# How many minutes before it starts a cup that names no window opens its check-in
+CUP_CHECKIN_MINUTES = 120
 
 # Newest first by when the event starts; an event with neither date sorts last
 NEWEST_FIRST = (
@@ -234,7 +248,7 @@ def phase_of(
             if "rounds" not in instance_state(event).unloaded
             else event_rounds(session, ident(event))
         )
-        if checkin_open(event, rounds):
+        if checkin_open(event, rounds, total > 0):
             return "checkin"
     return "seeded"
 
@@ -295,59 +309,41 @@ def last_stage_drawn(
     return {event_id: played_out for event_id, (_, played_out) in last.items()}
 
 
-def open_rounds(rounds: Iterable[DBEventRound]) -> list[DBEventRound]:
-    """The dated rounds of an event that are not over, earliest first."""
-    now = _today()
+def open_rounds(event: Season, rounds: Iterable[DBEventRound]) -> list[DBEventRound]:
+    """The dated rounds of an event that are not over, earliest first: a round
+    runs until midnight after its last day in the event's zone."""
+    now = utcnow()
     dated = sorted(
         (row for row in rounds if row.start_date is not None),
         key=lambda row: (row.start_date, row.number),
     )
-    return [row for row in dated if (row.end_date or row.start_date) >= now]
+    return [row for row in dated if now < (round_window(event, row) or (now, now))[1]]
 
 
-def next_round(rounds: Iterable[DBEventRound]) -> DBEventRound | None:
+def next_round(event: Season, rounds: Iterable[DBEventRound]) -> DBEventRound | None:
     """The next dated round of the event: the earliest one that is not over.
 
     A round with no dates is no round to check into, and a stage that holds no
     rounds at all leaves the event checking in to itself.
     """
-    return next(iter(open_rounds(rounds)), None)
+    return next(iter(open_rounds(event, rounds)), None)
 
 
-def checkin_window(
-    event: Season, round_: DBEventRound | None
-) -> tuple[date, date | None] | None:
-    """The days a check-in stands open, from `checkin_days` before it starts.
+def checkin_open(event: Season, rounds: Sequence[DBEventRound], drawn: bool) -> bool:
+    """Whether a player may check in now, in whichever shape the event takes.
 
-    A round gives its own window and closes when the round ends; no round
-    gives the event's, which closes on the day the event starts. None is no
-    window to hold anyone to: a blank `checkin_days`, or no start date.
+    An event whose next round carries dates checks in to that round, until
+    the round ends; every other event checks in to itself, until `drawn`
+    says it holds a series. An event with nothing to check into is shut, and
+    early check-in takes a player before the window opens.
     """
-    start = round_.start_date if round_ is not None else _start(event)
-    if event.checkin_days is None or start is None:
-        return None
-    return start - timedelta(days=event.checkin_days), (
-        round_.end_date if round_ is not None else start
-    )
-
-
-def checkin_open(event: Season, rounds: Sequence[DBEventRound]) -> bool:
-    """Whether the event's check-in stands open today, in whichever shape it takes.
-
-    An event whose next round carries dates checks in to that round; every
-    other event checks in to itself, up to the day it starts. An event with
-    nothing to check into is shut, and a window nobody dated never closes.
-    """
-    round_ = next_round(rounds)
+    round_ = next_round(event, rounds)
     undated = any(row.start_date is None for row in rounds)
     if round_ is None and not undated and _start(event) is None:
         return False
     window = checkin_window(event, round_)
-    if window is None:
-        return True
-    opens, closes = window
-    now = _today()
-    return opens <= now and (closes is None or now <= closes)
+    shut = drawn and round_ is None
+    return checkin_refusal(window, utcnow(), event.early_checkin, shut) is None
 
 
 def _start(event: Season) -> date | None:
@@ -485,6 +481,10 @@ class EventService:
                     "custom_game",
                 }
             )
+            if "checkin_opens_minutes" not in data.model_fields_set:
+                # left out, the check-in opens checkin_days before the start
+                del fields["checkin_opens_minutes"]
+            checkin_fields(fields)
             _hold_bounds(fields)
             if fields.get("entrant_kind") is None:
                 fields["entrant_kind"] = _league_entrant_kind(
@@ -511,6 +511,9 @@ class EventService:
                 # checks its players in per round rather than once for the cup
                 cup_rounds.write_legs(session, event, data.legs, stages)
                 event.checkin_enabled = False
+                if "early_checkin" not in data.model_fields_set:
+                    # a player checks in for a round from the day they sign up
+                    event.early_checkin = True
             else:
                 _write_stages(session, event, stages)
             _write_pool(session, ident(event), data.map_ids)
@@ -522,6 +525,14 @@ class EventService:
                     cup_rounds.points_text(data.points_by_place) if data.legs else None,
                     data.custom_game,
                 )
+                if not data.model_fields_set & {
+                    "checkin_days",
+                    "checkin_opens_minutes",
+                }:
+                    # a cup that names no window opens its check-in shortly before it starts
+                    event.sqlmodel_update(
+                        checkin_fields({"checkin_opens_minutes": CUP_CHECKIN_MINUTES})
+                    )
             if data.recurrence is not None:
                 if not cup:
                     raise BadRequestError("Only a cup repeats")
@@ -529,6 +540,7 @@ class EventService:
                 cup_recurrence.create_in(
                     session, event, data.recurrence, created_by or "admin"
                 )
+            _hold_window(event)
             hold_pool(session, event)
             return _answer(session, ident(event))
 
@@ -557,8 +569,9 @@ class EventService:
                     raise BadRequestError(
                         "Remove the event's teams before changing its league"
                     )
-            event.sqlmodel_update(fields)
+            event.sqlmodel_update(checkin_fields(fields))
             _hold_bounds(event.model_dump())
+            _hold_window(event)
             if data.model_fields_set & {"pick_ban", "map_rules"}:
                 from app.services.series_veto import check_order
 
@@ -745,7 +758,7 @@ class EventService:
             ids = [event.id for event in events]
             counts = series_counts_by_event(session, ids)
             drawn = last_stage_drawn(session, ids)
-            rounds = {event.id: next_round(event.rounds) for event in events}
+            rounds = {event.id: next_round(event, event.rounds) for event in events}
             # Only an event whose check-in is on and dated shows a hint
             hints = _round_hints(
                 session,
@@ -928,15 +941,18 @@ class EventService:
 
         This is the event shape of the check-in. An event whose next round
         carries dates checks in per round, through PUT /player-availability.
+        A player's own check-in is refused outside the event's window and once
+        the event holds a series; a runner's never is.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
-            if next_round(event_rounds(session, event_id)) is not None:
+            if next_round(event, event_rounds(session, event_id)) is not None:
                 raise BadRequestError(
                     "This event checks in per round. Answer the round instead."
                 )
             row = _entrant(session, event_id, entrant_id)
-            if not organizers.runs(claims, event_id):
+            runs = organizers.runs(claims, event_id)
+            if not runs:
                 user = _caller(session, claims)
                 member = (
                     user is not None
@@ -950,6 +966,15 @@ class EventService:
                 raise BadRequestError(
                     "A signup on the waitlist checks in once it is let in"
                 )
+            if event.checkin_enabled and not runs:
+                refusal = checkin_refusal(
+                    checkin_window(event),
+                    utcnow(),
+                    event.early_checkin,
+                    series_counts(session, event_id)[0] > 0,
+                )
+                if refusal is not None:
+                    raise ApiError(403, {"error": "checkin_closed", "message": refusal})
             cup_reads.hold_complete_team(session, event, row)
             row.checked_in_at = utcnow()
             session.flush()
@@ -987,6 +1012,30 @@ class EventService:
                     continue
                 row.checked_in_at = now
         return self.get_entrants(event_id, claims)
+
+    def close_checkin(self, event_id: int, closed: bool) -> EventPublic:
+        """Close the event's own check-in to players by hand, or reopen it.
+
+        A second close keeps the first stamp. An event that checks in per
+        dated round or per round of a cup has no check-in of its own to close.
+        """
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if next_round(event, event_rounds(session, event_id)) is not None:
+                raise BadRequestError(
+                    "This event checks in per round, until the round ends; "
+                    f"PUT /events/{event_id} with checkin_closes_minutes closes it earlier"
+                )
+            if cup_rounds.has_legs(session, event_id):
+                raise BadRequestError(
+                    "This cup checks in per round; close a round with "
+                    f"POST /events/{event_id}/legs/{{leg_id}}/checkin/close"
+                )
+            event.checkin_closed_at = (
+                (event.checkin_closed_at or utcnow()) if closed else None
+            )
+            session.flush()
+            return _answer(session, event_id)
 
     def replace_entrant(
         self, event_id: int, entrant_id: int, data: EntrantAdd
@@ -1755,9 +1804,10 @@ def _answer_time(
     stamped = answered[event.id]
     if stamped is not None:
         return stamped
-    window = checkin_window(event, round_)
-    opens = window[0] if window else round_.start_date
-    return datetime.combine(opens, time(), tzinfo=UTC) if opens else None
+    opens = checkin_window(event, round_).opens
+    if opens is None and round_.start_date is not None:
+        return datetime.combine(round_.start_date, time(), tzinfo=UTC)
+    return opens
 
 
 def _captain_fixtures(
@@ -1794,7 +1844,7 @@ def _captain_fixtures(
     wanted = {
         event_id: rounds
         for event_id in seats
-        if (rounds := open_rounds(by_id[event_id].rounds))
+        if (rounds := open_rounds(by_id[event_id], by_id[event_id].rounds))
     }
     # the same seats the /me nav lists: every event that is not closed
     listed = {event_id for event_id in seats if by_id[event_id].closed_at is None}
@@ -1936,7 +1986,7 @@ def _member_row(
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts, last_stage)
-    is_open = event.checkin_enabled and checkin_open(event, event.rounds)
+    is_open = event.checkin_enabled and checkin_open(event, event.rounds, counts[0] > 0)
     shape = (
         None
         if not event.checkin_enabled
@@ -1944,6 +1994,7 @@ def _member_row(
         if round_ is not None
         else "event"
     )
+    window = checkin_window(event, round_) if shape else None
     if shape != "round":
         hint = None
     answered = hint in ("answered_yes", "answered_no")
@@ -1970,6 +2021,8 @@ def _member_row(
         checked_in_at=checked_in_at,
         checkin_shape=shape,
         checkin_open=is_open,
+        checkin_opens_at=window.opens if window else None,
+        checkin_closes_at=window.closes if window else None,
         next_round=EventRoundPublic.from_row(round_) if round_ else None,
         availability_hint=hint,
         action=_member_action(
@@ -2084,10 +2137,18 @@ def _public(
         for link in (event.maps or [])
         if link and link.map
     ]
-    public.rounds = [SeasonRoundPublic.from_row(row) for row in (event.rounds or [])]
+    public.rounds = [
+        SeasonRoundPublic.from_row(row, None, round_checkin(event, row))
+        for row in (event.rounds or [])
+    ]
+    if event.checkin_enabled:
+        window = checkin_window(event, next_round(event, event.rounds or []))
+        public.checkin_opens_at, public.checkin_closes_at = window
     if not full:
         return public
-    public.checkin_open = event.checkin_enabled and checkin_open(event, event.rounds)
+    public.checkin_open = event.checkin_enabled and checkin_open(
+        event, event.rounds, resolved_counts[0] > 0
+    )
     public.uses_divisions = cup_divisions.uses_divisions(session, event)
     public.custom_game = cup_divisions.custom_game(session, event)
     if cup_divisions.is_cup(event):
@@ -2876,6 +2937,19 @@ def _hold_bounds(fields: dict[str, Any]) -> None:
     low, high = fields.get("mmr_min"), fields.get("mmr_max")
     if low is not None and high is not None and low > high:
         raise BadRequestError("The lowest MMR cannot be above the highest")
+
+
+def _hold_window(event: Season) -> None:
+    """Refuse a check-in window that closes before it opens."""
+    opens, closes = event.checkin_opens_minutes, event.checkin_closes_minutes
+    if opens is not None and closes is not None and opens <= closes:
+        raise ApiError(
+            422,
+            {
+                "error": "checkin_closes_minutes: the check-in closes after it "
+                "opens, so it needs fewer minutes than checkin_opens_minutes"
+            },
+        )
 
 
 def _refresh_for(

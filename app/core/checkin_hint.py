@@ -3,10 +3,15 @@
 The player's own answer is the truth. With no answer, their soft blocks say
 whether the whole round window is covered, which the page shows as a hint with
 one button to confirm: blocks inform, they never constrain.
+
+The check-in window of a dated round, a cup leg or an event is measured in
+minutes from its start, a runner's close by hand and the event's close shut it
+earlier, and every check-in reader takes it from here.
 """
 
 from collections.abc import Collection, Iterable, Mapping
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -15,6 +20,7 @@ from sqlmodel import col
 
 from app.core import free_time
 from app.models.base import ident
+from app.models.cup_rounds import CupLeg
 from app.models.relationships import DBEventRound
 from app.models.round_availability import DBRoundAvailability
 from app.models.season import AvailabilityHint, Season
@@ -42,6 +48,85 @@ def round_window(
         free_time.instant(first, time(), named),
         free_time.instant((last or first) + timedelta(days=1), time(), named),
     )
+
+
+class CheckinWindow(NamedTuple):
+    """When a player's own check-in opens and closes, aware UTC."""
+
+    # Null: open from sign-up
+    opens: datetime | None
+    # Null: open until the draw
+    closes: datetime | None
+
+
+def checkin_window(
+    event: Season, target: DBEventRound | CupLeg | None = None
+) -> CheckinWindow:
+    """The check-in window of a dated round, a cup leg, or the event itself.
+
+    The start is the leg's time, the round's first midnight in the event's
+    zone, else the event's time or its first day. The window opens
+    `checkin_opens_minutes` before the start. It closes at the earliest of
+    `checkin_closes_minutes` before the start, else a dated round's end; the
+    runner's close by hand, the leg's for a leg and the event's otherwise;
+    and the event's close or cancel. With none of these, an event or a leg
+    closes at its draw.
+    """
+    if isinstance(target, CupLeg):
+        start, end, by_hand = target.starts_at, None, target.checkin_closed_at
+    elif target is not None and target.start_date is not None:
+        start, end = round_window(event, target) or (None, None)
+        by_hand = event.checkin_closed_at
+    else:
+        start = event.starts_at or (round_window(event, None) or (None, None))[0]
+        end, by_hand = None, event.checkin_closed_at
+    opens = None
+    if start is not None and event.checkin_opens_minutes is not None:
+        opens = start - timedelta(minutes=event.checkin_opens_minutes)
+    if start is not None and event.checkin_closes_minutes is not None:
+        end = start - timedelta(minutes=event.checkin_closes_minutes)
+    shut = [
+        at
+        for at in (end, by_hand, event.closed_at, event.cancelled_at)
+        if at is not None
+    ]
+    return CheckinWindow(opens, min(shut, default=None))
+
+
+def round_checkin(event: Season, round_: DBEventRound) -> CheckinWindow:
+    """One round's window as its payload reads it: none on a round with no
+    dates or an event that takes no check-in."""
+    if not event.checkin_enabled or round_.start_date is None:
+        return CheckinWindow(None, None)
+    return checkin_window(event, round_)
+
+
+def checkin_refusal(
+    window: CheckinWindow,
+    now: datetime,
+    early: bool,
+    drawn: bool,
+    subject: str = "Check-in",
+) -> str | None:
+    """Why a player's own check-in is refused at `now`; None while it stands open.
+
+    Early check-in takes the player before the window opens. Nothing takes
+    them after it closes, by its time, by hand or with the event's close, or
+    once the cup or the leg it closes at is drawn.
+    """
+    if not early and window.opens is not None and now < window.opens:
+        return f"{subject} opens on {_utc(window.opens)}."
+    if window.closes is not None and now >= window.closes:
+        return f"{subject} closed on {_utc(window.closes)}."
+    if drawn:
+        return f"{subject} closed: the cup is drawn."
+    return None
+
+
+def _utc(moment: datetime) -> str:
+    """A moment as a refusal names it, in UTC: 9 Jan at 00:00 UTC."""
+    at = moment.astimezone(UTC)
+    return f"{at.day} {at:%b} at {at:%H:%M} UTC"
 
 
 def blocked_rounds(

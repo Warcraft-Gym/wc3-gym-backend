@@ -4,7 +4,7 @@ title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived on every read and ends on the admin's close.
 resource: ../../../app/models/season.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-09T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T12:00:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -45,8 +45,9 @@ GNL management uses `/events/{event_id}/teams`, `/series`, `/maps`, `/rounds`, `
 | `pick_ban` | the veto order, side A and side B per step |
 | `signups_open` | off: a signup is a request an admin may grant |
 | `scheduling_enabled` | off: the season takes no availability answers |
-| `checkin_enabled`, `checkin_days` | whether and when the round check-in opens |
-| `early_checkin` | whether a player may answer a round's check-in before its window opens; on, every round of the event that has not ended takes their answer |
+| `checkin_enabled`, `checkin_opens_minutes`, `checkin_days` | whether and when the round check-in opens: minutes before the round's first midnight, and the same in whole days |
+| `checkin_closes_minutes` | null closes the round check-in when the round ends; a number closes it that many minutes before the round starts |
+| `early_checkin` | whether a player may answer a round's check-in before its window opens; on, every round of the event that has not closed takes their answer |
 | `round_end_zone` | the IANA zone a round ends at midnight in; null leaves each reader its own fallback. See [scheduling and availability](scheduling-and-availability.md). |
 | `fantasy_grind` | whether the fantasy game offers the grind pick |
 | `fantasy_tier_cuts`, `fantasy_tiers_applied_at` | the MMR cuts between fantasy tiers |
