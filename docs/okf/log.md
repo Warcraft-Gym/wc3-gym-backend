@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-16
+
+* **Update**: a free for all seat whose entrant withdrew after the draw stays and reads `left`: it takes no place, `PUT /cup-series/{id}/places` takes 1 to the count of the other seats, and the next place goes through. `POST /cup-series/{id}/move` moves one entrant between lobbies of a round in one write, `PUT /cup-series/{id}/sides` refuses an entrant seated in another lobby of the round, and the replace write gives the new entrant every lobby seat of the old one. The [events module](concepts/events-module.md#cup-series) and [cup_series_side](data/tables/cup_series_side.md) state it.
+
 ## 2026-10-15
 
 * **Update**: cup series writes refuse an empty side, a side's report over a walkover or a forfeit, a side that withdrew and any write once the cup is closed; a repeat rule's create, change and next cup take an organizer grant; a double elimination ranks its champion first. The [events module](concepts/events-module.md#cup-series) states it.
