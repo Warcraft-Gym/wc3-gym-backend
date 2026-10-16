@@ -14,6 +14,7 @@ from typing import Any, NamedTuple
 
 from sqlalchemy import (
     ColumnElement,
+    Exists,
     Row,
     and_,
     case,
@@ -26,8 +27,8 @@ from sqlalchemy import (
     tuple_,
     update,
 )
+from sqlalchemy.orm import Mapped, aliased, load_only, noload, selectinload
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import aliased, load_only, noload, selectinload
 from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import col
 
@@ -753,7 +754,7 @@ class EventService:
                 )
                 .order_by(col(Season.id).desc())
             ).all()
-            joined, races, teams = _joined_events(session, user_id)
+            joined, races, teams, gone = _joined_events(session, user_id)
             formats = _cup_formats(session, events)
             ids = [event.id for event in events]
             counts = series_counts_by_event(session, ids)
@@ -789,6 +790,7 @@ class EventService:
                     every.get(event.id, []) if event.id is not None else [],
                     teams.get(ident(event)),
                     formats.get(ident(event), (False, False)),
+                    left=event.id in gone and event.id not in joined,
                 )
                 for event in events
             ]
@@ -1630,10 +1632,21 @@ def _day(event: Season) -> date | None:
     return event.starts_at.date() if event.starts_at else None
 
 
+def _left_seat(entrant: int | Mapped[int | None]) -> Exists:
+    """Whether the entrant holds a lobby seat with no place: the seat a
+    withdrawal after the draw leaves Left."""
+    return exists().where(
+        col(CupSeriesSide.entrant_id) == entrant, col(CupSeriesSide.place).is_(None)
+    )
+
+
 def _joined_events(
     session: OrmSession, user_id: int | None
 ) -> tuple[
-    dict[int, EventEntrant | None], dict[int, list[str]], dict[int, MemberCupTeam]
+    dict[int, EventEntrant | None],
+    dict[int, list[str]],
+    dict[int, MemberCupTeam],
+    set[int],
 ]:
     """The player's entrant row per event he joined, the races of every one of
     his rows there, and the cup team he plays a team cup in; a GNL signup has
@@ -1643,10 +1656,11 @@ def _joined_events(
     entrant; an event he never entered is no key at all. A player of a cup team
     joined the cup through the team's row. The same read answers the three
     maps, so an event that takes one entry per race costs no statement, and
-    neither does a team.
+    neither does a team. The same read also answers the events where the
+    player's entrant withdrew from a drawn lobby and holds a Left seat.
     """
     if user_id is None:
-        return {}, {}, {}
+        return {}, {}, {}, set()
     member = and_(
         col(CupTeamMember.team_id) == col(EventEntrant.cup_team_id),
         col(CupTeamMember.user_id) == user_id,
@@ -1668,6 +1682,7 @@ def _joined_events(
                 rel(EventEntrant.checked_in_at),
                 rel(EventEntrant.waitlisted_at),
                 rel(EventEntrant.cup_team_id),
+                rel(EventEntrant.withdrawn_at),
                 raiseload=True,
             )
         )
@@ -1678,14 +1693,21 @@ def _joined_events(
                 col(EventEntrant.user_id) == user_id,
                 col(CupTeamMember.user_id).is_not(None),
             ),
-            col(EventEntrant.withdrawn_at).is_(None),
+            or_(
+                col(EventEntrant.withdrawn_at).is_(None),
+                _left_seat(col(EventEntrant.id)).correlate(EventEntrant),
+            ),
         )
         .order_by(col(EventEntrant.id))
     )
     joined: dict[int, EventEntrant | None] = {}
     races: dict[int, list[str]] = {}
     teams: dict[int, MemberCupTeam] = {}
+    left: set[int] = set()
     for row, team_name, captain, count in entered:
+        if row.withdrawn_at is not None:
+            left.add(row.event_id)
+            continue
         joined[row.event_id] = row
         if row.cup_team_id is not None and team_name is not None:
             teams[row.event_id] = MemberCupTeam(
@@ -1703,7 +1725,7 @@ def _joined_events(
     )
     for season_id in signed:
         joined.setdefault(season_id, None)
-    return joined, races, teams
+    return joined, races, teams, left
 
 
 def _cup_formats(
@@ -1983,6 +2005,7 @@ def _member_row(
     fixtures: list[CaptainFixture],
     team: MemberCupTeam | None = None,
     cup_format: tuple[bool, bool] = (False, False),
+    left: bool = False,
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts, last_stage)
@@ -2036,6 +2059,7 @@ def _member_row(
             short=team is not None
             and bool(event.team_size)
             and team.players < (event.team_size or 0),
+            left=left,
         ),
         captain_fixture=fixture,
         captain_matches=fixtures,
@@ -2055,12 +2079,14 @@ def _member_action(
     waiting: bool = False,
     team: bool = False,
     short: bool = False,
+    left: bool = False,
 ) -> MemberAction:
     """The one action the member home offers, so every page agrees on it.
 
     A player of a cup team checks the team in, and leaves or withdraws it on
     the cup's team panel, so the home offers them no withdraw. A team still
-    waiting for an invited player takes no check-in yet.
+    waiting for an invited player takes no check-in yet. An entrant who
+    `left` a drawn lobby keeps its Left seat and takes no return signup.
     """
     # A KOTH night runs while it takes signups, so its first series closes no
     # door; nor does a cup's, whose late signups wait on its waitlist
@@ -2069,7 +2095,7 @@ def _member_action(
         and event.signups_open
         and not joined
     )
-    if phase == "finished":
+    if phase == "finished" or left:
         return "view"
     # A signup on the waitlist checks in once it is let in, a team's too
     if waiting:
@@ -3095,6 +3121,13 @@ def _enter(
         # One row per race, so the second race of a player is a row of its own
         statement = statement.where(col(EventEntrant.race) == race)
     existing = session.scalars(statement).first()
+    # A seat withdrawn after the draw stays Left, so its entrant takes no return signup
+    if (
+        existing is not None
+        and existing.withdrawn_at is not None
+        and session.scalar(select(_left_seat(ident(existing))))
+    ):
+        raise BadRequestError("A player who left a drawn lobby cannot sign up again")
     live = existing is not None and existing.withdrawn_at is None
     waiting = live and existing is not None and existing.waitlisted_at is not None
     if live and (not waiting or may_wait):

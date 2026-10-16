@@ -871,3 +871,35 @@ def test_a_placed_player_who_leaves_keeps_the_place_and_the_next_one_goes_throug
     assert again.status_code == 200, again.text
     first = lobbies(client, event, bracket, "Round 1")[0]
     assert [side["place"] for side in first["sides"]] == [1, 2, 3]
+
+
+def test_a_player_who_left_a_drawn_lobby_cannot_sign_up_again(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+) -> None:
+    """A seat withdrawn after the draw stays Left: its player takes no return
+    signup, and the member home offers them none."""
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    first = lobbies(client, event, bracket, "Round 1")[0]
+    headers = member(discord_of(first["sides"][0]["user_id"]))
+    left = client.delete(f"/events/{event}/entrants/me", headers=headers)
+    assert left.status_code == 204, left.text
+
+    again = client.post(
+        f"/events/{event}/entrants", json={"race": "HU"}, headers=headers
+    )
+
+    assert again.status_code == 400, again.text
+    assert again.json() == {
+        "error": "A player who left a drawn lobby cannot sign up again"
+    }
+    seats = client.get(f"/cup-series/{first['id']}").json()["sides"]
+    assert [side["left"] for side in seats] == [True, False, False, False]
+    [row] = [
+        one
+        for one in client.get("/me/events", headers=headers).json()
+        if one["id"] == event
+    ]
+    assert row["action"] == "view"
