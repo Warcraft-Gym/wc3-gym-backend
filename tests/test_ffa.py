@@ -903,3 +903,26 @@ def test_a_player_who_left_a_drawn_lobby_cannot_sign_up_again(
         if one["id"] == event
     ]
     assert row["action"] == "view"
+
+
+def test_the_sides_of_a_lobby_refuse_an_entrant_who_left_the_cup(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event, bracket, _ = ffa()
+    gone = entrant_of(event, players_of(event)[-1])
+    withdraw(client, auth_headers, event, gone)
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    first = lobbies(client, event, bracket, "Round 1")[0]
+    before = seated(first, seeds)
+    taken = [side["entrant_id"] for side in first["sides"]][:-1] + [gone]
+
+    refused = client.put(
+        f"/cup-series/{first['id']}/sides",
+        json={"entrant_ids": taken},
+        headers=auth_headers,
+    )
+
+    assert refused.status_code == 400, refused.text
+    assert refused.json() == {"error": "A player who left the cup moves to no lobby"}
+    assert seated(lobbies(client, event, bracket, "Round 1")[0], seeds) == before
