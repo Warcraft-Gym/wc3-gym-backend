@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-three route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T11:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T09:22:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -35,7 +35,7 @@ sources:
 | `organizers.py` | `/organizers`, `/me/organized-events`, `/events/{event_id}/organizers` | organizer grants and requests, the events a caller organizes, an event's organizers |
 | `matches.py` | `/matches` | fixtures |
 | `series.py` | `/series`, `/events/{event_id}/series`, `/casts` | series, event series searches, result kind, casts |
-| `cup_series.py` | `/cup-series` | a cup's series: reads, a side's report, a runner's results, lobby places, seats and maps, and the veto |
+| `cup_series.py` | `/cup-series` | a cup's series: reads, a side's report, a runner's results, lobby places, seats, moves and maps, and the veto |
 | `draft_series.py` | `/draft-series`, `/matches/{match_id}/draft-board` | a captain's proposed series, the Ready, seen and MMR state of one fixture's draft, and every figure its draft board draws |
 | `home.py` | `/home/series`, `/home/series/upcoming` | the home page's cross-event series lists, and every booked series with its casts |
 | `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet`, `/events/{event_id}/rounds` | a member's own flows, and a captain's read of the hours a pair shares in a round |
