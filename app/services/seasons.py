@@ -40,6 +40,7 @@ from app.models.season import (
     SeasonPublic,
     SeasonSignupUpdate,
     SeasonUpdate,
+    checkin_fields,
     progress_by_seasons,
     tier_of,
 )
@@ -239,7 +240,7 @@ class SeasonService:
                 "league_id": league.id,
                 "entrant_kind": league.entrant_kind,
             }
-            new_season = Season.add(session, fields)
+            new_season = Season.add(session, checkin_fields(fields))
             # A new season scores like the last one until an admin re-prices it
             session.add_all(default_rows(new_season.id))
             session.flush()
@@ -251,7 +252,9 @@ class SeasonService:
             row = Season.update(
                 session,
                 season_id,
-                **season.model_dump(exclude_unset=True, exclude={"round_count"}),
+                **checkin_fields(
+                    season.model_dump(exclude_unset=True, exclude={"round_count"})
+                ),
             )
             if not row:
                 raise NotFoundError("Season not found")

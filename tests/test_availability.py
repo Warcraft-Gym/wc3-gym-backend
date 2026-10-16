@@ -385,7 +385,10 @@ def test_a_player_cannot_check_in_before_the_window_opens(
     headers = member()
     checkin_day("2026-01-07")
 
-    assert refuse(client, headers, 2, False) == "Check-in for round 2 opens on 9 Jan."
+    assert (
+        refuse(client, headers, 2, False)
+        == "Check-in for round 2 opens on 9 Jan at 00:00 UTC."
+    )
     assert (
         AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
         == []
@@ -403,7 +406,10 @@ def test_a_player_cannot_clear_an_answer_before_the_window_opens(
 ) -> None:
     checkin_day("2026-01-07")
 
-    assert refuse(client, member(), 2, None) == "Check-in for round 2 opens on 9 Jan."
+    assert (
+        refuse(client, member(), 2, None)
+        == "Check-in for round 2 opens on 9 Jan at 00:00 UTC."
+    )
 
 
 def test_a_player_cannot_answer_a_round_that_is_over(
@@ -545,7 +551,10 @@ def test_early_check_in_takes_an_answer_before_the_window_opens(
     """Round 4 opens on 23 Jan, and the clock stands on 9 Jan."""
     headers = member()
 
-    assert refuse(client, headers, 4, False) == "Check-in for round 4 opens on 23 Jan."
+    assert (
+        refuse(client, headers, 4, False)
+        == "Check-in for round 4 opens on 23 Jan at 00:00 UTC."
+    )
 
     set_event(seeded["season_id"], early_checkin=True)
     assert [row["playday"] for row in write(client, headers, 4, False)] == [4]
@@ -702,7 +711,7 @@ def test_a_player_without_early_check_in_cannot_sit_out_every_round(
     assert resp.status_code == 403, resp.text
     assert resp.json() == {
         "error": "checkin_closed",
-        "message": "Check-in for round 3 opens on 16 Jan.",
+        "message": "Check-in for round 3 opens on 16 Jan at 00:00 UTC.",
     }
     assert (
         AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])

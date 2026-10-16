@@ -131,7 +131,9 @@ def test_a_press_before_the_window_is_answered_privately(
     """The default test day is two days before round 3's check-in opens."""
     post(client, press("1", "availability:1:3:no"))
 
-    assert discord_calls[-1][2] == {"content": "Check-in for round 3 opens on 16 Jan."}
+    assert discord_calls[-1][2] == {
+        "content": "Check-in for round 3 opens on 16 Jan at 00:00 UTC."
+    }
     assert (
         AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
         == []
