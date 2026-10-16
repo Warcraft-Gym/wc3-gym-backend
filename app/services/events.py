@@ -1019,20 +1019,27 @@ class EventService:
         """Close the event's own check-in to players by hand, or reopen it.
 
         A second close keeps the first stamp. An event that checks in per
-        dated round or per round of a cup has no check-in of its own to close.
+        dated round or per round of a cup has no check-in of its own to close,
+        nor has an event whose check-in is off. The reopen always clears the
+        stamp, which every dated round of the event reads too.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
-            if next_round(event, event_rounds(session, event_id)) is not None:
+            if (
+                closed
+                and next_round(event, event_rounds(session, event_id)) is not None
+            ):
                 raise BadRequestError(
                     "This event checks in per round, until the round ends; "
                     f"PUT /events/{event_id} with checkin_closes_minutes closes it earlier"
                 )
-            if cup_rounds.has_legs(session, event_id):
+            if closed and cup_rounds.has_legs(session, event_id):
                 raise BadRequestError(
                     "This cup checks in per round; close a round with "
                     f"POST /events/{event_id}/legs/{{leg_id}}/checkin/close"
                 )
+            if closed and not event.checkin_enabled:
+                raise BadRequestError("Check-in is off for this event")
             event.checkin_closed_at = (
                 (event.checkin_closed_at or utcnow()) if closed else None
             )

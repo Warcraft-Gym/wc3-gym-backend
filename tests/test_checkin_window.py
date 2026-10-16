@@ -9,13 +9,14 @@ before the opening, and a runner is never held to the window.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.services import availability, awards, cup_rounds, events
 from app.services.availability import AvailabilityService
@@ -542,19 +543,61 @@ def test_the_event_close_refuses_an_event_that_checks_in_per_round(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A cup over rounds closes each round on its own route, and a dated
-    round closes at its end or by checkin_closes_minutes."""
+    round closes at its end or by checkin_closes_minutes; the reopen still
+    clears the event's stamp."""
     cup = made(client, auth_headers, legs=LEGS)
     at(monkeypatch, events, "2026-01-10T00:00:00+00:00")
     for event, route in (
         (cup["id"], "/legs/{leg_id}/checkin/close"),
         (seeded["season_id"], "checkin_closes_minutes"),
     ):
-        for action in ("close", "reopen"):
-            response = client.post(
-                f"/events/{event}/checkin/{action}", headers=auth_headers
+        response = client.post(f"/events/{event}/checkin/close", headers=auth_headers)
+        assert response.status_code == 400, response.text
+        assert route in response.json()["error"]
+        opened = runner(client, auth_headers, f"/events/{event}/checkin/reopen")
+        assert opened["checkin_closed_at"] is None
+
+
+def test_the_reopen_clears_a_close_that_a_dated_round_added_later_reads(
+    client: Client, auth_headers: Headers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every dated round reads the event's close by hand, so a close stamped
+    while no dated round was next is cleared once a dated round is added."""
+    cup = made(client, auth_headers, starts_at=CUP_START, checkin_enabled=True)
+    at(monkeypatch, events, "2026-10-30T00:30:00+00:00")
+    runner(client, auth_headers, f"/events/{cup['id']}/checkin/close")
+    with Session.begin() as session:
+        session.add(
+            DBEventRound(
+                season_id=cup["id"],
+                stage_id=cup["stages"][0]["id"],
+                number=1,
+                start_date=date(2026, 11, 2),
             )
-            assert response.status_code == 400, response.text
-            assert route in response.json()["error"]
+        )
+
+    opened = runner(client, auth_headers, f"/events/{cup['id']}/checkin/reopen")
+
+    assert opened["checkin_closed_at"] is None
+
+
+def test_the_event_close_refuses_an_event_whose_check_in_is_off(
+    client: Client, auth_headers: Headers
+) -> None:
+    """Nothing reads a close on an event that takes no check-in; the reopen
+    still clears a stamp left from when it took one."""
+    cup = made(client, auth_headers, starts_at=CUP_START, checkin_enabled=False)
+
+    response = client.post(f"/events/{cup['id']}/checkin/close", headers=auth_headers)
+
+    assert response.status_code == 400, response.text
+    assert response.json() == {"error": "Check-in is off for this event"}
+    with Session.begin() as session:
+        session.get_one(Season, cup["id"]).checkin_closed_at = datetime(
+            2026, 10, 30, tzinfo=UTC
+        )
+    opened = runner(client, auth_headers, f"/events/{cup['id']}/checkin/reopen")
+    assert opened["checkin_closed_at"] is None
 
 
 def test_a_member_who_does_not_run_the_event_cannot_close_its_check_in(
