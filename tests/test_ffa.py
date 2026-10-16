@@ -244,23 +244,151 @@ def test_the_league_final_plays_three_series_and_the_points_leader_wins(
     ]
 
 
+def move(
+    client: Client, headers: dict[str, str], lobby: int, entrant: int, to: int
+) -> Any:  # noqa: ANN401
+    """Move one entrant from the lobby `lobby` to the lobby `to`."""
+    return client.post(
+        f"/cup-series/{lobby}/move",
+        json={"entrant_id": entrant, "to_series_id": to},
+        headers=headers,
+    )
+
+
 def test_an_organiser_moves_an_entrant_between_lobbies_before_the_round(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+) -> None:
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    first, second = lobbies(client, event, bracket, "Round 1")[:2]
+    fifteen = second["sides"][-1]["entrant_id"]
+    sixteen = first["sides"][-1]["entrant_id"]
+    player = member(discord_of(first["sides"][0]["user_id"]))
+    refused = move(client, player, second["id"], fifteen, first["id"])
+    assert refused.status_code == 403, refused.text
+
+    moved = move(client, auth_headers, second["id"], fifteen, first["id"])
+
+    assert moved.status_code == 200, moved.text
+    # the answer is the lobby left, then the lobby joined
+    assert [seated(row, seeds) for row in moved.json()] == [
+        [2, 7, 10],
+        [1, 8, 9, 16, 15],
+    ]
+    back = move(client, auth_headers, first["id"], sixteen, second["id"])
+    assert back.status_code == 200, back.text
+    assert [seated(row, seeds) for row in lobbies(client, event, bracket, "Round 1")][
+        :2
+    ] == [[1, 8, 9, 15], [2, 7, 10, 16]]
+
+
+def lobby_of(client: Client, event: int, stage: int, series: int) -> dict[str, Any]:
+    """One lobby of the stage, found by its id."""
+    return next(row for row in lobbies(client, event, stage) if row["id"] == series)
+
+
+def test_a_move_refuses_and_leaves_both_lobbies_as_they_were(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    from app.models.cup_series import CupSeries
+    from app.models.event_division import EventDivision
+
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    first, second, third, fourth = lobbies(client, event, bracket, "Round 1")
+    below = lobbies(client, event, bracket, "Round 2")[0]
+    assert play(client, auth_headers, fourth, by_seed(fourth, seeds)).status_code == 200
+    # the third lobby plays in a division of its own
+    with Session.begin() as session:
+        division = EventDivision(event_id=event, name="Other", position=1)
+        session.add(division)
+        session.flush()
+        held = session.get(CupSeries, third["id"])
+        assert held is not None
+        held.division_id = ident(division)
+        # a series of two sides in the round seats no lobby
+        pair = CupSeries(round_id=first["round_id"])
+        session.add(pair)
+        session.flush()
+        sided = {"id": ident(pair)}
+    one, eight = (side["entrant_id"] for side in first["sides"][:2])
+    two = second["sides"][0]["entrant_id"]
+    withdraw(client, auth_headers, event, eight)
+    before = [seated(row, seeds) for row in lobbies(client, event, bracket)]
+
+    for lobby, entrant, to, error in (
+        (first, one, below, "Move a player to a lobby of the same round and division"),
+        (first, one, third, "Move a player to a lobby of the same round and division"),
+        (first, one, fourth, "A lobby that holds places keeps its seats"),
+        (
+            fourth,
+            fourth["sides"][0]["entrant_id"],
+            first,
+            "A lobby that holds places keeps its seats",
+        ),
+        (first, two, second, "This entrant sits in no seat of this lobby"),
+        (first, one, first, "This entrant sits in that lobby already"),
+        (first, eight, second, "A player who left the cup moves to no lobby"),
+        (first, one, sided, "Only a lobby seats players to move"),
+    ):
+        refused = move(client, auth_headers, lobby["id"], entrant, to["id"])
+        assert refused.status_code == 400, refused.text
+        assert refused.json() == {"error": error}
+    assert [seated(row, seeds) for row in lobbies(client, event, bracket)] == before
+
+    # a lobby keeps two seats: the second lobby gives two of its four away
+    for side in second["sides"][:2]:
+        moved = move(
+            client, auth_headers, second["id"], side["entrant_id"], first["id"]
+        )
+        assert moved.status_code == 200, moved.text
+    short = move(
+        client,
+        auth_headers,
+        second["id"],
+        second["sides"][2]["entrant_id"],
+        first["id"],
+    )
+    assert short.status_code == 400, short.text
+    assert short.json() == {"error": "A lobby keeps two seats or more"}
+    assert seated(lobby_of(client, event, bracket, second["id"]), seeds) == [10, 15]
+
+
+def test_the_sides_of_a_lobby_refuse_an_entrant_seated_in_another_of_its_round(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     event, bracket, _ = ffa()
     generate(client, auth_headers, event, bracket)
     seeds = seeds_of(event)
     first, second = lobbies(client, event, bracket, "Round 1")[:2]
-    swapped = [side["entrant_id"] for side in first["sides"]]
-    swapped[-1] = second["sides"][-1]["entrant_id"]
-    moved = client.put(
+    taken = [side["entrant_id"] for side in first["sides"]]
+    taken[-1] = second["sides"][-1]["entrant_id"]
+
+    refused = client.put(
         f"/cup-series/{first['id']}/sides",
-        json={"entrant_ids": swapped},
+        json={"entrant_ids": taken},
         headers=auth_headers,
     )
-    assert moved.status_code == 200, moved.text
-    assert [seeds[side["user_id"]] for side in moved.json()["sides"]] == [1, 8, 9, 15]
-    assert seated(lobbies(client, event, bracket, "Round 1")[0], seeds) == [1, 8, 9, 15]
+
+    assert refused.status_code == 400, refused.text
+    assert refused.json() == {
+        "error": f"Entrant {taken[-1]} sits in another lobby of this round; move them"
+    }
+    assert seated(lobbies(client, event, bracket, "Round 1")[0], seeds) == [1, 8, 9, 16]
+    # the same seats in another order stay a lobby's own
+    again = client.put(
+        f"/cup-series/{first['id']}/sides",
+        json={
+            "entrant_ids": list(reversed(taken[:-1]))
+            + [first["sides"][-1]["entrant_id"]]
+        },
+        headers=auth_headers,
+    )
+    assert again.status_code == 200, again.text
 
 
 def test_a_played_lobby_keeps_its_seats_and_a_two_sided_series_takes_none(
@@ -349,7 +477,8 @@ def test_a_withdrawn_player_of_the_lobby_enters_no_places(
 
     refused = play(client, member(discord_of(left)), lobby, by_seed(lobby, seeds))
     assert refused.status_code == 403, refused.text
-    placed = play(client, auth_headers, lobby, by_seed(lobby, seeds))
+    # the runner places the three seats still in the cup
+    placed = play(client, auth_headers, lobby, by_seed(lobby, seeds)[1:])
     assert placed.status_code == 200, placed.text
 
 
@@ -579,3 +708,166 @@ def test_a_team_ffa_seats_teams_and_any_player_of_a_seated_team_reports(
     rows = table(client, event, stage)
     assert [row["points"] for row in rows] == [3, 2, 1, 0]
     assert {row["team_id"] for row in rows} == set(team_ids)
+
+
+def newcomer() -> int:
+    """A player who is not in the cup, to swap in for one who is."""
+    from app.models.user import User
+    from tests.seed import active
+
+    with Session.begin() as session:
+        user = User(
+            name="Late",
+            battle_tags=active("Late#0099"),
+            discordTag="late",
+            discordId="90099",
+            race=Race.HU,
+            mmr=1900,
+        )
+        session.add(user)
+        session.flush()
+        return ident(user)
+
+
+def swap(
+    client: Client, headers: dict[str, str], event: int, out: int, late: int
+) -> Any:  # noqa: ANN401
+    """Put the player `late` in the place of the entrant `out`."""
+    return client.post(
+        f"/events/{event}/entrants/{out}/replace",
+        json={"user_id": late, "race": "HU"},
+        headers=headers,
+    )
+
+
+def test_a_swap_puts_the_new_player_in_every_open_seat_of_the_old_one(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    lobby = lobbies(client, event, bracket, "Round 1")[0]
+    seat = lobby["sides"][-1]
+    late = newcomer()
+
+    swapped = swap(client, auth_headers, event, seat["entrant_id"], late)
+
+    assert swapped.status_code == 200, swapped.text
+    after = lobbies(client, event, bracket, "Round 1")[0]["sides"][-1]
+    assert (after["entrant_id"], after["user_id"]) == (swapped.json()["id"], late)
+    # the lobby keeps every seat filled, so it takes its places
+    placed = play(client, auth_headers, lobby, [1, 2, 3, 4])
+    assert placed.status_code == 200, placed.text
+
+
+def test_a_swap_never_takes_a_seat_of_a_lobby_with_places(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    lobby = lobbies(client, event, bracket, "Round 1")[0]
+    assert play(client, auth_headers, lobby, [1, 2, 3, 4]).status_code == 200
+    seat = lobby["sides"][-1]
+
+    refused = swap(client, auth_headers, event, seat["entrant_id"], newcomer())
+
+    assert refused.status_code == 400, refused.text
+    assert "played a match" in refused.text
+    kept = lobbies(client, event, bracket, "Round 1")[0]["sides"][-1]
+    assert (kept["entrant_id"], kept["user_id"]) == (
+        seat["entrant_id"],
+        seat["user_id"],
+    )
+
+
+def test_a_player_who_leaves_after_the_draw_keeps_a_left_seat_that_takes_no_place(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+) -> None:
+    """A withdrawal after the draw marks the seat Left: it takes no place, earns
+    no points and sends nobody on, and the next place goes through."""
+    event, bracket, _ = ffa()
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    first = lobbies(client, event, bracket, "Round 1")[0]
+    gone = first["sides"][0]["user_id"]
+    left = client.delete(
+        f"/events/{event}/entrants/me", headers=member(discord_of(gone))
+    )
+    assert left.status_code == 204, left.text
+
+    first = lobbies(client, event, bracket, "Round 1")[0]
+    assert seated(first, seeds) == [1, 8, 9, 16]
+    assert [side["left"] for side in first["sides"]] == [True, False, False, False]
+    every = play(client, auth_headers, first, by_seed(first, seeds))
+    assert every.status_code == 400, every.text
+    assert every.json() == {"error": "Seat 1 left the cup and takes no place"}
+    # the three other seats take places 1 to 3
+    gap = client.put(
+        f"/cup-series/{first['id']}/places",
+        json={
+            "places": [{"side_no": s, "place": p} for s, p in ((2, 1), (3, 2), (4, 4))]
+        },
+        headers=auth_headers,
+    )
+    assert gap.status_code == 400, gap.text
+    assert gap.json() == {"error": "The places run from 1 to 3, each once"}
+    placed = play(client, auth_headers, first, by_seed(first, seeds)[1:])
+    assert placed.status_code == 200, placed.text
+    assert [side["place"] for side in placed.json()["sides"]] == [None, 1, 2, 3]
+
+    settle(client, auth_headers, event, bracket)
+    through = {
+        seat
+        for lobby in lobbies(client, event, bracket, "Round 2")
+        for seat in seated(lobby, seeds)
+    }
+    assert {8, 9} <= through and 1 not in through
+    points = {
+        seeds[row["user_id"]]: row["points"] for row in table(client, event, bracket)
+    }
+    assert 1 not in points
+    # the lobby pays 4, 3, 2 to the three places it gave, as drawn
+    assert (points[8], points[9], points[16]) == (4, 3, 2)
+
+
+def test_a_placed_player_who_leaves_keeps_the_place_and_the_next_one_goes_through(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A runner withdraws the winner of a played lobby before the round below is
+    seated: the seat keeps its place, and the runner-up and the third go on."""
+    event, bracket, _ = ffa()
+    withdraw(client, auth_headers, event, entrant_of(event, players_of(event)[-1]))
+    generate(client, auth_headers, event, bracket)
+    seeds = seeds_of(event)
+    # a withdrawal before the draw leaves no seat
+    drawn = lobbies(client, event, bracket, "Round 1")
+    assert 16 not in {seat for lobby in drawn for seat in seated(lobby, seeds)}
+    first = drawn[0]
+    assert play(client, auth_headers, first, by_seed(first, seeds)).status_code == 200
+    withdraw(
+        client, auth_headers, event, entrant_of(event, first["sides"][0]["user_id"])
+    )
+
+    first = lobbies(client, event, bracket, "Round 1")[0]
+    assert [(side["place"], side["left"]) for side in first["sides"]] == [
+        (1, False),
+        (2, False),
+        (3, False),
+    ]
+    settle(client, auth_headers, event, bracket)
+
+    # the runner-up and the third of the first lobby rank with the winners and
+    # the runners-up of the other lobbies, and the snake deals them
+    assert [
+        seated(row, seeds) for row in lobbies(client, event, bracket, "Round 2")
+    ] == [
+        [8, 4, 9, 5],
+        [2, 3, 7, 6],
+    ]
+
+    # a correction of the played lobby places the player who left, whose place stands
+    again = play(client, auth_headers, first, by_seed(first, seeds))
+    assert again.status_code == 200, again.text
+    first = lobbies(client, event, bracket, "Round 1")[0]
+    assert [side["place"] for side in first["sides"]] == [1, 2, 3]
