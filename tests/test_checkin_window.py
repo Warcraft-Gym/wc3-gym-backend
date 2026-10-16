@@ -311,6 +311,43 @@ def test_an_early_close_shuts_the_cup_for_a_player_and_not_for_a_runner(
     assert check_in(client, auth_headers, cup["id"], other).status_code == 200
 
 
+def test_an_organizer_of_the_cup_checks_a_player_in_outside_the_window(
+    client: Client,
+    auth_headers: Headers,
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A member who holds an organizer row of the cup runs it, not only an
+    admin: it checks a player in after the cup's early close and before a
+    round of a cup opens."""
+    cup = made(client, auth_headers, starts_at=CUP_START, checkin_enabled=True)
+    assert edit(client, auth_headers, cup["id"], checkin_closes_minutes=30).is_success
+    rounds = made(
+        client, auth_headers, name="Round Cup", legs=LEGS, early_checkin=False
+    )
+    for event in (cup, rounds):
+        added = client.post(
+            f"/events/{event['id']}/organizers",
+            json={"discord_id": "80"},
+            headers=auth_headers,
+        )
+        assert added.status_code == 201, added.text
+    organizer = member("80")
+    player = players(1)[0]
+    entrant, leg_entrant = enter(cup["id"], player), enter(rounds["id"], player)
+    first = rounds["cup_legs"][0]["id"]
+
+    at(monkeypatch, events, "2026-10-30T01:31:00+00:00")
+    assert closed(check_in(client, member("90001"), cup["id"], entrant))
+    taken = check_in(client, organizer, cup["id"], entrant)
+    assert taken.status_code == 200, taken.text
+
+    at(monkeypatch, cup_rounds, "2026-11-06T16:59:00+00:00")
+    assert closed(leg_check_in(client, member("90001"), rounds["id"], first))
+    taken = leg_check_in(client, organizer, rounds["id"], first, leg_entrant)
+    assert taken.status_code == 200, taken.text
+
+
 def test_a_round_of_a_cup_follows_its_own_start(
     client: Client,
     auth_headers: Headers,
