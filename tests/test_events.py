@@ -1330,13 +1330,15 @@ def test_the_hint_reads_the_round_in_the_events_zone(
     event = add_event(
         kind=EventKind.cup, checkin_days=3, round_end_zone="Pacific/Auckland"
     )
-    add_round(event, TODAY, TODAY)
+    # Tomorrow's round in Auckland ends after today ends in UTC, at any hour
+    day = TODAY + timedelta(days=1)
+    add_round(event, day, day)
     enter(event, player)
-    busy_days(player, "America/New_York", TODAY)
+    busy_days(player, "America/New_York", day)
 
     assert my_events(client, headers)[event]["availability_hint"] == "open"
 
-    busy_days(player, "America/New_York", TODAY - timedelta(days=1))
+    busy_days(player, "America/New_York", day - timedelta(days=1))
     assert my_events(client, headers)[event]["availability_hint"] == "blocked_by_blocks"
 
 
