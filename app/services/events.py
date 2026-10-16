@@ -36,6 +36,7 @@ from app.core.checkin_hint import (
     checkin_refusal,
     checkin_window,
     round_checkin,
+    round_window,
 )
 from app.core.db import Session, rel
 from app.core.divisions import cut
@@ -306,23 +307,24 @@ def last_stage_drawn(
     return {event_id: played_out for event_id, (_, played_out) in last.items()}
 
 
-def open_rounds(rounds: Iterable[DBEventRound]) -> list[DBEventRound]:
-    """The dated rounds of an event that are not over, earliest first."""
-    now = _today()
+def open_rounds(event: Season, rounds: Iterable[DBEventRound]) -> list[DBEventRound]:
+    """The dated rounds of an event that are not over, earliest first: a round
+    runs until midnight after its last day in the event's zone."""
+    now = utcnow()
     dated = sorted(
         (row for row in rounds if row.start_date is not None),
         key=lambda row: (row.start_date, row.number),
     )
-    return [row for row in dated if (row.end_date or row.start_date) >= now]
+    return [row for row in dated if now < (round_window(event, row) or (now, now))[1]]
 
 
-def next_round(rounds: Iterable[DBEventRound]) -> DBEventRound | None:
+def next_round(event: Season, rounds: Iterable[DBEventRound]) -> DBEventRound | None:
     """The next dated round of the event: the earliest one that is not over.
 
     A round with no dates is no round to check into, and a stage that holds no
     rounds at all leaves the event checking in to itself.
     """
-    return next(iter(open_rounds(rounds)), None)
+    return next(iter(open_rounds(event, rounds)), None)
 
 
 def checkin_open(event: Season, rounds: Sequence[DBEventRound], drawn: bool) -> bool:
@@ -333,7 +335,7 @@ def checkin_open(event: Season, rounds: Sequence[DBEventRound], drawn: bool) -> 
     says it holds a series. An event with nothing to check into is shut, and
     early check-in takes a player before the window opens.
     """
-    round_ = next_round(rounds)
+    round_ = next_round(event, rounds)
     undated = any(row.start_date is None for row in rounds)
     if round_ is None and not undated and _start(event) is None:
         return False
@@ -754,7 +756,7 @@ class EventService:
             ids = [event.id for event in events]
             counts = series_counts_by_event(session, ids)
             drawn = last_stage_drawn(session, ids)
-            rounds = {event.id: next_round(event.rounds) for event in events}
+            rounds = {event.id: next_round(event, event.rounds) for event in events}
             # Only an event whose check-in is on and dated shows a hint
             hints = _round_hints(
                 session,
@@ -942,7 +944,7 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id)
-            if next_round(event_rounds(session, event_id)) is not None:
+            if next_round(event, event_rounds(session, event_id)) is not None:
                 raise BadRequestError(
                     "This event checks in per round. Answer the round instead."
                 )
@@ -1803,7 +1805,7 @@ def _captain_fixtures(
     wanted = {
         event_id: rounds
         for event_id in seats
-        if (rounds := open_rounds(by_id[event_id].rounds))
+        if (rounds := open_rounds(by_id[event_id], by_id[event_id].rounds))
     }
     # the same seats the /me nav lists: every event that is not closed
     listed = {event_id for event_id in seats if by_id[event_id].closed_at is None}
@@ -2101,7 +2103,7 @@ def _public(
         for row in (event.rounds or [])
     ]
     if event.checkin_enabled:
-        window = checkin_window(event, next_round(event.rounds or []))
+        window = checkin_window(event, next_round(event, event.rounds or []))
         public.checkin_opens_at, public.checkin_closes_at = window
     if not full:
         return public

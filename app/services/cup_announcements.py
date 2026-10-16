@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import event, exists, select
+from sqlalchemy import event, exists, func, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import load_only
 from sqlmodel import col
@@ -213,6 +213,9 @@ def remind_due(now: datetime) -> int:
         col(Season.cancelled_at).is_(None),
     )
     with Session() as session:
+        # a call falls at most LEAD plus the largest early close before the start
+        closes = select(func.max(col(Season.checkin_closes_minutes))).where(*open_cup)
+        ceiling = now + LEAD + timedelta(minutes=session.scalar(closes) or 0)
         due = [
             cup
             for cup in session.scalars(
@@ -221,6 +224,7 @@ def remind_due(now: datetime) -> int:
                 .where(
                     *open_cup,
                     col(Season.starts_at) > now,
+                    col(Season.starts_at) <= ceiling,
                     ~exists().where(col(CupLeg.event_id) == col(Season.id)),
                 )
             )
@@ -243,6 +247,7 @@ def remind_due(now: datetime) -> int:
                     *open_cup,
                     col(CupLeg.finished_at).is_(None),
                     col(CupLeg.starts_at) > now,
+                    col(CupLeg.starts_at) <= ceiling,
                 )
             ).tuples()
             if (start := leg.starts_at) is not None

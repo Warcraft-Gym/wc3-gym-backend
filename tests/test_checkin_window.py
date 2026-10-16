@@ -160,6 +160,29 @@ def test_a_dated_round_reads_its_window(client: Client, seeded: dict[str, Any]) 
     )
 
 
+def test_a_zoned_round_is_the_round_to_check_in_to_until_its_zone_midnight(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: Headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 2 runs Mon 12 to Sun 18 Jan 2026; in New York it ends at 05:00
+    UTC on Mon 19 Jan, and round 3 is next from then."""
+    season = seeded["season_id"]
+    assert edit(
+        client, auth_headers, season, round_end_zone="America/New_York"
+    ).is_success
+    for moment, number in (
+        ("2026-01-19T04:59:00+00:00", 2),
+        ("2026-01-19T05:00:00+00:00", 3),
+    ):
+        at(monkeypatch, events, moment)
+        with Session() as session:
+            event = session.get_one(Season, season)
+            round_ = events.next_round(event, events.event_rounds(session, season))
+            assert round_ is not None and round_.number == number
+
+
 def test_a_cup_opens_two_hours_before_it_starts_and_closes_at_its_draw(
     client: Client,
     auth_headers: Headers,
