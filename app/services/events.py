@@ -9,7 +9,7 @@ import random
 import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, NamedTuple
 
 from sqlalchemy import (
@@ -731,8 +731,8 @@ class EventService:
         shape and window, the next round and the one action the page offers.
         A caller with no id has joined nothing and reads a signup or a view.
         """
-        # next_round and checkin_open read only the rounds not over and the undated ones
-        today = _today()
+        # A round ends up to a day after its UTC date; open_rounds drops the ones over
+        since = _today() - timedelta(days=1)
         with Session.begin() as session:
             events = session.scalars(
                 select(Season)
@@ -747,7 +747,7 @@ class EventService:
                                     col(DBEventRound.end_date),
                                     col(DBEventRound.start_date),
                                 )
-                                >= today,
+                                >= since,
                             )
                         )
                     ),

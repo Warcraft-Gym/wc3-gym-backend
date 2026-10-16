@@ -2,6 +2,7 @@
 
 ## 2026-10-16
 
+* **Update**: `GET /me/events` names a dated round as the next round until midnight after its last day in the event's zone, as every other check-in read does. The [events module](concepts/events-module.md#the-member-read) states it.
 * **Update**: `PUT /cup-series/{id}/sides` refuses with 400 an entrant who withdrew, as the move does. The [events module](concepts/events-module.md#cup-series) and [cup_series_side](data/tables/cup_series_side.md) state it.
 * **Update**: `POST /events/{id}/checkin/close` refuses with 400 an event whose check-in is off, and `POST /events/{id}/checkin/reopen` clears `checkin_closed_at` on any event, because every dated round of the event reads it. [event](data/tables/event.md) and the [events module](concepts/events-module.md#check-in) state it.
 * **Update**: the entrant of a free for all seat that reads `left` takes no return signup: `POST /events/{id}/entrants`, the hand-add and the replace write answer 400 while the seat stands, and its `GET /me/events` action reads `view`. The [events module](concepts/events-module.md#managing-an-event) states it.

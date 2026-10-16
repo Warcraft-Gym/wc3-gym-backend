@@ -202,6 +202,30 @@ def test_a_zoned_round_is_the_round_to_check_in_to_until_its_zone_midnight(
             assert round_ is not None and round_.number == number
 
 
+def test_the_member_read_names_a_zoned_round_until_its_zone_midnight(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: Headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 2 ends on Sun 18 Jan 2026; in New York that is 05:00 UTC on
+    Mon 19 Jan, so the member home still names round 2 at 01:00 UTC."""
+    season = seeded["season_id"]
+    assert edit(
+        client, auth_headers, season, round_end_zone="America/New_York"
+    ).is_success
+    for moment, number in (
+        ("2026-01-19T01:00:00+00:00", 2),
+        ("2026-01-19T05:00:00+00:00", 3),
+    ):
+        at(monkeypatch, events, moment)
+        home = {
+            row["id"]: row
+            for row in client.get("/me/events", headers=auth_headers).json()
+        }
+        assert home[season]["next_round"]["number"] == number
+
+
 def test_a_cup_opens_two_hours_before_it_starts_and_closes_at_its_draw(
     client: Client,
     auth_headers: Headers,
