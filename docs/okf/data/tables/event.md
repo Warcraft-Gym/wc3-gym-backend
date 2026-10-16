@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T18:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -49,7 +49,8 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `checkin_enabled` | BOOLEAN | no | Off: no check-in is asked and every round stays open. |
 | `early_checkin` | BOOLEAN | no | Whether a player may check in before the window opens. Not the same switch as `checkin_enabled`, which turns check-in off as a whole. On, the player may answer every round of the event that has not closed, and check in to a cup or a round of a cup from the day they sign up. A new cup played over rounds turns it on. |
 | `checkin_opens_minutes` | INTEGER | yes | How many minutes before the start the check-in opens: before midnight on a dated round's first day, in `round_end_zone` or UTC, before `starts_at` on a cup, a KOTH night or a sign-up list, before `cup_leg.starts_at` on a round of a cup. Null opens it from sign-up. A new cup that names no window takes 120; any other new event `checkin_days` in minutes. |
-| `checkin_closes_minutes` | INTEGER | yes | How many minutes before the start the check-in closes, 0 or more and below `checkin_opens_minutes`; 0 closes a dated round at its start. Null closes a dated round when it ends, and a cup or a round of a cup at its draw. |
+| `checkin_closes_minutes` | INTEGER | yes | How many minutes before the start the check-in closes, 0 or more and below `checkin_opens_minutes`; 0 closes a dated round at its start. Null closes a dated round when it ends, and a cup or a round of a cup at its draw. A close by hand or the event's close shuts it earlier. |
+| `checkin_closed_at` | TIMESTAMP | yes | When a runner closed the event's own check-in by hand with `POST /events/{id}/checkin/close`, cleared by `POST /events/{id}/checkin/reopen`; a second close keeps the first time. The check-in closes at the earliest of the early close, this time, `closed_at` and `cancelled_at`. An event that checks in per dated round or per round of a cup has no close by hand: both routes refuse it with 400. |
 | `round_end_zone` | VARCHAR | yes | An IANA time zone name, the zone a round of this event ends at midnight in. Null names no zone: the check-in window and the free-time reads then stand at UTC midnights, and the check-in hint and the out-on-blocked-times flag read the round in the player's own zone. |
 | `multi_entry` | BOOLEAN | no | On, a player may enter once per race and each row seeds on its own race; every KOTH night opens it. |
 | `closed_at` | TIMESTAMP | yes | When a runner closed the event, stamped by `POST /events/{id}/finish`, `POST /events/{id}/cancel` and the KOTH close, cleared by `POST /events/{id}/reopen`. A closed event reads finished, a closed GNL season reads `complete`, and a chain grows no further. Nothing else ends an event whose teams are drafted. |

@@ -2,6 +2,7 @@
 
 ## 2026-10-16
 
+* **Update**: a runner closes the check-in by hand and reopens it: `POST /events/{id}/checkin/close` and `/checkin/reopen` for an event that checks in to itself, `POST /events/{id}/legs/{leg_id}/checkin/close` and `/checkin/reopen` for one round of a cup, which stamp `checkin_closed_at` on [event](data/tables/event.md) or [cup_leg](data/tables/cup_leg.md). The check-in closes at the earliest of the early close, the close by hand and the event's close or cancel, so a finished or cancelled event takes no player's check-in; the draw stamps nothing. The [events module](concepts/events-module.md#check-in) states it.
 * **Update**: the check-in is measured in minutes from the start. `event.checkin_opens_minutes` opens it, written from `checkin_days`, which reads the minutes back in whole days; `event.checkin_closes_minutes` closes it early, and with no early close a dated round closes at its end and a cup or a round of a cup at its draw. A player's own check-in on every path is refused outside the window with `checkin_closed`, a runner's never, and the player's write for every round leaves out the rounds closed to them; the event, member, round and cup round reads carry `checkin_opens_at` and `checkin_closes_at`, and the cup call to check in follows the window. [Scheduling and availability](concepts/scheduling-and-availability.md#check-in) and the [events module](concepts/events-module.md#check-in) state it.
 
 ## 2026-10-15

@@ -475,6 +475,23 @@ def check_in(
     return service.check_in(event_id, entrant_id, claims)
 
 
+@router.post(
+    "/events/{event_id}/checkin/close", dependencies=[Depends(require_event_runner)]
+)
+def close_checkin(event_id: int, service: EventServiceDep) -> EventPublic:
+    """Close the event's own check-in to players now; a runner still checks
+    anyone in. A second close keeps the first time."""
+    return service.close_checkin(event_id, True)
+
+
+@router.post(
+    "/events/{event_id}/checkin/reopen", dependencies=[Depends(require_event_runner)]
+)
+def reopen_checkin(event_id: int, service: EventServiceDep) -> EventPublic:
+    """Take the close by hand back: the check-in follows its window again."""
+    return service.close_checkin(event_id, False)
+
+
 @router.delete(
     "/events/{event_id}/entrants/{entrant_id}",
     status_code=204,
@@ -564,6 +581,24 @@ def check_out_of_leg(
 ) -> list[CupLegPublic]:
     """Take a round's check-in back while the round is not drawn."""
     return cup_rounds.check_in(event_id, leg_id, entrant_id, claims, False)
+
+
+@router.post(
+    "/events/{event_id}/legs/{leg_id}/checkin/close",
+    dependencies=[Depends(require_event_runner)],
+)
+def close_leg_checkin(event_id: int, leg_id: int) -> list[CupLegPublic]:
+    """Close one round's check-in to players now; the other rounds stay as they are."""
+    return cup_rounds.close_checkin(event_id, leg_id, True)
+
+
+@router.post(
+    "/events/{event_id}/legs/{leg_id}/checkin/reopen",
+    dependencies=[Depends(require_event_runner)],
+)
+def reopen_leg_checkin(event_id: int, leg_id: int) -> list[CupLegPublic]:
+    """Take a round's close by hand back: its check-in follows its window again."""
+    return cup_rounds.close_checkin(event_id, leg_id, False)
 
 
 @router.post(

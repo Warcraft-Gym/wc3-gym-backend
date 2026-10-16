@@ -220,6 +220,10 @@ class Season(SeasonBase, DBModel, table=True):
     )
     # How many minutes before the start it closes; null closes it at the draw or the round's end
     checkin_closes_minutes: int | None = None
+    # When a runner closed the event's own check-in by hand; null while it follows its window
+    checkin_closed_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
     # IANA name; a round of this event ends at midnight in this zone
     round_end_zone: str | None = Field(default=None, max_length=64)
     # Eligibility bounds. They warn on the entrant row and never refuse a signup.
@@ -716,8 +720,10 @@ class EventPublic(SQLModel):
     checkin_closes_minutes: int | None = None
     # When a player's own check-in opens; null when it is open from sign-up or the event takes none
     checkin_opens_at: Annotated[datetime | None, AwareUTC] = None
-    # When it closes: the early close, else a dated round's end; null when it closes at the draw
+    # When it closes: the earliest of the early close, a runner's close and the event's close, else a dated round's end; null when it closes at the draw
     checkin_closes_at: Annotated[datetime | None, AwareUTC] = None
+    # When a runner closed the event's own check-in by hand; null while it follows its window
+    checkin_closed_at: Annotated[datetime | None, AwareUTC] = None
     # On: a player may check in before the check-in window opens
     early_checkin: bool = False
     # IANA name; a round of this event ends at midnight in this zone
@@ -970,7 +976,7 @@ class MemberEventRow(SQLModel):
     checkin_open: bool = False
     # When that shape's check-in opens; null when it is open from sign-up or the event takes none
     checkin_opens_at: Annotated[datetime | None, AwareUTC] = None
-    # When it closes: the early close, else a dated round's end; null when it closes at the draw
+    # When it closes: the earliest of the early close, a runner's close and the event's close, else a dated round's end; null when it closes at the draw
     checkin_closes_at: Annotated[datetime | None, AwareUTC] = None
     # The next round of the event that carries dates; null when none does
     next_round: EventRoundPublic | None = None

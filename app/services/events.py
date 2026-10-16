@@ -158,11 +158,13 @@ _MEMBER_COLUMNS = load_only(
     rel(Season.end_date),
     rel(Season.published),
     rel(Season.closed_at),
+    rel(Season.cancelled_at),
     rel(Season.entrant_kind),
     rel(Season.signups_open),
     rel(Season.checkin_enabled),
     rel(Season.checkin_opens_minutes),
     rel(Season.checkin_closes_minutes),
+    rel(Season.checkin_closed_at),
     rel(Season.early_checkin),
     rel(Season.series_per_round),
     rel(Season.page_url),
@@ -1010,6 +1012,30 @@ class EventService:
                     continue
                 row.checked_in_at = now
         return self.get_entrants(event_id, claims)
+
+    def close_checkin(self, event_id: int, closed: bool) -> EventPublic:
+        """Close the event's own check-in to players by hand, or reopen it.
+
+        A second close keeps the first stamp. An event that checks in per
+        dated round or per round of a cup has no check-in of its own to close.
+        """
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if next_round(event, event_rounds(session, event_id)) is not None:
+                raise BadRequestError(
+                    "This event checks in per round, until the round ends; "
+                    f"PUT /events/{event_id} with checkin_closes_minutes closes it earlier"
+                )
+            if cup_rounds.has_legs(session, event_id):
+                raise BadRequestError(
+                    "This cup checks in per round; close a round with "
+                    f"POST /events/{event_id}/legs/{{leg_id}}/checkin/close"
+                )
+            event.checkin_closed_at = (
+                (event.checkin_closed_at or utcnow()) if closed else None
+            )
+            session.flush()
+            return _answer(session, event_id)
 
     def replace_entrant(
         self, event_id: int, entrant_id: int, data: EntrantAdd

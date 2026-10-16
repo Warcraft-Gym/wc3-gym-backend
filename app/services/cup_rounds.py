@@ -200,6 +200,7 @@ def legs_of(session: OrmSession, event_id: int) -> list[CupLegPublic]:
             checked_in=checked.get(ident(leg), []),
             checkin_opens_at=windows[ident(leg)].opens,
             checkin_closes_at=windows[ident(leg)].closes,
+            checkin_closed_at=leg.checkin_closed_at,
         )
         for leg in legs
     ]
@@ -241,6 +242,17 @@ def check_in(
             )
         elif not present and row is not None:
             session.delete(row)
+        session.flush()
+        return legs_of(session, event_id)
+
+
+def close_checkin(event_id: int, leg_id: int, closed: bool) -> list[CupLegPublic]:
+    """Close one round's check-in to players by hand, or reopen it; a second
+    close keeps the first stamp."""
+    with Session.begin() as session:
+        _cup(session, event_id)
+        leg = _leg(session, event_id, leg_id)
+        leg.checkin_closed_at = (leg.checkin_closed_at or utcnow()) if closed else None
         session.flush()
         return legs_of(session, event_id)
 
