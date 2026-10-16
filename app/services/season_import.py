@@ -49,7 +49,7 @@ from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
 from app.services.battle_tags import FOLDED_TAG, people_by_names
 from app.services.link_prompts import suggest, suggested_people
-from app.services.series import both_scores, in_season
+from app.services.series import both_scores
 
 logger = logging.getLogger(__name__)
 
@@ -671,7 +671,6 @@ def _series(
     # The rules SeriesService applies; a refused row rolls the import back
     for series in touched:
         both_scores(session, series)
-        in_season(session, series)
     # A Caster cell is a channel link or a Twitch login; the cast has no account
     for series, caster in casters:
         url = _cast_url(caster)

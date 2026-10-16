@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
@@ -55,26 +53,11 @@ def both_scores(session: OrmSession, row: Series, wins: int | None = None) -> No
         )
 
 
-def in_season(session: OrmSession, row: Series) -> None:
-    """A series cannot sit before its season starts: a mistyped year reads as
-    a season that has commenced, and every report of it is wrong. start_date is
-    a calendar date, so the day of slack covers the player's timezone."""
-    season = _fixture_season(session, row)
-    start = season.start_date if season else None
-    if row.date_time is None or start is None:
-        return
-    if row.date_time.date() < start - timedelta(days=1):
-        raise BadRequestError(
-            f"A series cannot be earlier than the season start, {start}"
-        )
-
-
 def add_in(session: OrmSession, series: SeriesCreate) -> int:
     """Write one series inside a transaction the caller owns and opened, and
     answer its id."""
     row = Series.add(session, series.model_dump())
     both_scores(session, row, stage_engine.series_wins(session, row))
-    in_season(session, row)
     derived.clear_kept_off_race(session, row)
     return ident(row)
 
@@ -103,7 +86,6 @@ def update_in(
             delete(DBSeriesGame).where(col(DBSeriesGame.series_id) == series_id)
         )
         row.result_kind = "played"
-    in_season(session, row)
     derived.clear_kept_off_race(session, row)
     stage_engine.after_score(session, row, was_scored, was_slot, force)
 

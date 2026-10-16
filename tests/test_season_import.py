@@ -495,19 +495,6 @@ def test_a_series_with_one_map_score_is_refused(
     assert _refused(client, auth_headers, row) == "A result needs both map scores"
 
 
-def test_a_series_before_the_season_start_is_refused(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    """The season starts 2026-01-05, and a year typed wrong reads a year early."""
-    from datetime import datetime
-
-    row = [1, 1, 1, 2, 2, 1, 2, 1, 1, datetime(2025, 1, 10, 20), None, False]
-
-    assert _refused(client, auth_headers, row) == (
-        "A series cannot be earlier than the season start, 2026-01-05"
-    )
-
-
 def test_importing_the_same_workbook_twice_adds_no_row(
     client: Client, auth_headers: dict[str, str]
 ) -> None:

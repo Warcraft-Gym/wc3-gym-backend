@@ -381,24 +381,19 @@ def test_schedule_sets_the_time_and_posts_publicly(
     assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
 
 
-def test_schedule_refuses_a_date_before_the_season_starts(
+def test_schedule_takes_a_date_before_the_season_starts(
     client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
 ) -> None:
+    """The season starts 2026-01-05; an early date is the scheduler's call."""
     series_id = seeded["series_open_id"]
     body, headers = signed(
-        command("schedule", user="2", series=series_id, when_utc="1994-10-12 22:41")
+        command("schedule", user="2", series=series_id, when_utc="2026-01-03 22:41")
     )
     client.post("/discord/interactions", content=body, headers=headers)
-    assert discord_calls == [
-        (
-            "PATCH",
-            f"{WEBHOOK}/messages/@original",
-            {"content": "A series cannot be earlier than the season start, 2026-01-05"},
-        )
-    ]
     with Session.begin() as session:
         series = session.get(Series, series_id)
-        assert series and series.date_time is None
+        assert series
+        assert series.date_time == datetime(2026, 1, 3, 22, 41, tzinfo=UTC)
 
 
 def test_schedule_refuses_a_stranger_and_a_bad_time_privately(
