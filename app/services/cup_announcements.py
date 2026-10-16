@@ -61,6 +61,9 @@ _CALL_COLUMNS = load_only(
     rel(Season.checkin_enabled),
     rel(Season.checkin_opens_minutes),
     rel(Season.checkin_closes_minutes),
+    rel(Season.checkin_closed_at),
+    rel(Season.closed_at),
+    rel(Season.cancelled_at),
     raiseload=True,
 )
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}

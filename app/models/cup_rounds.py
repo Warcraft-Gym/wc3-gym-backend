@@ -32,6 +32,10 @@ class CupLeg(DBModel, table=True):
     finished_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
+    # When a runner closed the round's check-in by hand; null while it follows its window
+    checkin_closed_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
 
 
 class CupLegStage(DBModel, table=True):
@@ -86,8 +90,10 @@ class CupLegPublic(SQLModel):
     checked_in: list[int] = []
     # When a player's own check-in for the round opens; null when it is open from sign-up
     checkin_opens_at: Annotated[datetime | None, AwareUTC] = None
-    # When it closes early; null when it closes at the round's draw
+    # When it closes: the earliest of the early close, a runner's close and the cup's close; null when it closes at the round's draw
     checkin_closes_at: Annotated[datetime | None, AwareUTC] = None
+    # When a runner closed the round's check-in by hand; null while it follows its window
+    checkin_closed_at: Annotated[datetime | None, AwareUTC] = None
 
 
 class CupLegCheckinWrite(SQLModel):

@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time and each player's blocked time are read as intervals, for a series and before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T18:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -57,7 +57,7 @@ A round ends at midnight after its last day, in the zone the event names (`round
 
 # Check-in
 
-The check-in of a dated round opens `checkin_opens_minutes` before the round starts, at midnight on its first day in the event's zone (UTC when the event names none), and closes when the round ends. A blank `checkin_opens_minutes` opens it from sign-up. `checkin_closes_minutes` closes it that many minutes before the round starts instead, so 0 closes it at the start. `checkin_days` is the same opening in whole days, rounded down; a write that names only `checkin_days` sets the minutes from it.
+The check-in of a dated round opens `checkin_opens_minutes` before the round starts, at midnight on its first day in the event's zone (UTC when the event names none), and closes when the round ends, or when the event is closed or cancelled before that. A blank `checkin_opens_minutes` opens it from sign-up. `checkin_closes_minutes` closes it that many minutes before the round starts instead, so 0 closes it at the start. `checkin_days` is the same opening in whole days, rounded down; a write that names only `checkin_days` sets the minutes from it.
 
 A player's own write is refused before the opening and after the close, with `403 {"error": "checkin_closed"}` and a message that names the time in UTC or says the round is over; a captain's and an admin's never are. With `early_checkin` on, the player may answer every round of the event that has not closed. Each dated round on `GET /player-series` and the event reads (`GET /events`, `GET /events/{id}`) carries `checkin_opens_at` and `checkin_closes_at`, aware UTC; a round with no dates, or an event that takes no check-in, carries null. One function, `checkin_window` in `app/core/checkin_hint.py`, answers the window of a dated round, a round of a cup and an event, and every check-in reader takes it; the same file computes what the check-in shows for one player and one round from their answer and their blocks, and writes nothing.
 
