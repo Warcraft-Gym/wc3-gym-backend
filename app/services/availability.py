@@ -11,7 +11,13 @@ from sqlalchemy import ColumnExpressionArgument, delete, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
-from app.core.checkin_hint import blocked_rounds, round_window
+from app.core.checkin_hint import (
+    blocked_rounds,
+    checkin_refusal,
+    checkin_window,
+    round_checkin,
+    round_window,
+)
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
@@ -30,7 +36,6 @@ from app.models.season import Season
 from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
-from app.services.events import checkin_window
 
 NO_SCHEDULING = "This event does not use availability."
 
@@ -52,14 +57,17 @@ class AvailabilityService:
     def season_rounds(self, season_id: int) -> list[SeasonRoundPublic]:
         """The rounds the dashboard asks about, with their windows and stage."""
         with Session.begin() as session:
-            _season(session, season_id)
+            season = _season(session, season_id)
             rows = session.execute(
                 select(DBEventRound, col(EventStage.name))
                 .outerjoin(EventStage, col(EventStage.id) == col(DBEventRound.stage_id))
                 .where(col(DBEventRound.season_id) == season_id)
                 .order_by(col(DBEventRound.number))
             ).all()
-            return [SeasonRoundPublic.from_row(row, name) for row, name in rows]
+            return [
+                SeasonRoundPublic.from_row(row, name, round_checkin(season, row))
+                for row, name in rows
+            ]
 
     def for_user(self, user_id: int, season_id: int) -> list[RoundAvailabilityPublic]:
         with Session.begin() as session:
@@ -228,20 +236,23 @@ def out_rounds(
 def _checkin_window(
     season: Season, rounds: Sequence[DBEventRound], playday: int
 ) -> None:
-    """Refuse a player before the round's check-in opens and after it ends."""
-    # An event that takes no check-in, or a blank window, keeps every round open
-    if not season.checkin_enabled:
-        return
+    """Refuse a player before the round's check-in opens and after it closes."""
     row = next((r for r in rounds if r.number == playday), None)
-    window = checkin_window(season, row) if row else None
-    if window is None or row is None:
+    # An event that takes no check-in, or a round with no dates, keeps the round open
+    if not season.checkin_enabled or row is None or row.start_date is None:
         return
-    opens, closes = window
-    # Early check-in takes an answer for every round of the event that is left
-    if not season.early_checkin and today() < opens:
-        raise _closed(f"Check-in for round {playday} opens on {opens.day} {opens:%b}.")
-    if closes and _ended(season, row):
+    if _ended(season, row):
         raise _closed(f"Round {playday} is over.")
+    # Early check-in takes an answer for every round of the event that is left
+    refusal = checkin_refusal(
+        checkin_window(season, row),
+        now(),
+        season.early_checkin,
+        False,
+        f"Check-in for round {playday}",
+    )
+    if refusal is not None:
+        raise _closed(refusal)
 
 
 def _ended(season: Season, row: DBEventRound) -> bool:

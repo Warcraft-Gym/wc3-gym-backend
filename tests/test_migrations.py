@@ -106,6 +106,8 @@ BEFORE_CUP_RECURRENCE = "d3b8f1a6c925"
 BEFORE_LOBBY_MAP = "e5c1a9d7b246"
 # The revision before a cup could be a custom game
 BEFORE_CUSTOM_GAME = "f2a6c3d8b417"
+# The revision before the check-in was measured in minutes
+BEFORE_CHECKIN_MINUTES = "c5f8e1b3d907"
 
 
 def comparable(
@@ -1920,3 +1922,39 @@ def test_the_custom_game_switch_comes_and_goes(tmp_path: Path) -> None:
     assert "custom_game" not in {
         c["name"] for c in inspect(create_engine(url)).get_columns("cup_settings")
     }
+
+
+def test_the_check_in_minutes_follow_the_days_and_come_and_go(tmp_path: Path) -> None:
+    """The opening is the days in minutes and a blank one stays blank, no event
+    closes early, and a cup over rounds takes early check-in; the downgrade
+    takes both columns away."""
+    url = fresh_database(tmp_path, "checkin_minutes")
+    upgrade_to(url, BEFORE_CHECKIN_MINUTES)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind, checkin_days) "
+                "VALUES (1, 'Season', 1, 'gnl', 3), (2, 'Open', 1, 'gnl', NULL), "
+                "(3, 'Cup', 1, 'cup', 2)"
+            )
+        )
+        connection.execute(text("INSERT INTO cup_leg (event_id, number) VALUES (3, 1)"))
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT id, checkin_opens_minutes, checkin_closes_minutes, "
+                "early_checkin FROM event ORDER BY id"
+            )
+        ).all()
+    assert [tuple(row) for row in rows] == [
+        (1, 4320, None, False),
+        (2, None, None, False),
+        (3, 2880, None, True),
+    ]
+
+    downgrade_to(url, BEFORE_CHECKIN_MINUTES)
+    columns = {c["name"] for c in inspect(create_engine(url)).get_columns("event")}
+    assert not {"checkin_opens_minutes", "checkin_closes_minutes"} & columns

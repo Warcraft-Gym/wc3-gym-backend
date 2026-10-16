@@ -84,6 +84,10 @@ class CupLegPublic(SQLModel):
     stage_ids: list[int] = []
     # The entrants checked in for it
     checked_in: list[int] = []
+    # When a player's own check-in for the round opens; null when it is open from sign-up
+    checkin_opens_at: Annotated[datetime | None, AwareUTC] = None
+    # When it closes early; null when it closes at the round's draw
+    checkin_closes_at: Annotated[datetime | None, AwareUTC] = None
 
 
 class CupLegCheckinWrite(SQLModel):

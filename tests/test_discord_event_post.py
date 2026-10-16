@@ -236,19 +236,41 @@ def test_a_shut_check_in_window_refuses_the_press(
     public_key: None,
     discord_calls: list[tuple[str, str, Any]],
 ) -> None:
-    """The window opens checkin_days before the start and closes on the day it
-    starts, and the press names the side it landed on."""
+    """The window opens checkin_opens_minutes before the start and an early
+    close shuts it checkin_closes_minutes before, and the press names the side
+    it landed on."""
     enter(cup, seeded["player_ids"][0])
-    set_fields(cup, checkin_days=0)
+    set_fields(cup, checkin_opens_minutes=0)
 
     send(client, press(event_cards.CHECK_IN, cup))
 
     assert reply(discord_calls) == event_cards.NOT_OPEN_YET
 
-    set_fields(cup, start_date=TODAY - timedelta(days=1))
+    set_fields(
+        cup,
+        start_date=TODAY - timedelta(days=1),
+        checkin_opens_minutes=60,
+        checkin_closes_minutes=0,
+    )
     send(client, press(event_cards.CHECK_IN, cup))
 
     assert reply(discord_calls) == event_cards.CHECK_IN_CLOSED
+
+
+def test_early_check_in_takes_a_press_before_the_window_opens(
+    client: Client,
+    cup: int,
+    seeded: dict[str, Any],
+    public_key: None,
+    discord_calls: list[tuple[str, str, Any]],
+) -> None:
+    """With early check-in on, the button takes a press before the window opens."""
+    enter(cup, seeded["player_ids"][0])
+    set_fields(cup, checkin_opens_minutes=0, early_checkin=True)
+
+    send(client, press(event_cards.CHECK_IN, cup))
+
+    assert reply(discord_calls) == "Checked in for GNL · Autumn Cup."
 
 
 def test_an_event_with_dated_rounds_sends_the_press_to_the_round(

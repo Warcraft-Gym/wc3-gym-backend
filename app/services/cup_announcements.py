@@ -18,10 +18,12 @@ from typing import Any
 
 from sqlalchemy import event, exists, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import load_only
 from sqlmodel import col
 
+from app.core.checkin_hint import checkin_window
 from app.core.config import frontend_url
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import ApiError, BadRequestError
 from app.models.announcement import AnnouncementState, AnnouncementSubscriber
 from app.models.base import ident
@@ -33,7 +35,7 @@ from app.models.event_award import EventAward
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
-from app.models.season import Season
+from app.models.season import NO_SERIES, Season, series_counts_by_event
 from app.models.settings import Settings
 from app.models.types import utcnow
 from app.models.user import User
@@ -50,8 +52,17 @@ CHANNEL_KEY, ROLE_KEY = "announcement_channel_id", "announcement_role_id"
 # played over rounds, a stage's first draw, one more round of a stage
 OPEN, REMIND, LEG_REMIND = "cup_open", "cup_remind", "cup_leg_remind"
 DRAW, ROUND, RESULT = "cup_draw", "cup_round", "cup_result"
-# How long before its start a cup, or one of its rounds, is called to check in
+# How long before its check-in closes, or it starts, a cup or a round is called to check in
 LEAD = timedelta(hours=1)
+# The event columns the call reads
+_CALL_COLUMNS = load_only(
+    rel(Season.name),
+    rel(Season.starts_at),
+    rel(Season.checkin_enabled),
+    rel(Season.checkin_opens_minutes),
+    rel(Season.checkin_closes_minutes),
+    raiseload=True,
+)
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 NOT_SET_UP = "Announcements are not set up"
 NO_ROLE = "Discord did not take the role; try again in a moment"
@@ -167,14 +178,34 @@ def announce_open(event_id: int) -> bool:
 
 
 # ============ It starts soon ============
+def _due(cup: Season, leg: CupLeg | None, now: datetime) -> bool:
+    """Whether the call of a cup, or of one round of it, is due at `now`.
+
+    It goes an hour before the check-in closes early, else an hour before the
+    start, or when the check-in opens if that is later, and only while the
+    check-in stands open. A cup that takes no check-in is called an hour
+    before it starts.
+    """
+    start = leg.starts_at if leg is not None else cup.starts_at
+    if start is None:
+        return False
+    if leg is None and not cup.checkin_enabled:
+        return start - LEAD <= now
+    opens, closes = checkin_window(cup, leg)
+    call = (closes or start) - LEAD
+    if opens is not None:
+        call = max(call, opens)
+    return call <= now and (closes is None or now < closes)
+
+
 def remind_due(now: datetime) -> int:
-    """Call every cup, and every round of a cup played over rounds, that starts
-    within the hour to check in; each once, and none that started already.
+    """Call every cup, and every round of a cup played over rounds, to check
+    in, each once, at the time `_due` names: before it starts, and before its
+    draw where it takes check-in.
 
     A cup played over rounds is called round by round, since each round takes
     its own check-in.
     """
-    soon = now + LEAD
     open_cup = (
         col(Season.kind) == EventKind.cup,
         col(Season.published).is_(True),
@@ -182,36 +213,42 @@ def remind_due(now: datetime) -> int:
         col(Season.cancelled_at).is_(None),
     )
     with Session() as session:
-        cups = session.execute(
-            select(
-                col(Season.id),
-                col(Season.name),
-                col(Season.starts_at),
-                col(Season.checkin_enabled),
-            ).where(
-                *open_cup,
-                col(Season.starts_at) > now,
-                col(Season.starts_at) <= soon,
-                ~exists().where(col(CupLeg.event_id) == col(Season.id)),
+        due = [
+            cup
+            for cup in session.scalars(
+                select(Season)
+                .options(_CALL_COLUMNS)
+                .where(
+                    *open_cup,
+                    col(Season.starts_at) > now,
+                    ~exists().where(col(CupLeg.event_id) == col(Season.id)),
+                )
             )
-        ).all()
-        legs = session.execute(
-            select(
-                col(CupLeg.id),
-                col(CupLeg.event_id),
-                col(CupLeg.number),
-                col(CupLeg.name),
-                col(CupLeg.starts_at),
-                col(Season.name),
-            )
-            .join(Season, col(Season.id) == col(CupLeg.event_id))
-            .where(
-                *open_cup,
-                col(CupLeg.finished_at).is_(None),
-                col(CupLeg.starts_at) > now,
-                col(CupLeg.starts_at) <= soon,
-            )
-        ).all()
+            if _due(cup, None, now)
+        ]
+        drawn = series_counts_by_event(session, [cup.id for cup in due])
+        cups = [
+            (ident(cup), cup.name, start, cup.checkin_enabled)
+            for cup in due
+            if (start := cup.starts_at) is not None
+            and not (cup.checkin_enabled and drawn.get(cup.id, NO_SERIES)[0])
+        ]
+        legs = [
+            (ident(leg), leg.event_id, leg.number, leg.name, start, cup.name)
+            for leg, cup in session.execute(
+                select(CupLeg, Season)
+                .options(_CALL_COLUMNS)
+                .join(Season, col(Season.id) == col(CupLeg.event_id))
+                .where(
+                    *open_cup,
+                    col(CupLeg.finished_at).is_(None),
+                    col(CupLeg.starts_at) > now,
+                )
+            ).tuples()
+            if (start := leg.starts_at) is not None
+            and _due(cup, leg, now)
+            and not cup_rounds.leg_drawn(session, ident(leg))
+        ]
     posted = 0
     for cup_id, name, starts_at, checkin in cups:
         check = " Check in now on the cup page." if checkin else ""

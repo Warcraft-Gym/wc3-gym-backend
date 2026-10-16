@@ -186,6 +186,74 @@ def test_a_cup_over_rounds_calls_each_round_to_check_in(
     assert text.startswith(f"<@&{ROLE}> Round 1 of **Friday Night Cup** starts <t:")
 
 
+def published_cup(
+    client: Client,
+    headers: Headers,
+    minutes: float,
+    **fields: Any,  # noqa: ANN401
+) -> int:
+    """A cup that takes check-in, published without its open post, starting in `minutes`."""
+    event = client.post(
+        "/events",
+        json=CUP | {"published": False, "checkin_enabled": True} | fields,
+        headers=headers,
+    ).json()["id"]
+    with Session.begin() as session:
+        session.get_one(Season, event).published = True
+    starts_in(event, minutes)
+    return event
+
+
+def test_the_call_goes_an_hour_before_an_early_close_or_when_the_check_in_opens(
+    client: Client,
+    auth_headers: Headers,
+    discord_calls: list,
+    announcements: None,
+) -> None:
+    """A cup that closes 90 minutes before its start in two hours is called now;
+    one that opens 30 minutes before its start in 45 is called once it opens."""
+    now = datetime.now(UTC)
+    published_cup(
+        client,
+        auth_headers,
+        120,
+        name="Early",
+        checkin_opens_minutes=180,
+        checkin_closes_minutes=90,
+    )
+    published_cup(client, auth_headers, 45, name="Late", checkin_opens_minutes=30)
+    # Closes 90 minutes before a start in 3 hours: its call is 30 minutes off
+    published_cup(client, auth_headers, 180, name="Later", checkin_closes_minutes=90)
+
+    assert cup_announcements.remind_due(now) == 1
+    assert posts(discord_calls)[-1].startswith(f"<@&{ROLE}> **Early** starts <t:")
+    assert cup_announcements.remind_due(now + timedelta(minutes=16)) == 1
+    assert posts(discord_calls)[-1].startswith(f"<@&{ROLE}> **Late** starts <t:")
+
+
+def test_a_drawn_cup_is_not_called_to_check_in(
+    client: Client,
+    auth_headers: Headers,
+    discord_calls: list,
+    announcements: None,
+) -> None:
+    """The draw closes the check-in, so a cup drawn before its call posts none."""
+    from app.models.event_entrant import EventEntrant
+    from app.models.types import utcnow
+
+    event, (stage,) = cup(4)
+    with Session.begin() as session:
+        session.get_one(Season, event).checkin_enabled = True
+        for row in session.scalars(
+            select(EventEntrant).where(col(EventEntrant.event_id) == event)
+        ):
+            row.checked_in_at = utcnow()
+    starts_in(event, 30)
+    generate(client, auth_headers, event, stage)
+
+    assert cup_announcements.remind_due(datetime.now(UTC)) == 0
+
+
 def test_the_draw_each_round_and_the_playoff_are_announced_then_the_podium(
     client: Client, auth_headers: Headers, discord_calls: list, announcements: None
 ) -> None:

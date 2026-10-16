@@ -17,6 +17,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
+from app.core.checkin_hint import checkin_refusal, checkin_window
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.outcome import scored
@@ -160,13 +161,15 @@ def has_legs(session: OrmSession, event_id: int) -> bool:
 
 
 def legs_of(session: OrmSession, event_id: int) -> list[CupLegPublic]:
-    """Every round of the cup in order, with its stages and its check-ins."""
+    """Every round of the cup in order, with its stages, its check-ins and its
+    check-in window."""
     legs = session.scalars(
         select(CupLeg)
         .where(col(CupLeg.event_id) == event_id)
         .order_by(col(CupLeg.number))
     ).all()
-    if not legs:
+    event = session.get(Season, event_id)
+    if not legs or event is None:
         return []
     ids = [ident(leg) for leg in legs]
     stages: dict[int, list[tuple[int, int]]] = {}
@@ -185,6 +188,7 @@ def legs_of(session: OrmSession, event_id: int) -> list[CupLegPublic]:
         .order_by(col(CupLegCheckin.checked_in_at))
     ):
         checked.setdefault(leg_id, []).append(entrant_id)
+    windows = {ident(leg): checkin_window(event, leg) for leg in legs}
     return [
         CupLegPublic(
             id=ident(leg),
@@ -194,6 +198,8 @@ def legs_of(session: OrmSession, event_id: int) -> list[CupLegPublic]:
             finished_at=leg.finished_at,
             stage_ids=[stage_id for _, stage_id in sorted(stages.get(ident(leg), []))],
             checked_in=checked.get(ident(leg), []),
+            checkin_opens_at=windows[ident(leg)].opens,
+            checkin_closes_at=windows[ident(leg)].closes,
         )
         for leg in legs
     ]
@@ -207,14 +213,24 @@ def check_in(
     present: bool,
 ) -> list[CupLegPublic]:
     """Check a player in for one round, or out again, while the round is not
-    drawn. A player checks their own entry in; a runner checks in anyone."""
+    drawn. A player checks their own entry in, inside the round's window; a
+    runner checks in anyone at any time before the draw."""
     with Session.begin() as session:
         event = _cup(session, event_id)
         leg = _leg(session, event_id, leg_id)
-        if leg.finished_at is not None or _leg_drawn(session, ident(leg)):
+        if leg.finished_at is not None or leg_drawn(session, ident(leg)):
             raise BadRequestError("This round is drawn; its players are set")
         runs = organizers.runs_in(session, claims, event_id)
         entrant = _entrant_for(session, event, entrant_id, claims, runs)
+        refusal = checkin_refusal(
+            checkin_window(event, leg),
+            utcnow(),
+            event.early_checkin,
+            False,
+            f"Check-in for {leg.name or f'round {leg.number}'}",
+        )
+        if refusal is not None and not runs:
+            raise ApiError(403, {"error": "checkin_closed", "message": refusal})
         row = session.get(CupLegCheckin, (ident(leg), ident(entrant)))
         if present and row is None:
             cup_reads.hold_complete_team(session, event, entrant)
@@ -235,7 +251,7 @@ def check_in_everyone(event_id: int, leg_id: int) -> list[CupLegPublic]:
     with Session.begin() as session:
         event = _cup(session, event_id)
         leg = _leg(session, event_id, leg_id)
-        if leg.finished_at is not None or _leg_drawn(session, ident(leg)):
+        if leg.finished_at is not None or leg_drawn(session, ident(leg)):
             raise BadRequestError("This round is drawn; its players are set")
         held = set(
             session.scalars(
@@ -376,7 +392,7 @@ def remove_leg(event_id: int, leg_id: int) -> list[CupLegPublic]:
         legs = _rows(session, event_id)
         if len(legs) <= 2:
             raise BadRequestError("A cup over rounds keeps two rounds or more")
-        if leg.finished_at is not None or _leg_drawn(session, ident(leg)):
+        if leg.finished_at is not None or leg_drawn(session, ident(leg)):
             raise BadRequestError(
                 f"Round {leg.number} is drawn; undo its draw before it goes"
             )
@@ -590,7 +606,7 @@ def _leg(session: OrmSession, event_id: int, leg_id: int) -> CupLeg:
     return leg
 
 
-def _leg_drawn(session: OrmSession, leg_id: int) -> bool:
+def leg_drawn(session: OrmSession, leg_id: int) -> bool:
     return (
         session.scalar(
             select(col(CupSeries.id))

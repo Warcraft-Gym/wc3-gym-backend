@@ -87,10 +87,30 @@ class SeasonBase(SQLModel):
     scheduling_enabled: bool = Field(
         default=True, sa_column_kwargs={"server_default": true()}
     )
-    # How many days before a round starts its check-in opens; blank keeps it open
+    # checkin_opens_minutes in whole days, rounded down; a write of it alone sets the minutes
     checkin_days: int | None = Field(
         default=3, ge=0, sa_column_kwargs={"server_default": "3"}
     )
+
+
+# The minutes of a day, which checkin_days counts in
+DAY_MINUTES = 1440
+
+
+def checkin_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    """An event write with `checkin_days` and `checkin_opens_minutes` in step.
+
+    Days written without the minutes set the minutes, and the days always
+    follow the minutes, rounded down, so a client that knows only the days
+    reads and writes the same window.
+    """
+    if "checkin_days" in fields and "checkin_opens_minutes" not in fields:
+        days = fields["checkin_days"]
+        fields["checkin_opens_minutes"] = None if days is None else days * DAY_MINUTES
+    if "checkin_opens_minutes" in fields:
+        opens = fields["checkin_opens_minutes"]
+        fields["checkin_days"] = None if opens is None else opens // DAY_MINUTES
+    return fields
 
 
 def tier_count(cuts: list[int] | None) -> int:
@@ -190,10 +210,16 @@ class Season(SeasonBase, DBModel, table=True):
     starts_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
-    # On: a player may answer a round's check-in before its window opens
+    # On: a player may check in before the check-in window opens
     early_checkin: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
+    # How many minutes before the start the check-in opens; null opens it from sign-up
+    checkin_opens_minutes: int | None = Field(
+        default=3 * DAY_MINUTES, sa_column_kwargs={"server_default": "4320"}
+    )
+    # How many minutes before the start it closes; null closes it at the draw or the round's end
+    checkin_closes_minutes: int | None = None
     # IANA name; a round of this event ends at midnight in this zone
     round_end_zone: str | None = Field(default=None, max_length=64)
     # Eligibility bounds. They warn on the entrant row and never refuse a signup.
@@ -580,6 +606,9 @@ class SeasonPublic(SeasonBase):
 
     @classmethod
     def from_season(cls, season: Season) -> Self:
+        # app.core.checkin_hint reads this module, so the window is imported here
+        from app.core.checkin_hint import round_checkin
+
         return cls(
             id=ident(season),
             name=season.name,
@@ -595,7 +624,10 @@ class SeasonPublic(SeasonBase):
                 for map_season in (season.maps or [])
                 if map_season and map_season.map
             ],
-            rounds=[SeasonRoundPublic.from_row(row) for row in (season.rounds or [])],
+            rounds=[
+                SeasonRoundPublic.from_row(row, None, round_checkin(season, row))
+                for row in (season.rounds or [])
+            ],
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,
@@ -676,8 +708,17 @@ class EventPublic(SQLModel):
     team_size: int | None = None
     entrant_cap: int | None = None
     entrant_min: int | None = None
+    # checkin_opens_minutes in whole days, rounded down
     checkin_days: int | None = None
-    # On: a player may answer a round's check-in before its window opens
+    # How many minutes before the start the check-in opens; null opens it from sign-up
+    checkin_opens_minutes: int | None = None
+    # How many minutes before the start it closes; null closes it at the draw or the round's end
+    checkin_closes_minutes: int | None = None
+    # When a player's own check-in opens; null when it is open from sign-up or the event takes none
+    checkin_opens_at: Annotated[datetime | None, AwareUTC] = None
+    # When it closes: the early close, else a dated round's end; null when it closes at the draw
+    checkin_closes_at: Annotated[datetime | None, AwareUTC] = None
+    # On: a player may check in before the check-in window opens
     early_checkin: bool = False
     # IANA name; a round of this event ends at midnight in this zone
     round_end_zone: str | None = None
@@ -702,7 +743,7 @@ class EventPublic(SQLModel):
     rounds: Annotated[list[SeasonRoundPublic], NoneToList] = []
     # Computed by the service on every read; null when the event is nested
     phase: EventPhase | None = None
-    # Whether the check-in stands open today; null on a list read
+    # Whether a player may check in now, early check-in included; null on a list read
     checkin_open: bool | None = None
     # The entrants who have not withdrawn; null on a list read
     entrant_count: int | None = None
@@ -743,8 +784,13 @@ class EventCreate(SQLModel):
     checkin_enabled: bool = True
     # On, a player may enter once per race; each row seeds on its own race
     multi_entry: bool = False
+    # Sent without checkin_opens_minutes, the check-in opens this many days before the start
     checkin_days: int | None = Field(default=3, ge=0)
-    # On: a player may answer a round's check-in before its window opens
+    # Left out with checkin_days, a cup opens 120 minutes before it starts and any other event 3 days
+    checkin_opens_minutes: int | None = Field(default=None, ge=0)
+    # Null closes the check-in at the draw, or a dated round's end; below checkin_opens_minutes
+    checkin_closes_minutes: int | None = Field(default=None, ge=0)
+    # On: a player may check in before the check-in window opens; left out, a cup with legs turns it on
     early_checkin: bool = False
     # IANA name; a round of this event ends at midnight in this zone
     round_end_zone: Annotated[str | None, KnownTimeZone] = Field(
@@ -811,6 +857,8 @@ class EventUpdate(SQLModel):
     checkin_enabled: bool | None = None
     multi_entry: bool | None = None
     checkin_days: int | None = Field(default=None, ge=0)
+    checkin_opens_minutes: int | None = Field(default=None, ge=0)
+    checkin_closes_minutes: int | None = Field(default=None, ge=0)
     early_checkin: bool | None = None
     round_end_zone: Annotated[str | None, KnownTimeZone] = Field(
         default=None, max_length=64
@@ -918,8 +966,12 @@ class MemberEventRow(SQLModel):
     # What the caller checks into: the round when the event's next round carries
     # dates, else the event; null when the event takes no check-in
     checkin_shape: CheckinShape | None = None
-    # That shape's check-in window stands open today
+    # A player may check in to that shape now, early check-in included
     checkin_open: bool = False
+    # When that shape's check-in opens; null when it is open from sign-up or the event takes none
+    checkin_opens_at: Annotated[datetime | None, AwareUTC] = None
+    # When it closes: the early close, else a dated round's end; null when it closes at the draw
+    checkin_closes_at: Annotated[datetime | None, AwareUTC] = None
     # The next round of the event that carries dates; null when none does
     next_round: EventRoundPublic | None = None
     # What the next round's check-in shows the caller; null off the round shape

@@ -4,8 +4,8 @@ The link tables with a model's worth of columns are in their own files:
 team_season.py and user_team_season.py.
 """
 
-from datetime import date
-from typing import TYPE_CHECKING, Self
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlalchemy import UniqueConstraint, select
 from sqlalchemy.orm import Session as OrmSession
@@ -13,6 +13,7 @@ from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
 from app.models.enums import Race
+from app.models.types import AwareUTC
 
 if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeam
@@ -145,9 +146,20 @@ class SeasonRoundPublic(SQLModel):
     stage_id: int | None = None
     # The stage's name, filled by the reads that join the stage
     stage_name: str | None = None
+    # When a player's own check-in for the round opens; null when it is open
+    # from sign-up, the round has no dates or the event takes no check-in
+    checkin_opens_at: Annotated[datetime | None, AwareUTC] = None
+    # When it closes: the early close, else the round's end; null on a round
+    # with no dates or an event that takes no check-in
+    checkin_closes_at: Annotated[datetime | None, AwareUTC] = None
 
     @classmethod
-    def from_row(cls, row: DBEventRound, stage_name: str | None = None) -> Self:
+    def from_row(
+        cls,
+        row: DBEventRound,
+        stage_name: str | None = None,
+        window: tuple[datetime | None, datetime | None] = (None, None),
+    ) -> Self:
         return cls(
             playday=row.number,
             start_date=row.start_date,
@@ -155,6 +167,8 @@ class SeasonRoundPublic(SQLModel):
             map_id=row.map_id,
             stage_id=row.stage_id,
             stage_name=stage_name,
+            checkin_opens_at=window[0],
+            checkin_closes_at=window[1],
         )
 
 

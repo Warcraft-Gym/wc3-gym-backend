@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T11:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -39,7 +39,7 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `fantasy_grind` | BOOLEAN | no | On: the fantasy game offers the grind pick, a second team paid by achievement rank. |
 | `signups_open` | BOOLEAN | no | Off: a signup is refused, or on a GNL season becomes a request an admin may grant. A finished event reads it off and refuses a signup whatever the column holds. |
 | `scheduling_enabled` | BOOLEAN | no | Off: the event takes no availability answers. |
-| `checkin_days` | INTEGER | yes | How many days before a round, or the event, its check-in opens. Null means the window never closes. |
+| `checkin_days` | INTEGER | yes | `checkin_opens_minutes` in whole days, rounded down; null when that is null. A write that names `checkin_days` without the minutes sets the minutes to that many days. |
 | `league_id` | INTEGER | yes | The league this is a run of. Null for an event with no league. |
 | `kind` | VARCHAR | no | `gnl`, `cup`, `koth` or `signup`. A GNL season is `gnl`. The shared services never branch on it. |
 | `parent_id` | INTEGER | yes | The event this one feeds: a qualifier names the event it qualifies for. The parent lists it under `children`. |
@@ -47,8 +47,10 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `entrant_kind` | VARCHAR | no | `solo`, `team` or `drafted_teams`. Copied from the league when the event is created. A `drafted_teams` event takes no direct signup. |
 | `published` | BOOLEAN | no | Off: a draft only an admin reads, and the phase is `draft`. |
 | `checkin_enabled` | BOOLEAN | no | Off: no check-in is asked and every round stays open. |
-| `early_checkin` | BOOLEAN | no | Whether a player may answer a round's check-in before its window opens. Not the same switch as `checkin_enabled`, which turns check-in off as a whole. On, the player may answer every round of the event that has not ended. |
-| `round_end_zone` | VARCHAR | yes | An IANA time zone name, the zone a round of this event ends at midnight in. Null names no zone: the check-in refusal and the free-time reads then stand at UTC midnights, and the check-in hint and the out-on-blocked-times flag read the round in the player's own zone. |
+| `early_checkin` | BOOLEAN | no | Whether a player may check in before the window opens. Not the same switch as `checkin_enabled`, which turns check-in off as a whole. On, the player may answer every round of the event that has not closed, and check in to a cup or a round of a cup from the day they sign up. A new cup played over rounds turns it on. |
+| `checkin_opens_minutes` | INTEGER | yes | How many minutes before the start the check-in opens: before midnight on a dated round's first day, in `round_end_zone` or UTC, before `starts_at` on a cup, a KOTH night or a sign-up list, before `cup_leg.starts_at` on a round of a cup. Null opens it from sign-up. A new cup that names no window takes 120; any other new event `checkin_days` in minutes. |
+| `checkin_closes_minutes` | INTEGER | yes | How many minutes before the start the check-in closes, 0 or more and below `checkin_opens_minutes`; 0 closes a dated round at its start. Null closes a dated round when it ends, and a cup or a round of a cup at its draw. |
+| `round_end_zone` | VARCHAR | yes | An IANA time zone name, the zone a round of this event ends at midnight in. Null names no zone: the check-in window and the free-time reads then stand at UTC midnights, and the check-in hint and the out-on-blocked-times flag read the round in the player's own zone. |
 | `multi_entry` | BOOLEAN | no | On, a player may enter once per race and each row seeds on its own race; every KOTH night opens it. |
 | `closed_at` | TIMESTAMP | yes | When a runner closed the event, stamped by `POST /events/{id}/finish`, `POST /events/{id}/cancel` and the KOTH close, cleared by `POST /events/{id}/reopen`. A closed event reads finished, a closed GNL season reads `complete`, and a chain grows no further. Nothing else ends an event whose teams are drafted. |
 | `cancelled_at` | TIMESTAMP | yes | When a runner called the event off with `POST /events/{id}/cancel`, which also stamps `closed_at` and deletes the award rows. A cancelled event reads finished, takes no signup and refuses a finish; `POST /events/{id}/reopen` clears both stamps. |

@@ -397,8 +397,8 @@ def test_the_phase_of_a_generated_event_reads_running_then_finished(
     assert phase(client, event) == "seeded"
 
     generate(client, auth_headers, event, first)
-    # The generated rounds carry dates, so the first one's check-in window stands
-    assert phase(client, event) == "checkin"
+    # The draw closes the cup's check-in, so the drawn event rests at seeded
+    assert phase(client, event) == "seeded"
 
     one = stage_series(client, event, first)["series"][0]
     assert score(client, auth_headers, one["id"], 2, 0).status_code == 200

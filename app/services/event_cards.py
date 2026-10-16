@@ -192,9 +192,8 @@ def _sign_up(
 
 def _window_text(row: MemberEventRow) -> str:
     """Which side of the check-in window a press on a shut one landed on."""
-    round_ = row.next_round
-    closes = (round_.end_date or round_.start_date) if round_ else row.start
-    return CHECK_IN_CLOSED if closes and closes < utcnow().date() else NOT_OPEN_YET
+    opens = row.checkin_opens_at
+    return NOT_OPEN_YET if opens is not None and utcnow() < opens else CHECK_IN_CLOSED
 
 
 def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], bool]:
@@ -223,7 +222,9 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
         if row.checkin_shape != "event" or row.entrant_id is None:
             return {"content": PER_ROUND}, PRIVATE
         EventService().check_in(row.id, row.entrant_id, {"sub": discord_id})
-    except (ApiError, BadRequestError, NotFoundError) as error:
+    except ApiError as error:
+        return {"content": error.body.get("message", str(error))}, PRIVATE
+    except (BadRequestError, NotFoundError) as error:
         return {"content": str(error)}, PRIVATE
     named = event_label(row.name, row.league_short_name)
     return {"content": f"Checked in for {named}."}, PRIVATE
