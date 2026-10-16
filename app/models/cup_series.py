@@ -192,6 +192,8 @@ class CupSeriesSidePublic(SeriesSidePublic):
 
     team: TeamSummaryPublic | None = None
     players: list[UserSummaryPublic] = []
+    # The seat's entrant withdrew before the lobby was placed: no place, no next round
+    left: bool = False
 
 
 class LobbyMapPublic(SQLModel):
@@ -205,6 +207,13 @@ class LobbyMapWrite(SQLModel):
     """A runner's map for a lobby, one of the cup's pool."""
 
     map_id: int
+
+
+class LobbyMoveWrite(SQLModel):
+    """A runner's move of one entrant from a lobby to another lobby of its round."""
+
+    entrant_id: int
+    to_series_id: int
 
 
 class CupSeriesPublic(PublicModel):

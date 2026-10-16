@@ -504,6 +504,7 @@ def test_a_finished_cup_takes_no_series_write_until_it_is_reopened(
         ("PUT", f"{path}/places", {"places": []}),
         ("PUT", f"{path}/lobby-map", {"map_id": 1}),
         ("PUT", f"{path}/sides", {"entrant_ids": []}),
+        ("POST", f"{path}/move", {"entrant_id": 1, "to_series_id": series_id}),
         ("PUT", f"{path}/veto", {"action": "undo"}),
     ]
 

@@ -30,6 +30,7 @@ from app.models.cup_series import (
     CupSeriesGame,
     CupSeriesPublic,
     LobbyMapWrite,
+    LobbyMoveWrite,
 )
 from app.models.enums import Race
 from app.models.event_entrant import EventEntrant
@@ -289,6 +290,19 @@ def sides(
         Caller(session, claims, row).hold_runner()
         cup_engine.set_sides(session, row, data)
         return cup_engine.read_one(session, row)
+
+
+def move(
+    series_id: int, data: LobbyMoveWrite, claims: dict[str, Any] | None
+) -> list[CupSeriesPublic]:
+    """A runner moves one entrant from a lobby to another lobby of its round,
+    in one write; answers the lobby left, then the lobby joined."""
+    with Session.begin() as session:
+        row = _open_series(session, series_id)
+        Caller(session, claims, row).hold_runner()
+        target = _series(session, data.to_series_id)
+        cup_engine.move_seat(session, row, target, data.entrant_id)
+        return [cup_engine.read_one(session, row), cup_engine.read_one(session, target)]
 
 
 def veto_board(series_id: int, claims: dict[str, Any] | None) -> SeriesVetoPublic:

@@ -45,7 +45,7 @@ from app.core.outcome import scored
 from app.core.query import QueryElement, QueryUtil
 from app.core.security import is_admin
 from app.models.base import ident
-from app.models.cup_series import CupSeries, CupVetoStep
+from app.models.cup_series import CupSeries, CupSeriesSide, CupVetoStep
 from app.models.cup_settings import CupPinWrite, CupSettings
 from app.models.cup_team import CupTeam, CupTeamInvite, CupTeamMember, team_summary
 from app.models.draft_series import DraftSeries
@@ -1042,10 +1042,11 @@ class EventService:
     ) -> EventEntrantPublic:
         """Put another player in the place of one who has not played yet.
 
-        The new player takes the seed, the division and every series of the old
-        one, so a drawn bracket keeps its shape; a veto the old player began in
-        a series still open starts over. The new player is held to the event's
-        rules as a hand-added player is, and the old row leaves.
+        The new player takes the seed, the division, every series and every
+        lobby seat of the old one, so a drawn bracket keeps its shape; a veto the
+        old player began in a series still open starts over. The new player is
+        held to the event's rules as a hand-added player is, and the old row
+        leaves.
         """
         _refresh_for(event_id, data, None)
         with Session.begin() as session:
@@ -1061,12 +1062,18 @@ class EventService:
                     )
                 )
             )
+            # every lobby seat of the old entrant, with its lobby, in one read
+            seats = session.execute(
+                select(CupSeriesSide, CupSeries)
+                .join(CupSeries, col(CupSeries.id) == col(CupSeriesSide.series_id))
+                .where(col(CupSeriesSide.entrant_id) == entrant_id)
+            ).all()
             played = [
                 row
                 for row in series
                 if scored(row) and row.entrant1_id and row.entrant2_id
             ]
-            if played:
+            if played or any(scored(lobby) for _, lobby in seats):
                 raise BadRequestError(
                     "This player has played a match already, so the place stays theirs"
                 )
@@ -1075,6 +1082,9 @@ class EventService:
             }
             seed, division_id = old.seed, old.division_id
             checked_in = old.checked_in_at
+            # a seat drops the old row first, so the session and the table agree
+            for seat, _ in seats:
+                seat.entrant_id = None
             session.delete(old)
             session.flush()
             new = _enter(
@@ -1084,6 +1094,9 @@ class EventService:
             new.division_id = division_id
             new.checked_in_at = utcnow() if event.checkin_enabled else checked_in
             session.flush()
+            for seat, _ in seats:
+                seat.entrant_id = ident(new)
+                seat.user_id = new.user_id or 0
             for row in series:
                 side = sides[ident(row)]
                 setattr(row, f"entrant{side}_id", ident(new))
