@@ -5,7 +5,10 @@ start the check-in opens, written from `checkin_days`, and
 `checkin_closes_minutes`, how many minutes before the start it closes, left
 null so every event keeps closing at its draw or its round's end. A cup
 played over rounds takes check-ins from sign-up, so early check-in turns on
-for every event that holds a `cup_leg` row.
+for every event that holds a `cup_leg` row. That flip is one way: the
+downgrade leaves `early_checkin` on, which is harmless, as the code before
+this revision reads it only while check-in is on, and a cup over rounds has
+check-in off.
 
 Revision ID: d3a8f6c1b294
 Revises: c5f8e1b3d907
