@@ -149,8 +149,9 @@ class AvailabilityService:
         """Answer every round of the event that has not ended, or clear them all.
 
         One delete and one insert write the lot, so the rounds move together.
-        A player writing for themselves meets the same window rule per round as
-        a single answer, which early check-in opens for every round left.
+        A player writing for themselves skips the rounds whose check-in has
+        closed and meets the same opening rule per round as a single answer,
+        which early check-in opens for every round left.
         """
         with Session.begin() as session:
             season = _season(session, season_id)
@@ -159,8 +160,13 @@ class AvailabilityService:
                     403, {"error": "scheduling_disabled", "message": NO_SCHEDULING}
                 )
             every = event_rounds(session, season_id)
-            rounds = [row for row in every if not _ended(season, row)]
-            if set_by_user_id == user_id:
+            own = set_by_user_id == user_id
+            rounds = [
+                row
+                for row in every
+                if not _ended(season, row) and not (own and _shut(season, row))
+            ]
+            if own:
                 for row in rounds:
                     _checkin_window(season, every, row.number)
             session.execute(
@@ -264,6 +270,12 @@ def _ended(season: Season, row: DBEventRound) -> bool:
         return False
     window = round_window(season, row)
     return window is not None and now() >= window[1]
+
+
+def _shut(season: Season, row: DBEventRound) -> bool:
+    """Whether the round's check-in has closed to the player, early or at its end."""
+    closes = round_checkin(season, row).closes
+    return closes is not None and now() >= closes
 
 
 def _closed(message: str) -> ApiError:

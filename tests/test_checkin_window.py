@@ -115,6 +115,35 @@ def test_an_early_close_shuts_a_round_at_its_start_but_not_for_its_captain(
     assert [row.playday for row in rows] == [2]
 
 
+def test_every_round_left_skips_the_round_an_early_close_shut(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    auth_headers: Headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On Wed 14 Jan round 2 is in play and past its close at its first
+    midnight, so the write for every round writes rounds 3 and 4 only."""
+    season = seeded["season_id"]
+    assert edit(
+        client, auth_headers, season, checkin_closes_minutes=0, early_checkin=True
+    ).is_success
+    headers = member()
+    at(monkeypatch, availability, "2026-01-11T23:59:00+00:00")
+    write(client, headers, 2, True)
+
+    at(monkeypatch, availability, "2026-01-14T12:00:00+00:00")
+    for answer, rows in (
+        (False, [(2, True), (3, False), (4, False)]),
+        (None, [(2, True)]),
+    ):
+        response = client.put(
+            "/player-availability/all", json={"available": answer}, headers=headers
+        )
+        assert response.status_code == 200, response.text
+        assert [(row["playday"], row["available"]) for row in response.json()] == rows
+
+
 def test_a_dated_round_reads_its_window(client: Client, seeded: dict[str, Any]) -> None:
     """GET /player-series answers the rounds of AvailabilityService, and the
     event read answers the same rounds."""

@@ -2,7 +2,7 @@
 
 ## 2026-10-16
 
-* **Update**: the check-in is measured in minutes from the start. `event.checkin_opens_minutes` opens it, written from `checkin_days`, which reads the minutes back in whole days; `event.checkin_closes_minutes` closes it early, and with no early close a dated round closes at its end and a cup or a round of a cup at its draw. A player's own check-in on every path is refused outside the window with `checkin_closed`, a runner's never; the event, member, round and cup round reads carry `checkin_opens_at` and `checkin_closes_at`, and the cup call to check in follows the window. [Scheduling and availability](concepts/scheduling-and-availability.md#check-in) and the [events module](concepts/events-module.md#check-in) state it.
+* **Update**: the check-in is measured in minutes from the start. `event.checkin_opens_minutes` opens it, written from `checkin_days`, which reads the minutes back in whole days; `event.checkin_closes_minutes` closes it early, and with no early close a dated round closes at its end and a cup or a round of a cup at its draw. A player's own check-in on every path is refused outside the window with `checkin_closed`, a runner's never, and the player's write for every round leaves out the rounds closed to them; the event, member, round and cup round reads carry `checkin_opens_at` and `checkin_closes_at`, and the cup call to check in follows the window. [Scheduling and availability](concepts/scheduling-and-availability.md#check-in) and the [events module](concepts/events-module.md#check-in) state it.
 
 ## 2026-10-15
 

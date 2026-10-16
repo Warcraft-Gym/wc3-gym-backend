@@ -26,7 +26,7 @@ The question "can you play?" belongs to a round, never to "every week". A round 
 
 `GET /player-series` answers the player's own answers beside the rounds of the event. Each round carries its number, its date window, the fixed map of game 1 and the stage it sits in, as `stage_id` and `stage_name`, so the page groups the rounds under their stage. A round in no stage, and a stage with no name, answer null. One statement reads the rounds and their stage names together. The round rows of an event payload carry `stage_id` too; that read does not join the stage, so `stage_name` reads null on it.
 
-One write answers every round of the event that has not ended, for one player: `PUT /player-availability/all` for the player themselves, `PUT /events/{event_id}/teams/{team_id}/availability/all` for their captain or an admin. It takes the same permissions as the single-round writers, writes the rounds in one transaction, and a null answer clears those same rounds again. Both answer the player's rows for the event, as the single-round writers do.
+One write answers every round of the event that has not ended, for one player: `PUT /player-availability/all` for the player themselves, `PUT /events/{event_id}/teams/{team_id}/availability/all` for their captain or an admin. It takes the same permissions as the single-round writers, writes the rounds in one transaction, and a null answer clears those same rounds again. A player's own write leaves out the rounds whose check-in has closed to them, so an early close never refuses the whole write. Both answer the player's rows for the event, as the single-round writers do.
 
 # Ask when someone cannot play
 
