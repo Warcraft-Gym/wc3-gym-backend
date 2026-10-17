@@ -525,3 +525,118 @@ def test_a_finished_cup_takes_no_series_write_until_it_is_reopened(
 
     flipped = client.put(f"{path}/report", json=turned, headers=loser)
     assert flipped.status_code == 200, flipped.text
+
+
+# --- the organizer picker's search ---
+
+
+def person(
+    name: str, discord_id: str | None, tag: str | None = None, banned: bool = False
+) -> int:
+    """A player row, with a Discord login when it has an id."""
+    from app.models.enums import Race
+    from app.models.types import utcnow
+
+    with Session.begin() as session:
+        user = User(
+            name=name,
+            discordId=discord_id,
+            discordTag=tag,
+            race=Race.HU,
+            banned_at=utcnow() if banned else None,
+        )
+        session.add(user)
+        session.flush()
+        assert user.id is not None
+        return user.id
+
+
+def names(response: Any) -> list[str]:  # noqa: ANN401
+    assert response.status_code == 200, response.text
+    return [row["name"] for row in response.json()]
+
+
+def test_a_runner_finds_players_by_name_or_discord_tag(
+    client: Client, auth_headers: Headers, member: Member
+) -> None:
+    grant(client, auth_headers, "50")
+    creator = member("50")
+    event = create(client, creator)
+    person("Quillfeather", "81", "quill.writes")
+    person("Ironhoof", "82", "hoofbeat")
+    person("Mistveil", "83", "QUILLSTORM")
+    path = f"/events/{event['id']}/organizer-candidates"
+
+    found = client.get(path, params={"q": "QUILL"}, headers=creator)
+    # a name or tag that starts with the text first, in name order, any case
+    assert names(found) == ["Mistveil", "Quillfeather"]
+    row = found.json()[1]
+    assert row["discord_id"] == "81" and row["discord_tag"] == "quill.writes"
+    assert row["user_id"] > 0
+    assert names(client.get(path, params={"q": "beat"}, headers=creator)) == [
+        "Ironhoof"
+    ]
+
+
+def test_the_search_skips_runners_logins_missing_and_bans(
+    client: Client, auth_headers: Headers, member: Member
+) -> None:
+    grant(client, auth_headers, "50")
+    creator = member("50")
+    event = create(client, creator)
+    person("Ashfall One", "84", "ash1")
+    person("Ashfall Two", None)
+    person("Ashfall Three", "85", "ash3", banned=True)
+    person("Ashfall Four", "86", "ash4")
+    added = client.post(
+        f"/events/{event['id']}/organizers",
+        json={"discord_id": "86"},
+        headers=creator,
+    )
+    assert added.status_code == 201, added.text
+    path = f"/events/{event['id']}/organizer-candidates"
+    assert names(client.get(path, params={"q": "ashfall"}, headers=creator)) == [
+        "Ashfall One"
+    ]
+
+
+def test_the_search_answers_ten_at_most_and_reads_a_wildcard_as_itself(
+    client: Client, auth_headers: Headers
+) -> None:
+    for index in range(12):
+        person(f"Northgate {index:02}", str(900 + index))
+    person("Half%Moon", "950")
+    person("Halfling", "951")
+    path = "/organizers/candidates"
+    assert (
+        len(names(client.get(path, params={"q": "north"}, headers=auth_headers))) == 10
+    )
+    assert names(client.get(path, params={"q": "f%m"}, headers=auth_headers)) == [
+        "Half%Moon"
+    ]
+
+
+def test_the_grant_search_skips_organizers_and_is_for_admins_only(
+    client: Client, auth_headers: Headers, member: Member
+) -> None:
+    person("Thornwick", "87", "thorn")
+    person("Thornbury", "88", "bury")
+    grant(client, auth_headers, "88")
+    path = "/organizers/candidates"
+    assert names(client.get(path, params={"q": "thorn"}, headers=auth_headers)) == [
+        "Thornwick"
+    ]
+    assert (
+        client.get(path, params={"q": "thorn"}, headers=member("70")).status_code == 403
+    )
+    assert client.get(path, params={"q": "t"}, headers=auth_headers).status_code == 422
+
+
+def test_only_a_runner_searches_an_events_candidates(
+    client: Client, auth_headers: Headers, member: Member
+) -> None:
+    grant(client, auth_headers, "50")
+    event = create(client, member("50"))
+    path = f"/events/{event['id']}/organizer-candidates"
+    assert client.get(path, params={"q": "ab"}, headers=member("71")).status_code == 403
+    assert client.get(path, params={"q": "ab"}, headers=auth_headers).status_code == 200

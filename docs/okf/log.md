@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-17
+
+* **Update**: `GET /events/{id}/organizer-candidates?q=` for a runner and `GET /organizers/candidates?q=` for an admin search the players with a Discord login by name or Discord tag, ten at most, past the accounts already running the event or holding a grant. [Roles and permissions](concepts/roles-and-permissions.md) and the [API overview](api/overview.md) state it.
+
 ## 2026-10-16
 
 * **Update**: `GET /me/events` names a dated round as the next round until midnight after its last day in the event's zone, as every other check-in read does. The [events module](concepts/events-module.md#the-member-read) states it.

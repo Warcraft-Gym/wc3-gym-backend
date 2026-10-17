@@ -94,3 +94,12 @@ class EventOrganizerPublic(SQLModel):
     name: str
     added_by: str
     added_at: Annotated[datetime, AwareUTC]
+
+
+class OrganizerCandidate(SQLModel):
+    """A player with a Discord login, offered when an organizer is added."""
+
+    user_id: int
+    name: str
+    discord_tag: str | None = None
+    discord_id: str
