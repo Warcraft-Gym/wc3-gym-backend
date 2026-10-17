@@ -396,6 +396,32 @@ def test_a_finished_event_shuts_its_signups(
     assert refused.json() == {"error": "Signups are closed for this event"}
 
 
+def test_a_draft_takes_no_signups_until_it_is_published(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    auth_headers: dict[str, str],
+) -> None:
+    """The stored flag stays true; a draft reads closed and refuses, and
+    publishing it opens the sign-ups."""
+    event = add_event(kind=EventKind.cup, signups_open=True, published=False)
+
+    read = client.get(f"/events/{event}", headers=auth_headers)
+    assert read.status_code == 200, read.text
+    assert read.json()["signups_open"] is False
+    refused = sign_up(client, event, member("1"))
+    assert refused.status_code == 400
+    assert refused.json() == {"error": "Signups are closed for this event"}
+
+    published = client.put(
+        f"/events/{event}", json={"published": True}, headers=auth_headers
+    )
+    assert published.status_code == 200, published.text
+    assert published.json()["signups_open"] is True
+    entered = sign_up(client, event, member("1"))
+    assert entered.status_code == 201, entered.text
+
+
 def test_a_withdraw_names_one_race_and_the_count_is_of_players(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:

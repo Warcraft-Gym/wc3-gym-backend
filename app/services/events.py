@@ -255,8 +255,9 @@ def phase_of(
 
 
 def _signups_open(event: Season, phase: EventPhase) -> bool:
-    """The stored flag, shut once the event reads finished."""
-    return event.signups_open and phase != "finished"
+    """The stored flag, shut while the event is a draft and once it reads
+    finished: a published event takes sign-ups, a draft takes none."""
+    return event.signups_open and phase not in ("draft", "finished")
 
 
 # The stage columns the chain test reads; a later select loads the rest, a session.get each missing column

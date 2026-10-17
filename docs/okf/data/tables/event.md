@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-17T22:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -37,7 +37,7 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `map_rules` | VARCHAR | yes | One rule per game, comma-joined: `fixed`, `loser`, `host`, `veto`. Null means the GNL default `fixed,loser,loser`. |
 | `score_system` | VARCHAR | no | The scale series points are paid on: `standard` or `helpstone`. |
 | `fantasy_grind` | BOOLEAN | no | On: the fantasy game offers the grind pick, a second team paid by achievement rank. |
-| `signups_open` | BOOLEAN | no | Off: a signup is refused, or on a GNL season becomes a request an admin may grant. A finished event reads it off and refuses a signup whatever the column holds. |
+| `signups_open` | BOOLEAN | no | Off: a signup is refused, or on a GNL season becomes a request an admin may grant. A draft and a finished event read it off and refuse a signup whatever the column holds. |
 | `scheduling_enabled` | BOOLEAN | no | Off: the event takes no availability answers. |
 | `checkin_days` | INTEGER | yes | `checkin_opens_minutes` in whole days, rounded down; null when that is null. A write that names `checkin_days` without the minutes sets the minutes to that many days. |
 | `league_id` | INTEGER | yes | The league this is a run of. Null for an event with no league. |

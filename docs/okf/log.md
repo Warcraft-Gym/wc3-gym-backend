@@ -2,6 +2,7 @@
 
 ## 2026-10-17
 
+* **Update**: a draft takes no signups: an unpublished event answers `signups_open` false on every read and refuses a signup, and publishing it opens them. The [events module](concepts/events-module.md) and [event](data/tables/event.md) state it.
 * **Update**: `GET /events/{id}/organizer-candidates?q=` for a runner and `GET /organizers/candidates?q=` for an admin search the players with a Discord login by name or Discord tag, ten at most, past the accounts already running the event or holding a grant. [Roles and permissions](concepts/roles-and-permissions.md) and the [API overview](api/overview.md) state it.
 
 ## 2026-10-16
