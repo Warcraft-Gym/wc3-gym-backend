@@ -240,7 +240,7 @@ class Season(SeasonBase, DBModel, table=True):
     eligibility_required: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
-    # On, beside eligibility_required: that battle tag is verified through Battle.net too
+    # ponytail: read by nothing; a Battle.net check never refuses a signup. Drop with a migration
     bnet_required: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )

@@ -2949,24 +2949,8 @@ RACE_NAMES = {
 
 
 def _hold_bounds(fields: dict[str, Any]) -> None:
-    """Refuse bounds that cannot hold together.
-
-    The Battle.net link is a part of the eligibility check, so it needs the
-    check on. A battle tag alone proves no Battle.net link, so an event that
-    asks for one takes members only. The lowest MMR is no higher than the
-    highest.
-    """
-    if fields.get("bnet_required") and not fields.get("eligibility_required"):
-        raise BadRequestError(
-            "The Battle.net link is part of the eligibility check; turn that on first"
-        )
-    if fields.get("bnet_required") and fields.get("signup_policy") in (
-        SignupPolicy.anyone,
-        SignupPolicy.anyone.value,
-    ):
-        raise BadRequestError(
-            "An event that asks for a Battle.net link takes members only: a battle tag alone proves none"
-        )
+    """Refuse bounds that cannot hold together: the lowest MMR is no higher
+    than the highest."""
     low, high = fields.get("mmr_min"), fields.get("mmr_max")
     if low is not None and high is not None and low > high:
         raise BadRequestError("The lowest MMR cannot be above the highest")
@@ -3015,9 +2999,8 @@ def _hold_eligible(
 
     W3Champions rates the player's active battle tag on the race of the signup,
     the rating sits inside the event's bounds, and the games on that race reach
-    the event's minimum; an event that asks for it also wants the tag verified
-    through Battle.net. The rule holds for a hand-added player as for a self
-    signup.
+    the event's minimum. A tag not verified through Battle.net counts the same.
+    The rule holds for a hand-added player as for a self signup.
     """
     season = w3c_season(session)
     user = session.scalars(
@@ -3030,10 +3013,6 @@ def _hold_eligible(
     if tag is None:
         raise BadRequestError(
             f"{user.name} has no battle tag, so this event cannot check the rating."
-        )
-    if event.bnet_required and tag.bnet_account_id is None:
-        raise BadRequestError(
-            f"{user.name} has no battle tag linked to Battle.net. Link it on the profile page first; this event takes linked players only."
         )
     if event.race_games_min is not None:
         rated = _rated(

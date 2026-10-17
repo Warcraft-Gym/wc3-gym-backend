@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-18
+
+* **Update**: an event with `eligibility_required` on takes a battle tag whether or not it is verified through Battle.net, by self signup and by hand; `event.bnet_required` is read by nothing, and an event with it on may take `anyone`. The [events module](concepts/events-module.md#entrants-seeds-divisions) and [event](data/tables/event.md) state it.
+
 ## 2026-10-17
 
 * **Update**: `GET /events/{id}/organizer-candidates?q=` for a runner and `GET /organizers/candidates?q=` for an admin search the players with a Discord login by name or Discord tag, ten at most, past the accounts already running the event or holding a grant. [Roles and permissions](concepts/roles-and-permissions.md) and the [API overview](api/overview.md) state it.
