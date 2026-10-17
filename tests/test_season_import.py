@@ -505,6 +505,7 @@ def test_a_series_before_the_season_start_is_refused(
 
     assert _refused(client, auth_headers, row) == (
         "A series cannot be earlier than the season start, 2026-01-05"
+        ". To play it earlier, an admin can move the season's start date."
     )
 
 
