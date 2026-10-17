@@ -1,5 +1,10 @@
 # Bundle history
 
+## 2026-10-18
+
+* **Update**: a drawn cup reads `running` from its start, before its first result. The [events module](concepts/events-module.md) states it.
+* **Update**: `GET /me/organized-events` carries `entrant_count`, `checked_in_count` and `waitlist_count` on each event. [Roles and permissions](concepts/roles-and-permissions.md) states it.
+
 ## 2026-10-17
 
 * **Update**: `GET /events`, `POST /events/search` and `GET /events/{id}` carry `ffa` and `custom_game` on a cup, read for a page in one grouped statement, so a list names how a cup plays. The [events module](concepts/events-module.md) states it.

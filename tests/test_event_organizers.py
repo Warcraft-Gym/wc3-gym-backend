@@ -414,6 +414,44 @@ def test_the_organized_events_read_as_the_events_list_does(
     ]
 
 
+def test_the_organized_events_count_who_is_in_checked_in_and_waiting(
+    client: Client, auth_headers: Headers, member: Member
+) -> None:
+    """Players are counted once each: in (neither withdrawn nor waiting),
+    checked in among them, and waiting; a withdrawn row counts nowhere."""
+    from app.models.event_entrant import EventEntrant
+    from app.models.types import utcnow
+
+    grant(client, auth_headers, "50")
+    headers = member("50")
+    busy = create(client, headers, name="Busy Cup")
+    create(client, headers, name="Empty Cup")
+    checked, signed, waiting, gone = players(4)
+    enter(client, auth_headers, busy["id"], [checked, signed, waiting, gone])
+    with Session.begin() as session:
+        rows = {
+            row.user_id: row
+            for row in session.scalars(
+                select(EventEntrant).where(EventEntrant.event_id == busy["id"])
+            )
+        }
+        rows[checked].checked_in_at = utcnow()
+        rows[waiting].waitlisted_at = utcnow()
+        rows[gone].withdrawn_at = utcnow()
+
+    mine = client.get("/me/organized-events", headers=headers)
+    assert mine.status_code == 200, mine.text
+    counts = {
+        row["name"]: (
+            row["entrant_count"],
+            row["checked_in_count"],
+            row["waitlist_count"],
+        )
+        for row in mine.json()
+    }
+    assert counts == {"Busy Cup": (2, 1, 1), "Empty Cup": (0, 0, 0)}
+
+
 def test_the_organizer_routes_are_mounted_once(app: FastAPI) -> None:
     """A router included twice names each of its operations twice."""
     with warnings.catch_warnings(record=True) as caught:

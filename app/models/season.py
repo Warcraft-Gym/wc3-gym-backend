@@ -771,6 +771,15 @@ class EventPublic(SQLModel):
     cup_recurrence: CupRecurrenceRef | None = None
 
 
+class OrganizedEventPublic(EventPublic):
+    """An event the caller runs, with how its sign-ups stand: `entrant_count`
+    holds the players in, and these the ones checked in and the ones waiting.
+    Each counts players, not race rows."""
+
+    checked_in_count: int = 0
+    waitlist_count: int = 0
+
+
 class EventCreate(SQLModel):
     """A new event. Its stages come from the body, or one default stage is made;
     an explicit empty list writes no stage at all."""
