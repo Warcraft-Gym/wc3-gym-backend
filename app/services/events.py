@@ -2126,10 +2126,12 @@ def _publics(
     session: OrmSession, rows: Sequence[Row[tuple[Season, bool]]]
 ) -> list[EventPublic]:
     """A page of event payloads, each with the archived flag read beside it,
-    and one grouped series count behind their phases."""
+    one grouped series count behind their phases, and one grouped read of how
+    each cup plays, so a list names a cup's mode."""
     ids = [event.id for event, _ in rows]
     counts = series_counts_by_event(session, ids)
     drawn = last_stage_drawn(session, ids)
+    formats = _cup_formats(session, [event for event, _ in rows])
     publics: list[EventPublic] = []
     for event, archived in rows:
         public = _public(
@@ -2139,6 +2141,8 @@ def _publics(
             last_stage=drawn.get(event.id, True),
         )
         public.archived = archived
+        if ident(event) in formats:
+            public.ffa, public.custom_game = formats[ident(event)]
         publics.append(public)
     return publics
 
@@ -2186,6 +2190,7 @@ def _public(
     public.uses_divisions = cup_divisions.uses_divisions(session, event)
     public.custom_game = cup_divisions.custom_game(session, event)
     if cup_divisions.is_cup(event):
+        public.ffa = _cup_formats(session, [event])[ident(event)][0]
         public.cup_legs = cup_rounds.legs_of(session, ident(event)) or None
         public.cup_recurrence = cup_recurrence.ref_of(session, ident(event))
     public.stages = [

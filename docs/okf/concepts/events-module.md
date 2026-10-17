@@ -61,7 +61,7 @@ A player's own check-in on `POST /events/{id}/entrants/{entrant_id}/checkin`, th
 
 # The list reads
 
-`GET /events` and the events of `GET /leagues/{league_id}` read newest start first: by the start time, else the start date, with an event that has neither last and the newer id first on a tie. The order and the page are cut in SQL. Both reads take `archived`: `false` leaves out every event that has a [koth_history_event](../data/tables/koth_history_event.md) row, `true` keeps only those, and no value keeps both. Each listed event carries `archived`: `true` when it has that row, else `false`, read as a column of the page statement. `POST /events/search` carries it the same way. `X-Total-Count` on `GET /events` counts the filtered set.
+`GET /events` and the events of `GET /leagues/{league_id}` read newest start first: by the start time, else the start date, with an event that has neither last and the newer id first on a tie. The order and the page are cut in SQL. Both reads take `archived`: `false` leaves out every event that has a [koth_history_event](../data/tables/koth_history_event.md) row, `true` keeps only those, and no value keeps both. Each listed event carries `archived`: `true` when it has that row, else `false`, read as a column of the page statement. `POST /events/search` carries it the same way. Each listed cup also carries `ffa` (a stage plays free for all lobbies) and `custom_game`, both read for the whole page in one grouped statement, so a list names a cup's mode; every other kind reads them null. `GET /events/{id}` carries both for a cup too. `X-Total-Count` on `GET /events` counts the filtered set.
 
 # The member read
 

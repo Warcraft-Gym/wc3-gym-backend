@@ -140,3 +140,33 @@ def test_a_custom_ffa_plays_its_lobbies_on_the_one_map(
     ]
     assert {row["lobby_map"]["id"] for row in lobbies} == {map_id}
     assert len(bracket(stage_of(cup))) == 3
+
+
+def test_the_list_and_the_event_name_how_a_cup_plays(
+    client: Client, auth_headers: Headers
+) -> None:
+    """A list row names a cup's mode as the event read does, from one read."""
+    (map_id,) = maps(1)
+    ffa_stage = {
+        "format": "ffa",
+        "best_of": 1,
+        "lobby_size": 4,
+        "group_advance": 2,
+        "points_by_place": "4,3,2,1",
+        "scheduling_mode": "immediate",
+    }
+    custom_cup(client, auth_headers, map_id, name="Custom Duel")
+    lobbies = custom_cup(
+        client, auth_headers, map_id, name="Custom Lobbies", stages=[ffa_stage]
+    )
+    make_cup(client, auth_headers, name="Plain Bracket")
+
+    rows = {
+        row["name"]: (row["custom_game"], row["ffa"])
+        for row in client.get("/events", params={"kind": "cup"}).json()
+    }
+    assert rows["Custom Duel"] == (True, False)
+    assert rows["Custom Lobbies"] == (True, True)
+    assert rows["Plain Bracket"] == (False, False)
+    full = client.get(f"/events/{lobbies['id']}").json()
+    assert (full["custom_game"], full["ffa"]) == (True, True)

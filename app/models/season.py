@@ -761,8 +761,10 @@ class EventPublic(SQLModel):
     children: list["EventPublic"] = []
     # A cup's choice to split into divisions; null on any other kind and on a list read
     uses_divisions: bool | None = None
-    # A cup played as a custom game on one map; null on any other kind and on a list read
+    # A cup played as a custom game on one map; null on any other kind
     custom_game: bool | None = None
+    # A cup whose stages play free for all lobbies; null on any other kind
+    ffa: bool | None = None
     # A cup played over rounds: its rounds in order; null on any other event and on a list read
     cup_legs: list[CupLegPublic] | None = None
     # A cup made from a recurring rule: the rule; null otherwise and on a list read
