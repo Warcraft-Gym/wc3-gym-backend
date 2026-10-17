@@ -393,7 +393,10 @@ def test_schedule_refuses_a_date_before_the_season_starts(
         (
             "PATCH",
             f"{WEBHOOK}/messages/@original",
-            {"content": "A series cannot be earlier than the season start, 2026-01-05"},
+            {
+                "content": "A series cannot be earlier than the season start, 2026-01-05"
+                ". To play it earlier, an admin can move the season's start date."
+            },
         )
     ]
     with Session.begin() as session:

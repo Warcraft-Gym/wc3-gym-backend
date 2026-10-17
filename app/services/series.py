@@ -66,6 +66,7 @@ def in_season(session: OrmSession, row: Series) -> None:
     if row.date_time.date() < start - timedelta(days=1):
         raise BadRequestError(
             f"A series cannot be earlier than the season start, {start}"
+            ". To play it earlier, an admin can move the season's start date."
         )
 
 
