@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-three route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T09:22:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-17T19:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -32,7 +32,7 @@ sources:
 | `seasons.py` | `/events/{event_id}`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges |
 | `leagues.py` | `/leagues` | leagues |
 | `events.py` | `/events`, `/me/events`, `/me/cup-series`, `/me/announcements`, `/me/team-invites`, `/cup-recurrences` | event CRUD and search, entrants, divisions, stages, standings, the caller's open cup series, announcement role and team invitations, recurring cups |
-| `organizers.py` | `/organizers`, `/me/organized-events`, `/events/{event_id}/organizers` | organizer grants and requests, the events a caller organizes, an event's organizers |
+| `organizers.py` | `/organizers`, `/organizers/candidates`, `/me/organized-events`, `/events/{event_id}/organizers`, `/events/{event_id}/organizer-candidates` | organizer grants and requests, the players a grant or a co-organizer can go to, the events a caller organizes, an event's organizers |
 | `matches.py` | `/matches` | fixtures |
 | `series.py` | `/series`, `/events/{event_id}/series`, `/casts` | series, event series searches, result kind, casts |
 | `cup_series.py` | `/cup-series` | a cup's series: reads, a side's report, a runner's results, lobby places, seats, moves and maps, and the veto |

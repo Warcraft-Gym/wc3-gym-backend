@@ -4,7 +4,9 @@ An admin grants and revokes organizers, and answers the requests members
 send. The runners of an event add and remove its co-organizers.
 """
 
-from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import (
     EventServiceDep,
@@ -18,6 +20,7 @@ from app.api.routes.public import Identity
 from app.models.organizer import (
     EventOrganizerPublic,
     EventOrganizerWrite,
+    OrganizerCandidate,
     OrganizerGrantCreate,
     OrganizerPublic,
     OrganizerRequestCreate,
@@ -28,11 +31,23 @@ from app.services import organizers
 
 router = APIRouter(tags=["organizers"])
 
+# What the organizer picker searches for: a part of a player's name or Discord tag
+SearchText = Annotated[str, Query(min_length=2, max_length=50)]
+
 
 @router.get("/organizers", dependencies=[Depends(require_admin)])
 def get_organizers() -> list[OrganizerPublic]:
     """Every organizer grant, oldest first, with how many events each runs."""
     return organizers.organizers()
+
+
+# Guarded, so it is never cached: at most ten rows, in one statement
+@router.get("/organizers/candidates", dependencies=[Depends(require_admin)])
+def get_organizer_candidates(q: SearchText) -> list[OrganizerCandidate]:
+    """The players with a Discord login whose name or Discord tag holds `q`, in
+    any case, who hold no grant yet: ten at most, a name or tag starting with
+    `q` first. The admin's add dialog searches it."""
+    return organizers.grant_candidates(q)
 
 
 @router.post("/organizers", status_code=201)
@@ -95,6 +110,21 @@ def get_event_organizers(event_id: int) -> list[EventOrganizerPublic]:
     """Who runs the event, in the order they were added. An open read: the
     event page names its organizers to every reader."""
     return organizers.event_organizers(event_id)
+
+
+# Guarded, so it is never cached: at most ten rows, in one statement
+@router.get(
+    "/events/{event_id}/organizer-candidates",
+    tags=["events"],
+    dependencies=[Depends(require_event_runner)],
+)
+def get_event_organizer_candidates(
+    event_id: int, q: SearchText
+) -> list[OrganizerCandidate]:
+    """The players with a Discord login whose name or Discord tag holds `q`, in
+    any case, who do not run the event yet: ten at most, a name or tag starting
+    with `q` first. A runner's co-organizer picker searches it."""
+    return organizers.event_candidates(event_id, q)
 
 
 @router.post("/events/{event_id}/organizers", status_code=201, tags=["events"])

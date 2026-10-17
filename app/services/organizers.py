@@ -10,7 +10,7 @@ event, and outlives the grant. An admin runs every event.
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import Select, case, exists, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -23,6 +23,7 @@ from app.models.league import League
 from app.models.organizer import (
     EventOrganizer,
     EventOrganizerPublic,
+    OrganizerCandidate,
     OrganizerGrant,
     OrganizerPublic,
     OrganizerRequest,
@@ -296,3 +297,63 @@ def organized_event_ids(discord_id: str) -> list[int]:
                 .order_by(col(EventOrganizer.event_id).desc())
             )
         )
+
+
+# --- the players offered when an organizer is added ---
+
+# A search answers this many players at most; the picker shows them as one short list
+CANDIDATES = 10
+
+
+def _candidates(text: str, taken: Select[Any]) -> list[OrganizerCandidate]:
+    """The players with a Discord login whose name or Discord tag holds the text,
+    in any case, past the accounts `taken` names, in one statement. A name or a
+    tag that starts with the text comes first. A banned player is not offered."""
+    needle = text.strip().lower()
+    if len(needle) < 2:
+        return []
+    discord_id = func.trim(col(User.discordId))
+    name = func.lower(col(User.name))
+    tag = func.lower(func.coalesce(col(User.discordTag), ""))
+    starts = or_(
+        name.startswith(needle, autoescape=True),
+        tag.startswith(needle, autoescape=True),
+    )
+    stmt = (
+        select(col(User.id), col(User.name), col(User.discordTag), discord_id)
+        .where(
+            col(User.discordId).is_not(None),
+            discord_id != "",
+            col(User.banned_at).is_(None),
+            or_(
+                name.contains(needle, autoescape=True),
+                tag.contains(needle, autoescape=True),
+            ),
+            discord_id.not_in(taken),
+        )
+        .order_by(case((starts, 0), else_=1), name, col(User.id))
+        .limit(CANDIDATES)
+    )
+    with Session.begin() as session:
+        return [
+            OrganizerCandidate(
+                user_id=user_id,
+                name=user_name,
+                discord_tag=user_tag,
+                discord_id=account,
+            )
+            for user_id, user_name, user_tag, account in session.execute(stmt)
+        ]
+
+
+def event_candidates(event_id: int, text: str) -> list[OrganizerCandidate]:
+    """The players a runner may add to that event, past the ones running it."""
+    taken = select(col(EventOrganizer.discord_id)).where(
+        col(EventOrganizer.event_id) == event_id
+    )
+    return _candidates(text, taken)
+
+
+def grant_candidates(text: str) -> list[OrganizerCandidate]:
+    """The players an admin may make organizers, past the ones holding a grant."""
+    return _candidates(text, select(col(OrganizerGrant.discord_id)))
