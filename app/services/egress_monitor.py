@@ -26,7 +26,7 @@ from app.models.egress_snapshot import EgressSnapshotResult
 from app.models.monitor_state import MonitorState
 from app.models.types import utcnow
 from app.services import egress
-from app.services.commands.base import PRIVATE
+from app.services.commands.base import PRIVATE, PUBLIC
 from app.services.egress import Day, day_of
 from app.services.egress_snapshot import unavailable
 
@@ -775,7 +775,7 @@ def hobby_summary(h: Hobby) -> str:
 
 
 def hobby_reply(h: Hobby, links: dict[str, str]) -> dict[str, Any]:
-    """The private answer to the digest's button."""
+    """The answer to the digest's button."""
     return message(
         h.now,
         AMBER if h.level == Level.AMBER else GREEN,
@@ -1121,8 +1121,12 @@ def hobby_usage(token: str, team: str, now: datetime, actual: bool) -> Hobby | L
 
 
 def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], bool]:
-    """A press on the digest's button: the usage right now against the Hobby limits, answered
-    privately so the channel gets no second post."""
+    """A press on the digest's button: the usage right now against the Hobby limits.
+
+    The first press that reads it takes the button off the digest and posts the answer in the
+    channel as a reply to it, so each digest gets one. A press that cannot take the button off,
+    or reads nothing, answers privately and leaves the button for another try.
+    """
     found = vercel_env()
     if found is None:
         return {"content": "Vercel usage is not read on this deployment."}, PRIVATE
@@ -1141,7 +1145,13 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
             "Set `VERCEL_USAGE_TOKEN` to a new token scoped to the team."
         }, PRIVATE
     links = {k: v for k, v in dashboards().items() if k == "Vercel usage"}
-    return hobby_reply(h, links), PRIVATE
+    reply = hobby_reply(h, links)
+    digest = payload.get("message", {}).get("id")
+    # ponytail: two presses inside the same second can both post; claim a row per digest if that happens
+    if digest and post({"components": []}, digest):
+        reply["message_reference"] = {"message_id": digest, "fail_if_not_exists": False}
+        return reply, PUBLIC
+    return reply, PRIVATE
 
 
 def iso_ms(at: datetime) -> str:
@@ -1290,14 +1300,19 @@ def crashed(reason: str, now: datetime | None = None) -> None:
         post(unavailable_alert(reason, now, mention_id()))
 
 
-def post(payload: dict[str, Any]) -> bool:
-    """Send one payload to the DEV_ALERTS_WEBHOOK_URL channel webhook; True when Discord
-    took it, False when the webhook is unset or the post failed."""
+def post(payload: dict[str, Any], message_id: str | None = None) -> bool:
+    """Send one payload to the DEV_ALERTS_WEBHOOK_URL channel webhook, or edit the message
+    `message_id` it posted; True when Discord took it, False when the webhook is unset or the
+    call failed."""
     url = os.getenv("DEV_ALERTS_WEBHOOK_URL")
     if not url:
         return False
     try:
-        requests.post(url, json=payload, timeout=10).raise_for_status()
+        if message_id is None:
+            requests.post(url, json=payload, timeout=10).raise_for_status()
+        else:
+            edit = f"{url.partition('?')[0]}/messages/{message_id}"
+            requests.patch(edit, json=payload, timeout=10).raise_for_status()
         return True
     except requests.RequestException as error:
         # The exception text carries the webhook URL and its token: log the type and status only

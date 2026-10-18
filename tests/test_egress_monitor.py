@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any, Self
 
 import pytest
+import requests
 from httpx2 import Client
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -13,7 +14,7 @@ from sqlalchemy.exc import DBAPIError
 from app.core.db import Session
 from app.models.egress_ledger import EgressLedger
 from app.models.monitor_state import MonitorState
-from app.services import egress, egress_monitor, egress_snapshot, interactions
+from app.services import discord, egress, egress_monitor, egress_snapshot, interactions
 from app.services.egress import Day
 from app.services.egress_monitor import Level
 from tests.discord import APP_ID, WEBHOOK, signed
@@ -982,8 +983,7 @@ def hobby_lines(latest: str = "<t:1790641800:d>") -> str:
 
 
 def press(client: Client) -> None:
-    """Press the digest's button through the interactions route; the reply edits the
-    private one the adapter deferred."""
+    """Press the button on the digest `digest-1` through the interactions route."""
     body, headers = signed(
         {
             "type": interactions.COMPONENT,
@@ -991,6 +991,7 @@ def press(client: Client) -> None:
             "token": DISCORD_TOKEN,
             "channel_id": "chan-1",
             "member": {"user": {"id": "1", "username": "p1"}},
+            "message": {"id": "digest-1"},
             "data": {"custom_id": "vercel-hobby", "component_type": 2},
         }
     )
@@ -998,21 +999,47 @@ def press(client: Client) -> None:
     assert resp.json() == {"ok": True}
 
 
-def test_the_button_answers_privately_with_the_usage_against_hobby(
+@pytest.fixture
+def edits(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
+    """The edits the webhook would receive, by message URL."""
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    class Edited:
+        def raise_for_status(self) -> None: ...
+
+    def patch(url: str, json: dict[str, Any], timeout: float) -> Edited:
+        calls.append((url, json))
+        return Edited()
+
+    monkeypatch.setattr(egress_monitor.requests, "patch", patch)
+    return calls
+
+
+def test_the_button_comes_off_and_the_usage_against_hobby_posts_once(
     client: Client,
     public_key: None,
     discord_calls: list[tuple[str, str, Any]],
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
     vercel: list[dict[str, Any]],
+    edits: list[tuple[str, dict[str, Any]]],
 ) -> None:
     monkeypatch.setattr(egress_monitor, "utcnow", lambda: NOW)
     monkeypatch.setenv("DEV_ALERTS_VERCEL_USAGE_URL", "https://vercel.test/usage")
     monkeypatch.setenv("DEV_ALERTS_SUPABASE_USAGE_URL", "https://supabase.test/usage")
     answer(monkeypatch, vercel, charges=HOBBY_CHARGES)
     press(client)
-    [(method, url, reply)] = discord_calls
-    assert (method, url) == ("PATCH", f"{WEBHOOK}/messages/@original")
+    assert edits == [
+        ("https://discord.test/webhook/messages/digest-1", {"components": []})
+    ]
+    # The bot posts the reply to the digest and drops the private "thinking" one
+    [(method, url, reply), dropped] = discord_calls
+    assert (method, url) == ("POST", f"{discord.API_URL}/channels/chan-1/messages")
+    assert dropped[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
+    assert reply["message_reference"] == {
+        "message_id": "digest-1",
+        "fail_if_not_exists": False,
+    }
     embed = reply["embeds"][0]
     assert embed["title"] == "Vercel usage compared with Hobby limits"
     assert embed["color"] == egress_monitor.AMBER
@@ -1037,6 +1064,28 @@ def test_the_button_answers_privately_with_the_usage_against_hobby(
         "to": "2026-09-29T00:29:00.000Z",
     }
     assert sent == []
+
+
+def test_the_button_answers_privately_when_it_cannot_come_off(
+    client: Client,
+    public_key: None,
+    discord_calls: list[tuple[str, str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    """A digest from another webhook, or one Discord took down, cannot be edited."""
+
+    def refused(url: str, json: dict[str, Any], timeout: float) -> None:
+        raise requests.HTTPError(response=SimpleNamespace(status_code=404))
+
+    monkeypatch.setattr(egress_monitor.requests, "patch", refused)
+    answer(monkeypatch, vercel, charges=HOBBY_CHARGES)
+    press(client)
+    [(method, url, reply)] = discord_calls
+    assert (method, url) == ("PATCH", f"{WEBHOOK}/messages/@original")
+    assert reply["embeds"][0]["title"] == "Vercel usage compared with Hobby limits"
+    assert "message_reference" not in reply
 
 
 def test_the_button_says_why_when_usage_cannot_be_read(

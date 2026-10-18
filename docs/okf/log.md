@@ -2,7 +2,7 @@
 
 ## 2026-10-18
 
-* **Update**: the [egress monitor](api/jobs.md#the-egress-monitor) compares the Vercel usage of the last 30 days with the Hobby limits: in the digest when the team's plan reads `hobby`, and otherwise through the digest's `vercel-hobby` button, which answers privately.
+* **Update**: the [egress monitor](api/jobs.md#the-egress-monitor) compares the Vercel usage of the last 30 days with the Hobby limits: in the digest when the team's plan reads `hobby`, and otherwise through the digest's `vercel-hobby` button, whose first press takes the button off and posts the comparison as a reply to the digest.
 
 ## 2026-10-17
 
