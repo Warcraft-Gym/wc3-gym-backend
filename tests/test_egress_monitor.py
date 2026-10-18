@@ -972,7 +972,7 @@ HOBBY_TABLE = (
 )
 
 
-def hobby_lines(latest: str = "<t:1790665200:d>") -> str:
+def hobby_lines(latest: str = "<t:1790641800:d>") -> str:
     return (
         f"Used is the last 30 days, 9 of them with data up to {latest}; pace is the last"
         " 7 days × 30. Both are shares of the Hobby limit.\n"
@@ -1047,11 +1047,14 @@ def test_the_button_says_why_when_usage_cannot_be_read(
     sent: list[dict[str, Any]],
     vercel: list[dict[str, Any]],
 ) -> None:
+    answer(monkeypatch, vercel, status=503, failing="/v1/billing/charges")
+    press(client)
     answer(monkeypatch, vercel, status=403, failing="/v1/billing/charges")
     press(client)
     monkeypatch.delenv("VERCEL_USAGE_TOKEN")
     press(client)
     assert [reply for _, _, reply in discord_calls] == [
+        {"content": "Vercel did not answer. Try again in a minute."},
         {
             "content": "Vercel refused the usage token. "
             "Set `VERCEL_USAGE_TOKEN` to a new token scoped to the team."
@@ -1115,10 +1118,24 @@ def test_on_hobby_with_no_charges_the_digest_says_so(
     answer(monkeypatch, vercel, team={"billing": {"plan": "hobby"}}, charges=[])
     run(monkeypatch, daily(20))
     fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
-    assert fields[egress_monitor.HOBBY_FIELD] == (
-        "Vercel returned no use for the last 30 days."
+    assert fields[egress_monitor.HOBBY_FIELD] == "not read (no charges)"
+    assert sent[0]["embeds"][0]["description"] == egress_monitor.NO_CHARGES
+    sent.clear()
+
+    # Charges whose every meter rounds to 0% of its limit
+    tiny = [
+        hobby_charge("ISR Reads", 100, "Reads", day, "wc3-gnl-website")
+        for day in range(21, 29)
+    ]
+    answer(monkeypatch, vercel, team={"billing": {"plan": "hobby"}}, charges=tiny)
+    run(monkeypatch, daily(20))
+    embed = sent[0]["embeds"][0]
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert (
+        fields[egress_monitor.HOBBY_FIELD]
+        == "Every meter is under 1% of its Hobby limit."
     )
-    assert sent[0]["embeds"][0]["color"] == egress_monitor.BLUE
+    assert embed["description"] == "All normal."
 
 
 def test_short_keeps_three_figures() -> None:

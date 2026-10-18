@@ -93,6 +93,7 @@ HOBBY = {
     "Blob Data Transfer": 10,
 }
 HOBBY_DAYS = 30  # Hobby has no billing cycle: each limit counts the last 30 days
+NO_CHARGES = f"Vercel sent no charges for the last {HOBBY_DAYS} days; its usage dashboard has the figures."
 PACE_DAYS = 7  # the complete billing days whose daily mean, times 30, is a meter's pace
 # The custom_id of the digest's button, which routes the press
 HOBBY_BUTTON = "vercel-hobby"
@@ -711,7 +712,8 @@ class Hobby:
     now: datetime
     actual: bool  # the team is on Hobby
     days: int  # the billing days in the window with any use
-    latest: datetime | None  # the end of the last billing day with use
+    pace_days: int  # the complete billing days the pace averages, at most PACE_DAYS
+    latest: datetime | None  # the end of the last billing day with use, or now if later
     meters: list[Meter]  # nearest its limit first
 
     @property
@@ -730,8 +732,10 @@ def short(q: float) -> str:
 
 def hobby_lines(h: Hobby) -> str:
     """Each used meter against its limit, then the project that uses most of each one over."""
-    if not h.meters or h.latest is None:
-        return f"Vercel returned no use for the last {HOBBY_DAYS} days."
+    if not h.days or h.latest is None:
+        return "not read (no charges)"
+    if not h.meters:
+        return "Every meter is under 1% of its Hobby limit."
     rows = [("", "Hobby", "Used", "Pace")]
     for m in h.meters:
         unit = VERCEL_UNITS.get(m.unit, ("", 0))[0]
@@ -742,7 +746,7 @@ def hobby_lines(h: Hobby) -> str:
     lines = [
         (
             f"Used is the last {HOBBY_DAYS} days, {h.days} of them with data up to"
-            f" {stamp(h.latest, 'd')}; pace is the last {PACE_DAYS} days × {HOBBY_DAYS}."
+            f" {stamp(h.latest, 'd')}; pace is the last {h.pace_days} days × {HOBBY_DAYS}."
             " Both are shares of the Hobby limit."
         ),
         table(rows),
@@ -756,8 +760,8 @@ def hobby_lines(h: Hobby) -> str:
 
 def hobby_summary(h: Hobby) -> str:
     over, total = sum(m.over for m in h.meters), len(h.meters)
-    if not total:
-        return f"Vercel returned no use for the last {HOBBY_DAYS} days."
+    if not h.days:
+        return NO_CHARGES
     if h.actual:
         if not over:
             return "Every Vercel meter is inside its Hobby limit."
@@ -876,6 +880,8 @@ def digest(
         usage.append(vercel_section(vercel))
         if vercel.level == Level.AMBER:
             amber.append(vercel_status(vercel))
+        elif isinstance(vercel, Hobby) and not vercel.days:
+            note.append(NO_CHARGES)
     elif vercel_error is not None:
         usage.append(field(VERCEL_FIELD, f"not read ({vercel_error})", inline=False))
     if m.last is None:
@@ -1076,8 +1082,9 @@ def hobby_usage(token: str, team: str, now: datetime, actual: bool) -> Hobby | L
         for r in charge_rows(charges)
         if r["ServiceName"] in HOBBY and r["ConsumedQuantity"]
     ]
-    # ISO times in one format sort as times
-    ends = sorted({r["ChargePeriodEnd"] for r in rows})
+    # ISO times in one format sort as times; a day the window only touches drops out
+    ends = sorted({r["ChargePeriodEnd"] for r in rows})[-HOBBY_DAYS:]
+    rows = [r for r in rows if r["ChargePeriodEnd"] >= ends[0]] if ends else []
     recent = set([e for e in ends if datetime.fromisoformat(e) <= now][-PACE_DAYS:])
     used: dict[str, float] = {}
     paced: dict[str, float] = {}
@@ -1109,8 +1116,8 @@ def hobby_usage(token: str, team: str, now: datetime, actual: bool) -> Hobby | L
     # A meter that rounds to 0% of its limit is noise in the table
     meters = [m for m in meters if max(m.used, m.pace) / m.limit >= 0.005]
     meters.sort(key=lambda m: -max(m.used, m.pace) / m.limit)
-    latest = datetime.fromisoformat(ends[-1]) if ends else None
-    return Hobby(now, actual, len(ends), latest, meters)
+    latest = min(datetime.fromisoformat(ends[-1]), now) if ends else None
+    return Hobby(now, actual, len(ends), len(recent), latest, meters)
 
 
 def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], bool]:
@@ -1119,7 +1126,15 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
     found = vercel_env()
     if found is None:
         return {"content": "Vercel usage is not read on this deployment."}, PRIVATE
-    h = hobby_usage(*found, utcnow(), actual=False)
+    try:
+        h = hobby_usage(*found, utcnow(), actual=False)
+    except requests.RequestException as error:
+        # The type and HTTP status only: the error text may carry the request and its token
+        status = getattr(error.response, "status_code", None)
+        log.warning(
+            "vercel usage not read on a press: %s %s", type(error).__name__, status
+        )
+        return {"content": "Vercel did not answer. Try again in a minute."}, PRIVATE
     if not isinstance(h, Hobby):
         return {
             "content": "Vercel refused the usage token. "
