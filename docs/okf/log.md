@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-18
+
+* **Update**: the [egress monitor](api/jobs.md#the-egress-monitor) compares the Vercel usage of the last 30 days with the Hobby limits: in the digest when the team's plan reads `hobby`, and otherwise through the digest's `vercel-hobby` button, whose first press takes the button off and posts the comparison as a reply to the digest.
+
 ## 2026-10-17
 
 * **Update**: `GET /events/{id}/organizer-candidates?q=` for a runner and `GET /organizers/candidates?q=` for an admin search the players with a Discord login by name or Discord tag, ten at most, past the accounts already running the event or holding a grant. [Roles and permissions](concepts/roles-and-permissions.md) and the [API overview](api/overview.md) state it.

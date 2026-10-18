@@ -26,6 +26,7 @@ from app.services import (
     discord,
     discord_posts,
     discord_roles,
+    egress_monitor,
     event_cards,
     player_series,
     series_cards,
@@ -334,6 +335,7 @@ COMPONENTS = {
     "availability": availability.press,
     event_cards.SIGN_UP: event_cards.press,
     event_cards.CHECK_IN: event_cards.press,
+    egress_monitor.HOBBY_BUTTON: egress_monitor.press,
 }
 # The autocomplete finders that are not the series list, keyed by command name
 CHOICES: dict[str, Callable[[dict[str, Any], Services], list[dict[str, Any]]]] = {
