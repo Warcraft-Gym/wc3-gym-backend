@@ -99,6 +99,7 @@ from app.models.season import (
     MemberAction,
     MemberCupTeam,
     MemberEventRow,
+    OrganizedEventPublic,
     Season,
     checkin_fields,
     series_counts,
@@ -208,9 +209,9 @@ def phase_of(
 
     The rungs run from the last one back: an unpublished event is a draft, an
     event an admin closed or whose last stage is played out or whose end has
-    passed is finished, one with a series started is running, then the signup
-    window and the check-in window of the next dated round. Seeded is the
-    resting rung.
+    passed is finished, one with a series started, or a drawn cup whose start
+    has come, is running, then the signup window and the check-in window of
+    the next dated round. Seeded is the resting rung.
 
     Finished takes the last stage: a scored stage with an empty stage after it
     is still running. An event that played nothing is finished once its end
@@ -239,7 +240,9 @@ def phase_of(
         end = event.end_date or (None if total else _start(event))
         if (total and total == scored and drawn) or (end and end < _today()):
             return "finished"
-    if started:
+    # A cup series carries no time, so it starts only once it is scored; a drawn
+    # cup is running from its start all the same
+    if started or (event.kind is EventKind.cup and total and _start_has_come(event)):
         return "running"
     if event.signups_open:
         return "signups_open"
@@ -256,8 +259,9 @@ def phase_of(
 
 
 def _signups_open(event: Season, phase: EventPhase) -> bool:
-    """The stored flag, shut once the event reads finished."""
-    return event.signups_open and phase != "finished"
+    """The stored flag, shut while the event is a draft and once it reads
+    finished: a published event takes sign-ups, a draft takes none."""
+    return event.signups_open and phase not in ("draft", "finished")
 
 
 # The stage columns the chain test reads; a later select loads the rest, a session.get each missing column
@@ -357,6 +361,45 @@ def _today() -> date:
     return utcnow().date()
 
 
+def _signup_counts(
+    session: OrmSession, event_ids: Sequence[int]
+) -> dict[int, tuple[int, int, int]]:
+    """For each event, the players in, the ones of them checked in, and the
+    ones on the waitlist, in one grouped statement. A player counts once
+    however many races they entered, as the event read counts them; a
+    withdrawn row counts nowhere."""
+    if not event_ids:
+        return {}
+    player = func.coalesce(
+        col(EventEntrant.user_id),
+        col(EventEntrant.team_id),
+        -col(EventEntrant.cup_team_id),
+    )
+    present = col(EventEntrant.withdrawn_at).is_(None)
+    live = and_(present, col(EventEntrant.waitlisted_at).is_(None))
+    checked_in = and_(live, col(EventEntrant.checked_in_at).is_not(None))
+    waiting = and_(present, col(EventEntrant.waitlisted_at).is_not(None))
+    rows = session.execute(
+        select(
+            col(EventEntrant.event_id),
+            func.count(distinct(case((live, player)))),
+            func.count(distinct(case((checked_in, player)))),
+            func.count(distinct(case((waiting, player)))),
+        )
+        .where(col(EventEntrant.event_id).in_(event_ids))
+        .group_by(col(EventEntrant.event_id))
+    )
+    return {event_id: (inn, checked, wait) for event_id, inn, checked, wait in rows}
+
+
+def _start_has_come(event: Season) -> bool:
+    """Whether the event's start is now or past: its start time, else its day."""
+    if event.starts_at is not None:
+        return event.starts_at <= utcnow()
+    start = _start(event)
+    return start is not None and start <= _today()
+
+
 class EventService:
     def get_all(
         self,
@@ -414,6 +457,28 @@ class EventService:
                 .order_by(*NEWEST_FIRST)
             ).all()
             return _publics(session, rows)
+
+    def organized(self, event_ids: Sequence[int]) -> list[OrganizedEventPublic]:
+        """Those events as `by_ids` reads them, each with how many players are
+        in, checked in and waiting, counted for all of them in one statement."""
+        events = self.by_ids(event_ids)
+        if not events:
+            return []
+        with Session.begin() as session:
+            counts = _signup_counts(session, [event.id for event in events])
+        return [
+            OrganizedEventPublic.model_validate(
+                event.model_dump()
+                | dict(
+                    zip(
+                        ("entrant_count", "checked_in_count", "waitlist_count"),
+                        counts.get(event.id, (0, 0, 0)),
+                        strict=True,
+                    )
+                )
+            )
+            for event in events
+        ]
 
     def search(
         self,
@@ -2135,10 +2200,12 @@ def _publics(
     session: OrmSession, rows: Sequence[Row[tuple[Season, bool]]]
 ) -> list[EventPublic]:
     """A page of event payloads, each with the archived flag read beside it,
-    and one grouped series count behind their phases."""
+    one grouped series count behind their phases, and one grouped read of how
+    each cup plays, so a list names a cup's mode."""
     ids = [event.id for event, _ in rows]
     counts = series_counts_by_event(session, ids)
     drawn = last_stage_drawn(session, ids)
+    formats = _cup_formats(session, [event for event, _ in rows])
     publics: list[EventPublic] = []
     for event, archived in rows:
         public = _public(
@@ -2148,6 +2215,8 @@ def _publics(
             last_stage=drawn.get(event.id, True),
         )
         public.archived = archived
+        if ident(event) in formats:
+            public.ffa, public.custom_game = formats[ident(event)]
         publics.append(public)
     return publics
 
@@ -2195,6 +2264,7 @@ def _public(
     public.uses_divisions = cup_divisions.uses_divisions(session, event)
     public.custom_game = cup_divisions.custom_game(session, event)
     if cup_divisions.is_cup(event):
+        public.ffa = _cup_formats(session, [event])[ident(event)][0]
         public.cup_legs = cup_rounds.legs_of(session, ident(event)) or None
         public.cup_recurrence = cup_recurrence.ref_of(session, ident(event))
     public.stages = [

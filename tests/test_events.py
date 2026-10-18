@@ -141,6 +141,31 @@ def test_the_rounds_seed_the_event_and_the_series_run_it(
     assert phase(client, event) == "running"
 
 
+def test_a_drawn_cup_runs_from_its_start(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A cup series carries no time and starts only once it is scored, so a
+    drawn cup reads running from its start time, before any result."""
+    from tests.test_cup_divisions import field_of, make_cup, stage_of
+    from tests.test_stage_engine import generate
+
+    # midnight of today: the start has come, and the day has not passed
+    started = datetime.combine(TODAY, datetime.min.time(), UTC)
+    drawn = make_cup(client, auth_headers, name="Evening Cup")
+    set_fields(drawn["id"], starts_at=NOW + timedelta(days=2))
+    field_of(drawn["id"], (1900, 1800, 1700, 1600))
+    generate(client, auth_headers, drawn["id"], stage_of(drawn))
+    assert phase(client, drawn["id"]) != "running"
+
+    set_fields(drawn["id"], starts_at=started)
+    assert phase(client, drawn["id"]) == "running"
+
+    # a cup not drawn yet waits at its start, still taking signups
+    waiting = make_cup(client, auth_headers, name="Late Cup")
+    set_fields(waiting["id"], starts_at=started)
+    assert phase(client, waiting["id"]) == "signups_open"
+
+
 def test_an_event_finishes_on_the_last_result_or_the_end_date(
     client: Client, seeded: dict[str, Any]
 ) -> None:

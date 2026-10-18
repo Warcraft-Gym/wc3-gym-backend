@@ -4,9 +4,13 @@
 
 * **Update**: `event.bnet_required` is a rule of its own, beside the rating check: on, a signup or a hand-add needs an active battle tag verified through Battle.net, a player already in stays and their row warns `not_verified`, and the refusal points at "Verify with Battle.net". A cup that takes members only refuses a hand-added player with no Discord login, by user id or by battle tag, and its sign-up rules answer 409 once it is drawn. The [events module](concepts/events-module.md#entrants-seeds-divisions) and [event](data/tables/event.md) state it.
 * **Update**: the [egress monitor](api/jobs.md#the-egress-monitor) compares the Vercel usage of the last 30 days with the Hobby limits: in the digest when the team's plan reads `hobby`, and otherwise through the digest's `vercel-hobby` button, whose first press takes the button off and posts the comparison as a reply to the digest.
+* **Update**: a drawn cup reads `running` from its start, before its first result. The [events module](concepts/events-module.md) states it.
+* **Update**: `GET /me/organized-events` carries `entrant_count`, `checked_in_count` and `waitlist_count` on each event. [Roles and permissions](concepts/roles-and-permissions.md) states it.
 
 ## 2026-10-17
 
+* **Update**: `GET /events`, `POST /events/search` and `GET /events/{id}` carry `ffa` and `custom_game` on a cup, read for a page in one grouped statement, so a list names how a cup plays. The [events module](concepts/events-module.md) states it.
+* **Update**: a draft takes no signups: an unpublished event answers `signups_open` false on every read and refuses a signup, and publishing it opens them. The [events module](concepts/events-module.md) and [event](data/tables/event.md) state it.
 * **Update**: `GET /events/{id}/organizer-candidates?q=` for a runner and `GET /organizers/candidates?q=` for an admin search the players with a Discord login by name or Discord tag, ten at most, past the accounts already running the event or holding a grant. [Roles and permissions](concepts/roles-and-permissions.md) and the [API overview](api/overview.md) state it.
 
 ## 2026-10-16

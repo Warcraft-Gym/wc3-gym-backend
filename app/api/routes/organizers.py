@@ -26,7 +26,7 @@ from app.models.organizer import (
     OrganizerRequestCreate,
     OrganizerRequestPublic,
 )
-from app.models.season import EventPublic
+from app.models.season import OrganizedEventPublic
 from app.services import organizers
 
 router = APIRouter(tags=["organizers"])
@@ -97,12 +97,14 @@ def decline_organizer(discord_id: str) -> None:
 @router.get("/me/organized-events", tags=["events"])
 def get_my_organized_events(
     claims: RequireLogin, service: EventServiceDep
-) -> list[EventPublic]:
-    """The events the caller runs, newest first, drafts included. A guest, the
-    admin token and an admin viewing as a lower role run none of them."""
+) -> list[OrganizedEventPublic]:
+    """The events the caller runs, newest first, drafts included, each with
+    how many players are in, checked in and waiting (`entrant_count`,
+    `checked_in_count`, `waitlist_count`). A guest, the admin token and an
+    admin viewing as a lower role run none of them."""
     if claims.get("role") == "guest" or "actual_role" in claims:
         return []
-    return service.by_ids(organizers.organized_event_ids(str(claims["sub"])))
+    return service.organized(organizers.organized_event_ids(str(claims["sub"])))
 
 
 @router.get("/events/{event_id}/organizers", tags=["events"])
