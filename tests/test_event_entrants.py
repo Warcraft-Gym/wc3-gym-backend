@@ -443,16 +443,6 @@ def eligible_cup(**fields: Any) -> int:  # noqa: ANN401
     return add_event(kind=EventKind.cup, eligibility_required=True, **fields)
 
 
-def link_battle_net(user_id: int) -> None:
-    """The player's active battle tag, verified through Battle.net."""
-    from app.services.battle_tags import active_row
-
-    with Session.begin() as session:
-        row = active_row(session, user_id)
-        assert row is not None
-        row.bnet_account_id = f"acc-{user_id}"
-
-
 def rate(user_id: int, mmr: int, games: int = 40, race: Race = Race.HU) -> None:
     with Session.begin() as session:
         session.add(
@@ -473,7 +463,7 @@ def no_refresh(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str]]:
     return asked
 
 
-def test_an_eligible_cup_takes_a_linked_player_rated_inside_its_bounds(
+def test_an_eligible_cup_takes_a_player_rated_inside_its_bounds(
     client: Client,
     seeded: dict[str, Any],
     member: Member,
@@ -482,7 +472,6 @@ def test_an_eligible_cup_takes_a_linked_player_rated_inside_its_bounds(
     asked = no_refresh(monkeypatch)
     event = eligible_cup(mmr_min=1400, mmr_max=1800, min_games=20)
     player = seeded["player_ids"][0]
-    link_battle_net(player)
     rate(player, 1600)
 
     created = sign_up(client, event, member("1"))
@@ -518,28 +507,94 @@ def test_an_eligible_cup_refuses_each_rule_it_names(
     assert "10 games on Human" in games.json()["error"]
 
 
-def test_the_battle_net_link_is_asked_for_only_where_the_event_turns_it_on(
+def link_battle_net(user_id: int) -> None:
+    """The player's active battle tag, verified through Battle.net."""
+    from app.services.battle_tags import active_row
+
+    with Session.begin() as session:
+        row = active_row(session, user_id)
+        assert row is not None
+        row.bnet_account_id = f"acc-{user_id}"
+
+
+def test_a_cup_that_takes_verified_players_refuses_an_unverified_tag(
     client: Client,
     seeded: dict[str, Any],
     member: Member,
-    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
 ) -> None:
-    """A rated player with no Battle.net link enters a checked cup, and is
-    refused by one that also asks for the link."""
-    no_refresh(monkeypatch)
-    player = seeded["player_ids"][0]
-    headers = member("1")
-    rate(player, 1600)
+    """Verification is its own rule: it holds with the rating check off, by
+    self signup and by hand, and a verified tag enters."""
+    first, second = seeded["player_ids"][:2]
+    event = add_event(kind=EventKind.cup, bnet_required=True)
 
-    taken = sign_up(client, eligible_cup(name="Rated only"), headers)
-    assert taken.status_code == 201, taken.text
+    refused = sign_up(client, event, member("1"))
+    by_hand = client.post(
+        f"/events/{event}/entrants/admin",
+        json={"user_id": second, "race": "HU"},
+        headers=auth_headers,
+    )
 
-    linked_cup = eligible_cup(name="Linked only", bnet_required=True)
-    refused = sign_up(client, linked_cup, headers)
     assert refused.status_code == 400
-    assert "linked to Battle.net" in refused.json()["error"]
+    assert "verified with Battle.net" in refused.json()["error"]
+    assert by_hand.status_code == 400
+    link_battle_net(first)
+    assert sign_up(client, event, member("1")).status_code == 201
+
+
+def test_turning_verification_on_marks_the_players_already_in(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Member,
+    auth_headers: dict[str, str],
+) -> None:
+    """A tightened rule removes nobody: the row carries not_verified until the
+    player verifies."""
+    player = seeded["player_ids"][0]
+    event = add_event(kind=EventKind.cup)
+    assert sign_up(client, event, member("1")).status_code == 201
+
+    switched = client.put(
+        f"/events/{event}", json={"bnet_required": True}, headers=auth_headers
+    )
+
+    assert switched.status_code == 200, switched.text
+    rows = client.get(f"/events/{event}/entrants", headers=auth_headers).json()
+    assert [row["warnings"] for row in rows] == [["not_verified"]]
     link_battle_net(player)
-    assert sign_up(client, linked_cup, headers).status_code == 201
+    rows = client.get(f"/events/{event}/entrants", headers=auth_headers).json()
+    assert [row["warnings"] for row in rows] == [[]]
+
+
+def test_a_members_cup_takes_no_hand_added_player_without_a_discord_login(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A new battle tag would make a person who cannot check in or report, so
+    the cup refuses it and writes no player."""
+    from sqlmodel import select
+
+    from app.models.user import User
+
+    event = add_event(kind=EventKind.cup)
+
+    refused = client.post(
+        f"/events/{event}/entrants/admin",
+        json={"battle_tag": "Nobody#1234", "race": "HU"},
+        headers=auth_headers,
+    )
+    taken = client.post(
+        f"/events/{event}/entrants/admin",
+        json={"user_id": seeded["player_ids"][0], "race": "HU"},
+        headers=auth_headers,
+    )
+
+    assert refused.status_code == 400
+    assert "no Discord login" in refused.json()["error"]
+    assert taken.status_code == 201, taken.text
+    with Session() as session:
+        assert (
+            session.scalars(select(User).where(User.name == "Nobody")).first() is None
+        )
 
 
 def test_a_hand_added_player_is_held_to_the_same_rules(
@@ -551,7 +606,6 @@ def test_a_hand_added_player_is_held_to_the_same_rules(
     no_refresh(monkeypatch)
     event = eligible_cup(mmr_min=1400)
     player = seeded["player_ids"][0]
-    link_battle_net(player)
     rate(player, 1300)
 
     refused = client.post(
@@ -586,22 +640,19 @@ def test_the_bounds_must_hold_together(
     body = {"name": "Bounds Cup", "kind": "cup", "stages": []}
     anyone = client.post(
         "/events",
-        json=body
-        | {
-            "eligibility_required": True,
-            "bnet_required": True,
-            "signup_policy": "anyone",
-        },
+        json=body | {"bnet_required": True, "signup_policy": "anyone"},
         headers=auth_headers,
     )
     assert anyone.status_code == 400
-    assert "members only" in anyone.json()["error"]
-    # the Battle.net link is a part of the check, so it needs the check on
+    assert "Gym members only" in anyone.json()["error"]
+    # verification is its own rule, so it needs no rating check
     alone = client.post(
-        "/events", json=body | {"bnet_required": True}, headers=auth_headers
+        "/events",
+        json=body | {"name": "Verified Cup", "bnet_required": True},
+        headers=auth_headers,
     )
-    assert alone.status_code == 400
-    # without the link, a battle tag is enough for the rating, so anyone may sign up
+    assert alone.status_code == 201, alone.text
+    # a battle tag is enough for the rating, so anyone may sign up
     rated = client.post(
         "/events",
         json=body
@@ -617,24 +668,6 @@ def test_the_bounds_must_hold_together(
         "/events", json=body | {"mmr_min": 1800, "mmr_max": 1400}, headers=auth_headers
     )
     assert upside.status_code == 400
-    made = client.post(
-        "/events",
-        json=body
-        | {
-            "eligibility_required": True,
-            "bnet_required": True,
-            "mmr_min": 1400,
-            "mmr_max": 1800,
-        },
-        headers=auth_headers,
-    )
-    assert made.status_code == 201, made.text
-    switched = client.put(
-        f"/events/{made.json()['id']}",
-        json={"signup_policy": "anyone"},
-        headers=auth_headers,
-    )
-    assert switched.status_code == 400
 
 
 def test_a_cup_rates_a_player_on_the_races_they_have_really_played(

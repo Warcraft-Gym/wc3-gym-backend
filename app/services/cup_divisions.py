@@ -92,8 +92,8 @@ def hold_divisions_on(session: OrmSession, event: Season) -> None:
         raise BadRequestError(NO_DIVISIONS)
 
 
-def hold_undrawn(session: OrmSession, event_id: int) -> None:
-    """Refuse a division change once any stage of the cup holds its series."""
+def hold_undrawn(session: OrmSession, event_id: int, error: str = DRAWN) -> None:
+    """Refuse a change once any stage of the cup holds its series."""
     drawn = session.scalar(
         select(col(CupSeries.id))
         .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
@@ -101,7 +101,7 @@ def hold_undrawn(session: OrmSession, event_id: int) -> None:
         .limit(1)
     )
     if drawn is not None:
-        raise ApiError(409, {"error": DRAWN})
+        raise ApiError(409, {"error": error})
 
 
 def clear_divisions(session: OrmSession, event_id: int) -> None:

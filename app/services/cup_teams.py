@@ -344,7 +344,11 @@ def _hold_free(session: OrmSession, event: Season, players: list[User]) -> None:
 
 
 def _hold(session: OrmSession, event: Season, player: User) -> None:
-    """Hold one player to the cup's eligibility, on their own."""
+    """Hold one player to the cup's rules, on their own: a Discord login on a
+    cup that takes members, a verified main tag where it asks, the rating."""
+    event_service._hold_member(event, player)
+    if event.bnet_required:
+        event_service._hold_verified(session, ident(player))
     if event.eligibility_required:
         event_service._hold_eligible(session, event, ident(player), player.race)
 

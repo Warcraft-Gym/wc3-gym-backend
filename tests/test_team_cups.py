@@ -198,6 +198,23 @@ def test_every_player_is_held_to_the_cups_eligibility(
     assert "rated 1500" in refused.text
 
 
+def test_every_player_of_a_team_needs_a_verified_tag_where_the_cup_asks(
+    client: Client, member: Member
+) -> None:
+    from tests.test_event_entrants import link_battle_net
+
+    event = cup(name="Verified Cup", bnet_required=True)
+    captain, mate = players(2)
+    link_battle_net(captain)
+
+    refused = sign_up(client, event, headers_of(member, captain), "Blue", mate)
+    assert refused.status_code == 400
+    assert "verified with Battle.net" in refused.text
+    link_battle_net(mate)
+    taken = sign_up(client, event, headers_of(member, captain), "Blue", mate)
+    assert taken.status_code == 201, taken.text
+
+
 def test_a_team_cup_draws_complete_teams_and_any_member_reports(
     client: Client,
     member: Member,
