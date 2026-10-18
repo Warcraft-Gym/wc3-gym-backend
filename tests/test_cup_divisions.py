@@ -144,6 +144,35 @@ def test_a_drawn_cup_keeps_its_divisions(client: Client, auth_headers: Headers) 
         assert refused.status_code == 409, refused.text
 
 
+def test_a_drawn_cup_keeps_its_sign_up_rules(
+    client: Client, auth_headers: Headers
+) -> None:
+    cup = make_cup(client, auth_headers)
+    field_of(cup["id"], (2000, 1900, 1500, 1400))
+    unchanged = client.put(
+        f"/events/{cup['id']}", json={"mmr_max": 2400}, headers=auth_headers
+    )
+    assert unchanged.status_code == 200, unchanged.text
+    drawn = client.post(
+        f"/events/{cup['id']}/stages/{stage_of(cup)}/generate", headers=auth_headers
+    )
+    assert drawn.status_code == 200, drawn.text
+
+    refused = client.put(
+        f"/events/{cup['id']}", json={"bnet_required": True}, headers=auth_headers
+    )
+    # a body that names a rule at its stored value changes nothing, so it passes
+    same = client.put(
+        f"/events/{cup['id']}",
+        json={"mmr_max": 2400, "name": "Renamed"},
+        headers=auth_headers,
+    )
+
+    assert refused.status_code == 409, refused.text
+    assert "sign-up rules are set" in refused.json()["error"]
+    assert same.status_code == 200, same.text
+
+
 def test_a_seed_write_may_reseed_one_division_alone(
     client: Client, auth_headers: Headers
 ) -> None:

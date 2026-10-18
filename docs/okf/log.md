@@ -2,6 +2,8 @@
 
 ## 2026-10-18
 
+* **Update**: `event.bnet_required` is a rule of its own, beside the rating check: on, a signup or a hand-add needs an active battle tag verified through Battle.net, a player already in stays and their row warns `not_verified`, and the refusal points at "Verify with Battle.net". A cup that takes members only refuses a hand-added player with no Discord login, by user id or by battle tag, and its sign-up rules answer 409 once it is drawn. The [events module](concepts/events-module.md#entrants-seeds-divisions) and [event](data/tables/event.md) state it.
+* **Update**: the [egress monitor](api/jobs.md#the-egress-monitor) compares the Vercel usage of the last 30 days with the Hobby limits: in the digest when the team's plan reads `hobby`, and otherwise through the digest's `vercel-hobby` button, whose first press takes the button off and posts the comparison as a reply to the digest.
 * **Update**: a drawn cup reads `running` from its start, before its first result. The [events module](concepts/events-module.md) states it.
 * **Update**: `GET /me/organized-events` carries `entrant_count`, `checked_in_count` and `waitlist_count` on each event. [Roles and permissions](concepts/roles-and-permissions.md) states it.
 
