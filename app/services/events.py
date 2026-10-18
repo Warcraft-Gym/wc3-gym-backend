@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import col
 
+from app.core.battle_tags import has_login
 from app.core.checkin_hint import (
     availability_hints,
     checkin_refusal,
@@ -2953,15 +2954,21 @@ def _named_user(session: OrmSession, event: Season, data: EntrantAdd) -> User:
         user = _by_battle_tag(session, data.battle_tag, _signup_race(data))
     else:
         raise BadRequestError("Name a user_id, a battle_tag or a team_id")
+    _hold_member(event, user)
+    return user
+
+
+def _hold_member(event: Season, user: User) -> None:
+    """Refuse a player with no Discord login on a cup that takes members only;
+    a team cup holds each of its players to it too."""
     if (
         cup_divisions.is_cup(event)
         and event.signup_policy is SignupPolicy.members
-        and not (user.discordId or "").strip()
+        and not has_login(user.discordId)
     ):
         raise BadRequestError(
             f"{user.name} has no Discord login, and this cup takes Gym members only."
         )
-    return user
 
 
 SIGNUP_RULES = {

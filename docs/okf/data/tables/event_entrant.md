@@ -4,7 +4,7 @@ title: event_entrant
 description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
 resource: ../../../../app/models/event_entrant.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T21:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-18T00:31:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -54,7 +54,7 @@ Pointed at by [series](series.md) (`entrant1_id`, `entrant2_id`), [series_side](
 
 # Rules
 
-- The MMR and the warnings on the payload derive from [w3cstats](w3cstats.md) on every read. Eligibility warns and never refuses; only `entrant_cap` refuses. See [events module](../../concepts/events-module.md).
+- The MMR and the warnings on the payload derive on every read from [w3cstats](w3cstats.md), the ban and, for `not_verified`, the player's main battle tag. A warning never removes a row; the event's own switches decide what refuses a signup. See [events module](../../concepts/events-module.md#entrants-seeds-divisions).
 - A drafted GNL team is a [user_team_season](user_team_season.md) row, not an entrant.
 
 Archival participants are scoped to an event and a source section. Exact labels share an entrant only inside that section. Normal signups still require a race and a known account or full tag.
