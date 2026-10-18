@@ -13,7 +13,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
 from sqlalchemy import text
@@ -26,8 +26,12 @@ from app.models.egress_snapshot import EgressSnapshotResult
 from app.models.monitor_state import MonitorState
 from app.models.types import utcnow
 from app.services import egress
+from app.services.commands.base import PRIVATE
 from app.services.egress import Day, day_of
 from app.services.egress_snapshot import unavailable
+
+if TYPE_CHECKING:
+    from app.services.interactions import Services
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +59,13 @@ VERCEL_NAMES = {
     "Build CPU Minutes": "Build CPU",
     "Fast Data Transfer": "Data transfer",
     "Fast Origin Transfer": "Origin transfer",
+    "Function Invocations": "Invocations",
+    "Image Optimization Transformation": "Image transforms",
+    "Image Optimization Cache Reads": "Image reads",
+    "Image Optimization Cache Writes": "Image writes",
+    "Blob Simple Operations": "Blob simple ops",
+    "Blob Advanced Operations": "Blob advanced ops",
+    "Blob Data Transfer": "Blob transfer",
 }
 # Vercel's units as the digest writes them, with their decimals; any other unit is a count
 VERCEL_UNITS = {
@@ -63,6 +74,29 @@ VERCEL_UNITS = {
     "gigabyte": ("GB", 2),
     "gigabyte-hour": ("GB-h", 1),
 }
+# Hobby's included use per 30 days, in each service's charge unit (vercel.com/pricing, 2026-10-18)
+# ponytail: the meters the team uses; add Global Config, Workflow and Queues when it uses them
+HOBBY = {
+    "Fluid Active CPU": 4,
+    "Fluid Provisioned Memory": 360,
+    "Function Invocations": 1_000_000,
+    "CDN Requests": 1_000_000,
+    "Fast Data Transfer": 100,
+    "Fast Origin Transfer": 10,
+    "ISR Reads": 1_000_000,
+    "ISR Writes": 200_000,
+    "Image Optimization Transformation": 5_000,
+    "Image Optimization Cache Reads": 300_000,
+    "Image Optimization Cache Writes": 100_000,
+    "Blob Simple Operations": 10_000,
+    "Blob Advanced Operations": 2_000,
+    "Blob Data Transfer": 10,
+}
+HOBBY_DAYS = 30  # Hobby has no billing cycle: each limit counts the last 30 days
+PACE_DAYS = 7  # the complete billing days whose daily mean, times 30, is a meter's pace
+# The custom_id of the digest's button, which routes the press
+HOBBY_BUTTON = "vercel-hobby"
+HOBBY_LABEL = "Compare with Hobby limits"
 
 RED, AMBER, GREEN, BLUE = 0xD63232, 0xF1C40F, 0x36A64F, 0x4F95D8
 SILENT = 1 << 12  # SUPPRESS_NOTIFICATIONS: the post shows without a notification
@@ -74,6 +108,7 @@ EGRESS_FIELD = "Supabase · egress"
 DB_FIELD = "Supabase · database size (prod)"
 ROUTES_FIELD = "Supabase · busiest routes (prod)"
 VERCEL_FIELD = "Vercel · usage this billing period"
+HOBBY_FIELD = "Vercel · last 30 days against the Hobby limits"
 ROUTE_FIELDS = (ROUTES_FIELD, "Top routes")
 JOBS_DOC = (
     "https://github.com/Warcraft-Gym/wc3-gym-backend/blob/main/docs/okf/api/jobs.md"
@@ -646,7 +681,118 @@ def vercel_lines(v: Vercel) -> str:
     return "\n".join(lines)
 
 
-def vercel_status(v: Vercel) -> str:
+@dataclass(frozen=True)
+class Meter:
+    """One Hobby meter over the last 30 days: its use, its pace and the project that uses most."""
+
+    name: str
+    unit: str
+    limit: float
+    used: float  # the sum over the last 30 days
+    pace: float  # the last complete billing days' daily mean, times 30
+    top: str
+    share: float  # the top project's share of `used`
+
+    @property
+    def label(self) -> str:
+        return VERCEL_NAMES.get(self.name, self.name)
+
+    @property
+    def over(self) -> bool:
+        """Past the limit or on pace for it: on Hobby the feature then pauses."""
+        return self.used >= self.limit or self.pace > self.limit
+
+
+@dataclass(frozen=True)
+class Hobby:
+    """The team's use over the last 30 days against the Hobby limits: the real read on
+    Hobby, and on Pro the answer to the digest's button."""
+
+    now: datetime
+    actual: bool  # the team is on Hobby
+    days: int  # the billing days in the window with any use
+    latest: datetime | None  # the end of the last billing day with use
+    meters: list[Meter]  # nearest its limit first
+
+    @property
+    def level(self) -> Level:
+        """Amber with any meter past its limit or on pace for it; never red, as on Pro."""
+        return Level.AMBER if any(m.over for m in self.meters) else Level.NORMAL
+
+
+def short(q: float) -> str:
+    """Three significant figures, with k or M from a thousand: 9.65, 726k, 1.39M."""
+    for scale, suffix in ((1e6, "M"), (1e3, "k")):
+        if q >= scale * 0.9995:
+            return f"{q / scale:.3g}{suffix}"
+    return f"{q:.3g}"
+
+
+def hobby_lines(h: Hobby) -> str:
+    """Each used meter against its limit, then the project that uses most of each one over."""
+    if not h.meters or h.latest is None:
+        return f"Vercel returned no use for the last {HOBBY_DAYS} days."
+    rows = [("", "Hobby", "Used", "Pace")]
+    for m in h.meters:
+        unit = VERCEL_UNITS.get(m.unit, ("", 0))[0]
+        limit = f"{short(m.limit)} {unit}".rstrip()
+        rows.append(
+            (m.label, limit, f"{m.used / m.limit:,.0%}", f"{m.pace / m.limit:,.0%}")
+        )
+    lines = [
+        (
+            f"Used is the last {HOBBY_DAYS} days, {h.days} of them with data up to"
+            f" {stamp(h.latest, 'd')}; pace is the last {PACE_DAYS} days × {HOBBY_DAYS}."
+            " Both are shares of the Hobby limit."
+        ),
+        table(rows),
+    ]
+    over = [m for m in h.meters if m.over]
+    if over:
+        top = ", ".join(f"{m.top} {m.share:.0%} of {m.label}" for m in over)
+        lines.append(f"Top project: {top}.")
+    return "\n".join(lines)
+
+
+def hobby_summary(h: Hobby) -> str:
+    over, total = sum(m.over for m in h.meters), len(h.meters)
+    if not total:
+        return f"Vercel returned no use for the last {HOBBY_DAYS} days."
+    if h.actual:
+        if not over:
+            return "Every Vercel meter is inside its Hobby limit."
+        return f"{over} of {total} Vercel meters are past their Hobby limit or on pace for it."
+    if not over:
+        return "If the team were on Hobby, every meter would stay inside its limit."
+    return (
+        f"If the team were on Hobby, {over} of {total} meters would be"
+        " past their limit or on pace for it."
+    )
+
+
+def hobby_reply(h: Hobby, links: dict[str, str]) -> dict[str, Any]:
+    """The private answer to the digest's button."""
+    return message(
+        h.now,
+        AMBER if h.level == Level.AMBER else GREEN,
+        "Vercel usage compared with Hobby limits",
+        hobby_summary(h),
+        [field("Meters", hobby_lines(h), inline=False)],
+        links=links,
+        footer=MONITOR_FOOTER,
+    )
+
+
+def vercel_section(v: Vercel | Hobby) -> dict[str, Any]:
+    """The digest's Vercel field: the credit on Pro, the Hobby limits on Hobby."""
+    if isinstance(v, Hobby):
+        return field(HOBBY_FIELD, hobby_lines(v), inline=False)
+    return field(VERCEL_FIELD, vercel_lines(v), inline=False)
+
+
+def vercel_status(v: Vercel | Hobby) -> str:
+    if isinstance(v, Hobby):
+        return hobby_summary(v)
     if v.billed_usd >= 0.01:
         return f"Vercel usage is past the {usd(VERCEL_CREDIT_USD, False)} credit and billing on demand."
     return (
@@ -675,16 +821,21 @@ def vercel_rejected_alert(
 
 
 def vercel_recovery(
-    v: Vercel, was: str, since: datetime, now: datetime
+    v: Vercel | Hobby, was: str, since: datetime, now: datetime
 ) -> dict[str, Any]:
     """The silent all-clear after the usage was red or could not be read."""
+    summary = (
+        hobby_summary(v)
+        if isinstance(v, Hobby)
+        else f"Usage this billing period is {usd(v.used_usd)} of the {usd(VERCEL_CREDIT_USD, False)} credit."
+    )
     return message(
         now,
         GREEN,
         f"Vercel usage: {'read again' if was == Level.UNAVAILABLE else 'all clear'}",
-        f"Usage this billing period is {usd(v.used_usd)} of the {usd(VERCEL_CREDIT_USD, False)} credit.",
+        summary,
         [
-            field(VERCEL_FIELD, vercel_lines(v), inline=False),
+            vercel_section(v),
             field(
                 f"{'Red' if was == Level.RED else 'Unavailable'} for",
                 f"{duration(now - since)}, since {stamp(since)}",
@@ -708,11 +859,12 @@ def digest(
     links: dict[str, str] | None = None,
     db_mb: float | None = None,
     db_error: str | None = None,
-    vercel: Vercel | None = None,
+    vercel: Vercel | Hobby | None = None,
     vercel_error: str | None = None,
 ) -> dict[str, Any]:
     """The silent daily post with every meter; before the first complete day, the baseline
-    note. A red check turns it red, an amber one yellow, and the description names each."""
+    note. A red check turns it red, an amber one yellow, and the description names each.
+    On Pro it carries the button that compares the usage with the Hobby limits."""
     db, usage, red, amber, note = [], [], [], [], []
     if db_mb is not None:
         db.append(field(DB_FIELD, db_line(db_mb), inline=False))
@@ -721,7 +873,7 @@ def digest(
     elif db_error is not None:
         db.append(field(DB_FIELD, f"not read ({db_error})", inline=False))
     if vercel is not None:
-        usage.append(field(VERCEL_FIELD, vercel_lines(vercel), inline=False))
+        usage.append(vercel_section(vercel))
         if vercel.level == Level.AMBER:
             amber.append(vercel_status(vercel))
     elif vercel_error is not None:
@@ -742,7 +894,7 @@ def digest(
         title = f"Daily infrastructure digest · {day_label(m.last.day)}"
     colour = RED if red else AMBER if amber else BLUE
     status = " ".join([*red, *amber, *note]) or STATUS[Level.NORMAL][1]
-    return message(
+    out = message(
         m.now,
         colour,
         title,
@@ -752,6 +904,16 @@ def digest(
         links=links,
         footer=MONITOR_FOOTER,
     )
+    if isinstance(vercel, Vercel):
+        # Discord drops the button from a plain channel webhook; one the bot created keeps it
+        button = {
+            "type": 2,
+            "style": 2,
+            "label": HOBBY_LABEL,
+            "custom_id": HOBBY_BUTTON,
+        }
+        out["components"] = [{"type": 1, "components": [button]}]
+    return out
 
 
 # The run
@@ -808,34 +970,55 @@ def database_mb() -> float | None:
     return None
 
 
-def vercel_usage(now: datetime) -> Vercel | Level | None:
-    """The team's usage this billing period from the Vercel API: its charges and its CDN
-    cache hits; UNAVAILABLE when the token is rejected; None when VERCEL_USAGE_TOKEN or
-    VERCEL_TEAM_ID is unset. Any other failure raises to the run, which shows it in the digest."""
+def vercel_env() -> tuple[str, str] | None:
+    """VERCEL_USAGE_TOKEN and VERCEL_TEAM_ID; None when either is unset."""
     token = os.getenv("VERCEL_USAGE_TOKEN", "").strip()
     team = os.getenv("VERCEL_TEAM_ID", "").strip()
-    if not token or not team:
+    return (token, team) if token and team else None
+
+
+def vercel_get(
+    token: str, team: str, path: str, **params: str
+) -> requests.Response | None:
+    """One GET on the Vercel API for the team; None when the token is rejected."""
+    response = requests.get(
+        f"{VERCEL_API}{path}",
+        params={"teamId": team, **params},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=20,
+    )
+    if response.status_code in (401, 403):
+        log.warning("vercel usage not read: token rejected %s", response.status_code)
         return None
+    response.raise_for_status()
+    return response
+
+
+def charge_rows(charges: requests.Response) -> list[dict[str, Any]]:
+    """One JSON line per service, project, region and billing day."""
+    return [json.loads(line) for line in charges.text.splitlines() if line.strip()]
+
+
+def vercel_usage(now: datetime) -> Vercel | Hobby | Level | None:
+    """The team's usage from the Vercel API: on Pro, this billing period's charges and CDN
+    cache hits; on Hobby, the last 30 days against its limits. UNAVAILABLE when the token is
+    rejected; None when VERCEL_USAGE_TOKEN or VERCEL_TEAM_ID is unset. Any other failure
+    raises to the run, which shows it in the digest."""
+    found = vercel_env()
+    if found is None:
+        return None
+    token, team = found
 
     def get(path: str, **params: str) -> requests.Response | None:
-        response = requests.get(
-            f"{VERCEL_API}{path}",
-            params={"teamId": team, **params},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=20,
-        )
-        if response.status_code in (401, 403):
-            log.warning(
-                "vercel usage not read: token rejected %s", response.status_code
-            )
-            return None
-        response.raise_for_status()
-        return response
+        return vercel_get(token, team, path, **params)
 
-    found = get(f"/v2/teams/{team}")
-    if found is None:
+    answer = get(f"/v2/teams/{team}")
+    if answer is None:
         return Level.UNAVAILABLE
-    period = found.json()["billing"]["period"]
+    billing = answer.json()["billing"]
+    if billing.get("plan") == "hobby":
+        return hobby_usage(token, team, now, actual=True)
+    period = billing["period"]
     start, end = (
         datetime.fromtimestamp(period[k] / 1000, UTC) for k in ("start", "end")
     )
@@ -845,9 +1028,7 @@ def vercel_usage(now: datetime) -> Vercel | Level | None:
     cdn = get("/v2/usage", type="requests", **window)
     if charges is None or cdn is None:
         return Level.UNAVAILABLE
-    # One JSON line per service, project, region and day
-    rows = [json.loads(line) for line in charges.text.splitlines() if line.strip()]
-    usage = [r for r in rows if r["ServiceCategory"] != VERCEL_FEES]
+    usage = [r for r in charge_rows(charges) if r["ServiceCategory"] != VERCEL_FEES]
     totals: dict[str, list[Any]] = {}
     by_day: dict[datetime, float] = {}
     for r in usage:
@@ -878,6 +1059,74 @@ def vercel_usage(now: datetime) -> Vercel | Level | None:
         services=services,
         hits=hit / (hit + miss) if hit + miss else None,
     )
+
+
+def hobby_usage(token: str, team: str, now: datetime, actual: bool) -> Hobby | Level:
+    """The team's use over the last 30 days against the Hobby limits, from its charges;
+    UNAVAILABLE when the token is rejected."""
+    window = {
+        "from": iso_ms(now - timedelta(days=HOBBY_DAYS)),
+        "to": iso_ms(now - timedelta(minutes=1)),
+    }
+    charges = vercel_get(token, team, "/v1/billing/charges", **window)
+    if charges is None:
+        return Level.UNAVAILABLE
+    rows = [
+        r
+        for r in charge_rows(charges)
+        if r["ServiceName"] in HOBBY and r["ConsumedQuantity"]
+    ]
+    # ISO times in one format sort as times
+    ends = sorted({r["ChargePeriodEnd"] for r in rows})
+    recent = set([e for e in ends if datetime.fromisoformat(e) <= now][-PACE_DAYS:])
+    used: dict[str, float] = {}
+    paced: dict[str, float] = {}
+    units: dict[str, str] = {}
+    projects: dict[str, dict[str, float]] = {}
+    for r in rows:
+        name, quantity = r["ServiceName"], r["ConsumedQuantity"]
+        used[name] = used.get(name, 0) + quantity
+        if r["ChargePeriodEnd"] in recent:
+            paced[name] = paced.get(name, 0) + quantity
+        units[name] = r["ConsumedUnit"] or ""
+        project = (r.get("Tags") or {}).get("ProjectName") or "other"
+        by_project = projects.setdefault(name, {})
+        by_project[project] = by_project.get(project, 0) + quantity
+    meters = []
+    for name, total in used.items():
+        top, most = max(projects[name].items(), key=lambda p: p[1])
+        meters.append(
+            Meter(
+                name=name,
+                unit=units[name],
+                limit=HOBBY[name],
+                used=total,
+                pace=paced.get(name, 0) / max(len(recent), 1) * HOBBY_DAYS,
+                top=top.removeprefix("wc3-gym-").removeprefix("wc3-gnl-"),
+                share=most / total,
+            )
+        )
+    # A meter that rounds to 0% of its limit is noise in the table
+    meters = [m for m in meters if max(m.used, m.pace) / m.limit >= 0.005]
+    meters.sort(key=lambda m: -max(m.used, m.pace) / m.limit)
+    latest = datetime.fromisoformat(ends[-1]) if ends else None
+    return Hobby(now, actual, len(ends), latest, meters)
+
+
+def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], bool]:
+    """A press on the digest's button: the usage right now against the Hobby limits, answered
+    privately so the channel gets no second post."""
+    found = vercel_env()
+    if found is None:
+        return {"content": "Vercel usage is not read on this deployment."}, PRIVATE
+    h = hobby_usage(*found, utcnow(), actual=False)
+    if not isinstance(h, Hobby):
+        return {
+            "content": "Vercel refused the usage token. "
+            "Set `VERCEL_USAGE_TOKEN` to a new token scoped to the team."
+        }, PRIVATE
+    links = {k: v for k, v in dashboards().items() if k == "Vercel usage"}
+    return hobby_reply(h, links), PRIVATE
 
 
 def iso_ms(at: datetime) -> str:
@@ -924,7 +1173,7 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
         name = type(error).__name__
         usage, vercel_error = None, f"{name} {status}" if status else name
         log.warning("vercel usage not read: %s", vercel_error)
-    vercel = usage if isinstance(usage, Vercel) else None
+    vercel = usage if isinstance(usage, Vercel | Hobby) else None
     start = min(
         cycle(now).start.date(), (now - timedelta(days=AVERAGE_DAYS + 1)).date()
     )
@@ -994,7 +1243,7 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
                     VERCEL_KEY,
                     v.level,
                     now,
-                    dict,  # never called: Vercel is never red, past the credit usage bills on demand
+                    dict,  # never called: Vercel is never red; Pro bills on demand, Hobby shows amber
                     lambda s: vercel_recovery(v, s.level, s.since, now),
                 )
             )

@@ -13,9 +13,11 @@ from sqlalchemy.exc import DBAPIError
 from app.core.db import Session
 from app.models.egress_ledger import EgressLedger
 from app.models.monitor_state import MonitorState
-from app.services import egress, egress_monitor, egress_snapshot
+from app.services import egress, egress_monitor, egress_snapshot, interactions
 from app.services.egress import Day
 from app.services.egress_monitor import Level
+from tests.discord import APP_ID, WEBHOOK, signed
+from tests.discord import TOKEN as DISCORD_TOKEN
 
 SECRET = "monitor-secret"
 FAKE_ID = "123456789012345678"
@@ -931,6 +933,201 @@ def test_the_digest_shows_the_credit_used_this_billing_period(
     assert current is not None and current.level == "normal"
 
 
+def hobby_charge(
+    service: str, quantity: float, unit: str, day: int, project: str
+) -> dict[str, Any]:
+    """One charges line for the billing day that ends at 07:00 on `day` September."""
+    end = f"2026-09-{day:02}T07:00:00.000Z"
+    return {
+        **charge(service, 0, quantity, unit, day_end=end),
+        "Tags": {"ProjectName": project},
+    }
+
+
+# Eight complete billing days, 21-28 Sep, and the day still open at NOW
+HOBBY_CHARGES = [
+    charge("Pro", 0.67, 1, category="Subscription Licenses"),
+    charge("Build CPU Minutes", 0.09, 40, "minute"),
+    charge("Image Optimization Cache Reads", 0, 0, "Reads"),
+    hobby_charge("ISR Writes", 6_000, "Writes", 29, "wc3-gnl-website"),
+    *(
+        line
+        for day in range(21, 29)
+        for line in (
+            hobby_charge("ISR Writes", 10_000, "Writes", day, "wc3-gnl-website"),
+            hobby_charge("Fluid Active CPU", 0.06, "hour", day, "wc3-gym-backend"),
+            hobby_charge("Fluid Active CPU", 0.04, "hour", day, "wc3-gnl-website"),
+            hobby_charge("CDN Requests", 1_000, "Requests", day, "wc3-gnl-website"),
+        )
+    ),
+]
+# Pace: the last seven complete days' mean times 30; ISR Writes alone is past its limit
+HOBBY_TABLE = (
+    "```\n"
+    "              Hobby  Used  Pace\n"
+    "ISR Writes     200k   43%  150%\n"
+    "Active CPU      4 h   20%   75%\n"
+    "CDN Requests     1M    1%    3%\n"
+    "```"
+)
+
+
+def hobby_lines(latest: str = "<t:1790665200:d>") -> str:
+    return (
+        f"Used is the last 30 days, 9 of them with data up to {latest}; pace is the last"
+        " 7 days × 30. Both are shares of the Hobby limit.\n"
+        f"{HOBBY_TABLE}\n"
+        "Top project: website 100% of ISR Writes."
+    )
+
+
+def press(client: Client) -> None:
+    """Press the digest's button through the interactions route; the reply edits the
+    private one the adapter deferred."""
+    body, headers = signed(
+        {
+            "type": interactions.COMPONENT,
+            "application_id": APP_ID,
+            "token": DISCORD_TOKEN,
+            "channel_id": "chan-1",
+            "member": {"user": {"id": "1", "username": "p1"}},
+            "data": {"custom_id": "vercel-hobby", "component_type": 2},
+        }
+    )
+    resp = client.post("/discord/interactions", content=body, headers=headers)
+    assert resp.json() == {"ok": True}
+
+
+def test_the_button_answers_privately_with_the_usage_against_hobby(
+    client: Client,
+    public_key: None,
+    discord_calls: list[tuple[str, str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    monkeypatch.setattr(egress_monitor, "utcnow", lambda: NOW)
+    monkeypatch.setenv("DEV_ALERTS_VERCEL_USAGE_URL", "https://vercel.test/usage")
+    monkeypatch.setenv("DEV_ALERTS_SUPABASE_USAGE_URL", "https://supabase.test/usage")
+    answer(monkeypatch, vercel, charges=HOBBY_CHARGES)
+    press(client)
+    [(method, url, reply)] = discord_calls
+    assert (method, url) == ("PATCH", f"{WEBHOOK}/messages/@original")
+    embed = reply["embeds"][0]
+    assert embed["title"] == "Vercel usage compared with Hobby limits"
+    assert embed["color"] == egress_monitor.AMBER
+    assert embed["description"] == (
+        "If the team were on Hobby, 1 of 3 meters would be past their limit or on pace for it."
+    )
+    assert embed["fields"] == [
+        {"name": "Meters", "value": hobby_lines(), "inline": False},
+        {
+            "name": "Dashboards",
+            "value": "[Vercel usage](https://vercel.test/usage)",
+            "inline": False,
+        },
+    ]
+    assert reply["allowed_mentions"] == {"parse": []}
+    # The last 30 days up to a minute before the press; no team or CDN read
+    [charges] = vercel
+    assert charges["url"] == "https://api.vercel.com/v1/billing/charges"
+    assert charges["params"] == {
+        "teamId": "team_test",
+        "from": "2026-08-30T00:30:00.000Z",
+        "to": "2026-09-29T00:29:00.000Z",
+    }
+    assert sent == []
+
+
+def test_the_button_says_why_when_usage_cannot_be_read(
+    client: Client,
+    public_key: None,
+    discord_calls: list[tuple[str, str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    answer(monkeypatch, vercel, status=403, failing="/v1/billing/charges")
+    press(client)
+    monkeypatch.delenv("VERCEL_USAGE_TOKEN")
+    press(client)
+    assert [reply for _, _, reply in discord_calls] == [
+        {
+            "content": "Vercel refused the usage token. "
+            "Set `VERCEL_USAGE_TOKEN` to a new token scoped to the team."
+        },
+        {"content": "Vercel usage is not read on this deployment."},
+    ]
+
+
+def test_the_pro_digest_carries_the_button(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    answer(monkeypatch, vercel)
+    run(monkeypatch, daily(20))
+    assert sent[0]["components"] == [
+        {
+            "type": 1,
+            "components": [
+                {
+                    "type": 2,
+                    "style": 2,
+                    "label": "Compare with Hobby limits",
+                    "custom_id": "vercel-hobby",
+                }
+            ],
+        }
+    ]
+
+
+def test_on_hobby_the_digest_shows_the_limits_and_no_button(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    answer(
+        monkeypatch, vercel, team={"billing": {"plan": "hobby"}}, charges=HOBBY_CHARGES
+    )
+    run(monkeypatch, daily(20))
+    payload = sent[0]
+    embed = payload["embeds"][0]
+    assert "components" not in payload
+    assert embed["color"] == egress_monitor.AMBER
+    assert embed["description"] == (
+        "1 of 3 Vercel meters are past their Hobby limit or on pace for it."
+    )
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert egress_monitor.VERCEL_FIELD not in fields
+    assert fields[egress_monitor.HOBBY_FIELD] == hobby_lines()
+    # Hobby has no billing period: the team, then the last 30 days of charges
+    assert [c["url"].rsplit("/", 1)[-1] for c in vercel] == ["team_test", "charges"]
+    current = state(egress_monitor.VERCEL_KEY)
+    assert current is not None and current.level == "amber"
+
+
+def test_on_hobby_with_no_charges_the_digest_says_so(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    answer(monkeypatch, vercel, team={"billing": {"plan": "hobby"}}, charges=[])
+    run(monkeypatch, daily(20))
+    fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
+    assert fields[egress_monitor.HOBBY_FIELD] == (
+        "Vercel returned no use for the last 30 days."
+    )
+    assert sent[0]["embeds"][0]["color"] == egress_monitor.BLUE
+
+
+def test_short_keeps_three_figures() -> None:
+    assert [
+        egress_monitor.short(q)
+        for q in (0, 0.8, 9.648, 723, 999.6, 4_812, 726_011, 999_600, 1_392_552)
+    ] == ["0", "0.8", "9.65", "723", "1k", "4.81k", "726k", "1M", "1.39M"]
+
+
 def test_isr_writes_are_listed_even_when_they_cost_least() -> None:
     services = [
         egress_monitor.Service(f"S{i}", 1, "Requests", 1.0 - i / 10) for i in range(5)
@@ -963,6 +1160,7 @@ def test_without_both_variables_vercel_is_skipped(
     run(monkeypatch, daily(20))
     assert vercel == []
     assert vercel_field(sent[0]) is None
+    assert "components" not in sent[0]
     assert state(egress_monitor.VERCEL_KEY) is None
 
 
@@ -1115,7 +1313,7 @@ def test_a_timeout_shows_not_read_and_logs_no_token(
 @pytest.mark.parametrize(
     ("body", "error"),
     [
-        ({"team": {"billing": None}}, "TypeError"),
+        ({"team": {"billing": None}}, "AttributeError"),
         ({"charges": ["{not json"]}, "JSONDecodeError"),
         (
             {"charges": [{**charge("CDN Requests", 0), "EffectiveCost": "many"}]},
