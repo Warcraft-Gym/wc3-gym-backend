@@ -2,7 +2,7 @@
 
 ## 2026-10-18
 
-* **Update**: an event with `eligibility_required` on takes a battle tag whether or not it is verified through Battle.net, by self signup and by hand; `event.bnet_required` is read by nothing, and an event with it on may take `anyone`. The [events module](concepts/events-module.md#entrants-seeds-divisions) and [event](data/tables/event.md) state it.
+* **Update**: `event.bnet_required` is a rule of its own, beside the rating check: on, a signup or a hand-add needs an active battle tag verified through Battle.net, a player already in stays and their row warns `not_verified`, and the refusal points at "Verify with Battle.net". A cup that takes members only refuses a hand-added player with no Discord login, by user id or by battle tag, and its sign-up rules answer 409 once it is drawn. The [events module](concepts/events-module.md#entrants-seeds-divisions) and [event](data/tables/event.md) state it.
 
 ## 2026-10-17
 

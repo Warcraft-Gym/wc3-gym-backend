@@ -570,6 +570,12 @@ class EventService:
                     raise BadRequestError(
                         "Remove the event's teams before changing its league"
                     )
+            # a cup's sign-up rules lock at its draw: the field they let in is set
+            if cup_divisions.is_cup(event) and any(
+                fields[key] != getattr(event, key)
+                for key in SIGNUP_RULES & fields.keys()
+            ):
+                cup_divisions.hold_undrawn(session, event_id, RULES_DRAWN)
             event.sqlmodel_update(checkin_fields(fields))
             _hold_bounds(event.model_dump())
             _hold_window(event)
@@ -866,7 +872,10 @@ class EventService:
                 row = _enter(session, event, data, team_id=data.team_id)
             else:
                 row = _enter(
-                    session, event, data, user_id=ident(_named_user(session, data))
+                    session,
+                    event,
+                    data,
+                    user_id=ident(_named_user(session, event, data)),
                 )
             entrant_id = ident(row)
             public = _entrant_publics(session, event, [row])[0]
@@ -1097,7 +1106,7 @@ class EventService:
             session.delete(old)
             session.flush()
             new = _enter(
-                session, event, data, user_id=ident(_named_user(session, data))
+                session, event, data, user_id=ident(_named_user(session, event, data))
             )
             new.seed = seed
             new.division_id = division_id
@@ -2391,6 +2400,9 @@ def _warnings(
         warnings.append("under_mmr_min")
     if user is not None and user.banned_at is not None:
         warnings.append("banned")
+    # a player already in when the event turned verification on stays, marked
+    if event.bnet_required and user is not None and not _verified(user):
+        warnings.append("not_verified")
     return warnings
 
 
@@ -2927,17 +2939,44 @@ def _signup_user(
     return user
 
 
-def _named_user(session: OrmSession, data: EntrantAdd) -> User:
-    """The player an admin names: a user id, or a battle tag to find or create."""
+def _named_user(session: OrmSession, event: Season, data: EntrantAdd) -> User:
+    """The player a runner names: a user id, or a battle tag to find or create.
+
+    A cup that takes members only takes a player with a Discord login alone,
+    so a hand-add never enters a person who cannot check in or report.
+    """
     if data.user_id is not None:
         user = session.get(User, data.user_id)
         if user is None:
             raise NotFoundError(f"User not found by id: {data.user_id}")
-        return user
-    if data.battle_tag:
-        return _by_battle_tag(session, data.battle_tag, _signup_race(data))
-    raise BadRequestError("Name a user_id, a battle_tag or a team_id")
+    elif data.battle_tag:
+        user = _by_battle_tag(session, data.battle_tag, _signup_race(data))
+    else:
+        raise BadRequestError("Name a user_id, a battle_tag or a team_id")
+    if (
+        cup_divisions.is_cup(event)
+        and event.signup_policy is SignupPolicy.members
+        and not (user.discordId or "").strip()
+    ):
+        raise BadRequestError(
+            f"{user.name} has no Discord login, and this cup takes Gym members only."
+        )
+    return user
 
+
+SIGNUP_RULES = {
+    "signup_policy",
+    "eligibility_required",
+    "bnet_required",
+    "mmr_min",
+    "mmr_max",
+    "min_games",
+    "min_games_seasons",
+    "race_games_min",
+}
+RULES_DRAWN = (
+    "The cup is drawn, so its sign-up rules are set; undo the draw to change them"
+)
 
 RACE_NAMES = {
     "HU": "Human",
@@ -2949,8 +2988,19 @@ RACE_NAMES = {
 
 
 def _hold_bounds(fields: dict[str, Any]) -> None:
-    """Refuse bounds that cannot hold together: the lowest MMR is no higher
-    than the highest."""
+    """Refuse bounds that cannot hold together.
+
+    A battle tag alone proves no Battle.net account, so an event that takes
+    verified players only takes members only. The lowest MMR is no higher than
+    the highest.
+    """
+    if fields.get("bnet_required") and fields.get("signup_policy") in (
+        SignupPolicy.anyone,
+        SignupPolicy.anyone.value,
+    ):
+        raise BadRequestError(
+            "An event that takes players verified with Battle.net takes Gym members only: a battle tag alone proves no Battle.net account"
+        )
     low, high = fields.get("mmr_min"), fields.get("mmr_max")
     if low is not None and high is not None and low > high:
         raise BadRequestError("The lowest MMR cannot be above the highest")
@@ -2992,6 +3042,23 @@ def _refresh_for(
         refresh_rating(*target, history)
 
 
+def _hold_verified(session: OrmSession, user_id: int) -> None:
+    """Refuse a player whose active battle tag Battle.net has not verified, on
+    an event that takes verified players only; a self signup and a hand-add alike."""
+    tag = active_row(session, user_id)
+    if tag is None or tag.bnet_account_id is None:
+        user = session.get(User, user_id)
+        name = user.name if user is not None else "This player"
+        raise BadRequestError(
+            f'{name} has no battle tag verified with Battle.net, and this event takes verified players only. They verify it on their profile with "Verify with Battle.net".'
+        )
+
+
+def _verified(user: User) -> bool:
+    """Whether Battle.net verified the player's active tag; the tags are loaded."""
+    return any(row.is_active and row.bnet_account_id for row in user.battle_tags)
+
+
 def _hold_eligible(
     session: OrmSession, event: Season, user_id: int, race: Race
 ) -> None:
@@ -2999,8 +3066,8 @@ def _hold_eligible(
 
     W3Champions rates the player's active battle tag on the race of the signup,
     the rating sits inside the event's bounds, and the games on that race reach
-    the event's minimum. A tag not verified through Battle.net counts the same.
-    The rule holds for a hand-added player as for a self signup.
+    the event's minimum. The rule holds for a hand-added player as for a self
+    signup.
     """
     season = w3c_season(session)
     user = session.scalars(
@@ -3100,6 +3167,8 @@ def _enter(
         if team_id is not None
         else col(EventEntrant.cup_team_id) == cup_team_id
     )
+    if event.bnet_required and user_id is not None:
+        _hold_verified(session, user_id)
     if event.eligibility_required and user_id is not None and race is not None:
         _hold_eligible(session, event, user_id, race)
     statement = select(EventEntrant).where(col(EventEntrant.event_id) == event.id, side)
