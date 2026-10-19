@@ -22,7 +22,7 @@ api env="prod":
     (*)       echo "env must be prod, staging or local" >&2; exit 2 ;;
     esac
 
-# What each route's database connections received over the last days, measured, most first.
+# What each route's database connections received and its CPU over the last days, most bytes first.
 routes env="prod" days="1":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -34,15 +34,28 @@ routes env="prod" days="1":
     rows = json.loads(os.environ["BODY"])
     for r in rows:
         r.setdefault("db_bytes", 0)
+        r.setdefault("cpu_ms", 0)
+        r["cpu_s"] = f"{r['cpu_ms'] / 1000:.1f}"
         r["db_mb"] = f"{r['db_bytes'] / 1e6:.1f}" if r["db_bytes"] or not r["statements"] else "-"
         r["response_mb"] = f"{r['bytes'] / 1e6:.1f}"
     rows.sort(key=lambda r: (r["day"], -r["db_bytes"]))
-    columns = ("day", "method", "calls", "statements", "rows", "db_mb", "response_mb", "route")
+    columns = ("day", "method", "calls", "statements", "rows", "db_mb", "response_mb", "cpu_s", "route")
     table = [columns] + [tuple(str(r[c]) for c in columns) for r in rows]
     widths = [max(len(row[i]) for row in table) for i in range(len(columns) - 1)]
     for row in table:
         print("  ".join(cell.rjust(w) for cell, w in zip(row, widths)), row[-1])
     print("\ndb_mb: bytes the database connections received (the egress); response_mb: the JSON sent")
+    print("cpu_s: process CPU; the (startup) row holds each process's CPU before its first ledger write\n")
+    days: dict[str, list[int]] = {}
+    for r in rows:
+        total = days.setdefault(r["day"], [0, 0, 0])
+        if r["route"] == "(startup)":
+            total[0] += r["calls"]
+            total[1] += r["cpu_ms"]
+        else:
+            total[2] += r["cpu_ms"]
+    for day, (starts, startup, routed) in sorted(days.items()):
+        print(f"{day}: cold starts {starts}, startup CPU {startup / 1000:.1f} s, routed CPU {routed / 1000:.1f} s")
     PY
 
 # Each day's measured egress over the last days, oldest first.

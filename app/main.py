@@ -12,7 +12,7 @@ import.
 
 import logging
 import os
-from time import perf_counter
+from time import perf_counter, process_time
 
 from anyio import to_thread
 from fastapi import FastAPI, Request
@@ -40,6 +40,24 @@ logger = logging.getLogger(__name__)
 
 # The ledger's own read route stays out of the ledger
 UNRECORDED_ROUTES = {"/jobs/egress"}
+# The ledger row, under method "-", that holds the CPU a process spent before its first write
+STARTUP_ROUTE = "(startup)"
+
+# Process CPU in whole ms that the ledger holds; None before the process's first write
+_cpu_in_ledger: int | None = None
+
+
+def take_cpu() -> tuple[int | None, int]:
+    """The process CPU the ledger does not hold yet, in whole ms: (startup, spent).
+
+    The first call of a process returns all its CPU so far as startup and 0 spent;
+    every later call returns no startup and the CPU since the call before. Requests
+    that overlap, or that the ledger skips, shift CPU between routes; a day's sum is exact.
+    """
+    global _cpu_in_ledger
+    now = int(process_time() * 1000)
+    before, _cpu_in_ledger = _cpu_in_ledger, now
+    return (now, 0) if before is None else (None, now - before)
 
 
 class VercelHeadersMiddleware:
@@ -62,7 +80,8 @@ class EgressMiddleware:
     The counts go out in three response headers and one log line, and into
     the daily egress ledger. A 404 or a 405 is logged but not recorded, so a
     scanner cannot grow the ledger with made-up paths or methods. The headers carry the
-    counts at the start of the response; a streamed body is not buffered.
+    counts at the start of the response; a streamed body is not buffered. The ledger
+    row also takes the process CPU spent since the ledger's last write.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -110,15 +129,28 @@ class EgressMiddleware:
                 and answer["status"] not in (404, 405)
                 and template not in UNRECORDED_ROUTES
             ):
+                # Taken here on the event loop, so two requests never take the same CPU
+                startup, cpu_ms = take_cpu()
                 await to_thread.run_sync(
-                    record_egress, template, scope["method"], spent, answer["bytes"]
+                    record_egress,
+                    template,
+                    scope["method"],
+                    spent,
+                    answer["bytes"],
+                    cpu_ms,
+                    startup,
                 )
 
 
-def record_egress(route: str, method: str, cost: Cost, size: int) -> None:
-    """Add the request to the ledger; a failed write is logged, never raised."""
+def record_egress(
+    route: str, method: str, cost: Cost, size: int, cpu_ms: int, startup: int | None
+) -> None:
+    """Add the request, and on a process's first write its startup, to the ledger;
+    a failed write is logged, never raised."""
     try:
-        egress.record(route, method, cost, size)
+        if startup is not None:
+            egress.record(STARTUP_ROUTE, "-", Cost(), 0, startup)
+        egress.record(route, method, cost, size, cpu_ms)
     except Exception:
         logger.warning(
             "egress ledger write failed for %s %s", method, route, exc_info=True
