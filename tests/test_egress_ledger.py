@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
+from app import main
 from app.core.db import (
     Cost,
     _cost,
@@ -58,6 +59,42 @@ def test_the_ledger_counts_every_call(
     # The read route itself is never recorded
     again = client.get("/jobs/egress", headers=scheduler).json()
     assert {row["route"] for row in again} == {"/events/{event_id}/series", "/users"}
+
+
+def test_the_ledger_records_the_cpu_of_each_route_and_of_the_start(
+    client: Client,
+    seeded: dict[str, Any],
+    scheduler: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A process that has written nothing to the ledger yet
+    monkeypatch.setattr(main, "_cpu_in_ledger", None)
+    for _ in range(2):
+        client.get(f"/events/{seeded['season_id']}/series")
+    client.get("/users")
+
+    rows = client.get("/jobs/egress", headers=scheduler).json()
+    starts = [row for row in rows if row["route"] == main.STARTUP_ROUTE]
+    assert len(starts) == 1
+    start = starts[0]
+    assert (start["method"], start["calls"], start["statements"]) == ("-", 1, 0)
+    assert start["cpu_ms"] > 0
+    routes = {row["route"]: row for row in rows}
+    assert routes["/events/{event_id}/series"]["cpu_ms"] > 0
+    assert routes["/users"]["cpu_ms"] > 0
+
+
+def test_the_ledger_adds_the_cpu_of_each_call(
+    app: object, scheduler: dict[str, str], client: Client
+) -> None:
+    egress.record("/x", "GET", Cost(), 0, cpu_ms=7)
+    egress.record("/x", "GET", Cost(), 0, cpu_ms=5)
+    row = next(
+        r
+        for r in client.get("/jobs/egress", headers=scheduler).json()
+        if r["route"] == "/x"
+    )
+    assert (row["calls"], row["cpu_ms"]) == (2, 12)
 
 
 def test_the_ledger_is_behind_the_scheduler_secret(

@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-19
+
+* **Update**: [egress_ledger](data/tables/egress_ledger.md) gains `cpu_ms`, the process CPU each route's calls spent, and a `(startup)` row per day with the processes started and the CPU each spent before its first ledger write; `just monitor routes` prints both.
+
 ## 2026-10-18
 
 * **Update**: `event.bnet_required` is a rule of its own, beside the rating check: on, a signup or a hand-add needs an active battle tag verified through Battle.net, a player already in stays and their row warns `not_verified`, and the refusal points at "Verify with Battle.net". A cup that takes members only refuses a hand-added player with no Discord login, by user id or by battle tag, and its sign-up rules answer 409 once it is drawn. The [events module](concepts/events-module.md#entrants-seeds-divisions) and [event](data/tables/event.md) state it.

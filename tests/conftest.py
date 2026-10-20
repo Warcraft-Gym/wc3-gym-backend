@@ -38,7 +38,7 @@ os.environ.pop("SCORE_SYSTEM", None)
 # A bot token would send the role sync to Discord, and the guard below fails that
 os.environ.pop("DISCORD_BOT_TOKEN", None)
 
-from app.main import create_app
+from app.main import create_app, take_cpu
 from app.services import blob, r2, replays
 from app.services.w3c import W3CService
 from tests.discord import PUBLIC_KEY, Clock, record
@@ -74,7 +74,10 @@ def db_url(tmp_path_factory: pytest.TempPathFactory) -> str:
 
 @pytest.fixture(scope="session")
 def app(db_url: str) -> FastAPI:
-    return create_app(db_url=db_url)
+    app = create_app(db_url=db_url)
+    # The suite's own start is no test's: only a test that resets the CPU tally sees a (startup) row
+    take_cpu()
+    return app
 
 
 @pytest.fixture

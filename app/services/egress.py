@@ -12,8 +12,11 @@ from app.core.db import Cost, Session
 from app.models.egress_ledger import EgressLedger
 from app.models.types import utcnow
 
+# The columns an upsert adds to the day's row
+COUNTS = ("calls", "statements", "rows", "db_bytes", "bytes", "cpu_ms")
 
-def record(route: str, method: str, cost: Cost, size: int) -> None:
+
+def record(route: str, method: str, cost: Cost, size: int, cpu_ms: int = 0) -> None:
     """Add one call of this route to today's row, in one upsert statement."""
     values = {
         "day": utcnow().date(),
@@ -24,6 +27,7 @@ def record(route: str, method: str, cost: Cost, size: int) -> None:
         "rows": cost.rows,
         "db_bytes": cost.db_bytes,
         "bytes": size,
+        "cpu_ms": cpu_ms,
     }
     with Session.begin() as session:
         dialect = session.get_bind().dialect.name
@@ -34,7 +38,7 @@ def record(route: str, method: str, cost: Cost, size: int) -> None:
                 index_elements=["day", "route", "method"],
                 set_={
                     name: col(getattr(EgressLedger, name)) + statement.excluded[name]
-                    for name in ("calls", "statements", "rows", "db_bytes", "bytes")
+                    for name in COUNTS
                 },
             )
         )
