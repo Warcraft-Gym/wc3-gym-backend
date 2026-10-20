@@ -25,7 +25,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from vercel.headers import set_headers
 
-from app.api.main import api_router
+from app.api.main import routers
 from app.core.db import Cost, init_engine, start_request_cost
 from app.core.exceptions import (
     ApiError,
@@ -244,7 +244,8 @@ def create_app(db_url: str | None = None) -> FastAPI:
         logger.error("Unhandled error", exc_info=exc)
         return JSONResponse({"error": "Internal Server Error"}, status_code=500)
 
-    app.include_router(api_router)
+    for router in routers:
+        app.include_router(router)
 
     logger.debug("Application built")
     return app

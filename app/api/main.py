@@ -1,5 +1,3 @@
-from fastapi import APIRouter
-
 from app.api.routes import (
     battlenet,
     config,
@@ -28,29 +26,32 @@ from app.api.routes import (
     users,
 )
 
-api_router = APIRouter()
-api_router.include_router(login.router)
-api_router.include_router(dev_login.router)
-api_router.include_router(users.router)
-api_router.include_router(battlenet.router)
-api_router.include_router(teams.router)
-api_router.include_router(matches.router)
-api_router.include_router(seasons.router)
-api_router.include_router(events.router)
-api_router.include_router(organizers.router)
-api_router.include_router(leagues.router)
-api_router.include_router(import_export.router)
-api_router.include_router(public.router)
-api_router.include_router(home.router)
-api_router.include_router(series.router)
-api_router.include_router(cup_series.router)
-api_router.include_router(draft_series.router)
-api_router.include_router(maps.router)
-api_router.include_router(fantasy.router)
-api_router.include_router(config.router)
-api_router.include_router(koth.router)
-api_router.include_router(koth_nights.router)
-api_router.include_router(stats.router)
-api_router.include_router(health.router)
-api_router.include_router(jobs.router)
-api_router.include_router(discord.router)
+# create_app includes each one; a cold request builds every router up to its match, so the busiest go first
+# Routers that share a path prefix (/events, /users) keep their relative order, which picks the match
+routers = (
+    users.router,
+    stats.router,
+    jobs.router,
+    series.router,
+    login.router,
+    dev_login.router,
+    battlenet.router,
+    teams.router,
+    matches.router,
+    seasons.router,
+    events.router,
+    organizers.router,
+    leagues.router,
+    import_export.router,
+    public.router,
+    home.router,
+    cup_series.router,
+    draft_series.router,
+    maps.router,
+    fantasy.router,
+    config.router,
+    koth.router,
+    koth_nights.router,
+    health.router,
+    discord.router,
+)
