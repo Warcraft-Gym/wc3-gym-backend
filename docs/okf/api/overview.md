@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-three route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-17T19:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-20T00:15:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -50,6 +50,8 @@ sources:
 | `health.py` | `/health` | liveness |
 
 Swagger UI is at `/docs` and the OpenAPI document at `/openapi.json`. FastAPI includes routers lazily, so enumerate routes from `app.openapi()["paths"]`, not from `app.routes`.
+
+`create_app` includes each router of `app/api/main.py` itself, in that list's order. The first request on a new instance builds the routes of every router up to the one that matches, so the routers of the busiest routes come first. Routers that share a path prefix, such as `/events` or `/users`, keep their relative order, because that order picks the matching route.
 
 The OpenAPI version is `1.1.0`. GNL creation and management live on the event routes; no `/seasons` route exists.
 
