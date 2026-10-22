@@ -4,7 +4,7 @@ title: Settings and the current season
 description: A key-value table holds the few runtime values an admin edits, including the two season pointers, and a missing row falls back to the newest season.
 resource: ../../../app/services/settings.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:40:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T11:00:00Z }
 sources:
   - id: settings
     resource: ../../../app/services/settings.py
@@ -27,10 +27,9 @@ sources:
 | `KOTH_NIGHTBOT_TOKEN` | the Twitch chat signup | the signup answers 401 |
 | `results_channel_id` | the result card | no card |
 | `content_channel_id` | the cast claim and reminder cards | no card |
-| `admin_role` | the old bot only; it grants nothing here | nothing |
 | `fantasy_team_creation_enabled` | a hand override of the fantasy creation lock | the phase rule alone |
 
-Before adding a key for the bot, read `GET /config/settings` and reuse a row with the same purpose; the old bot left rows such as `scheduling_channel_id` behind, and a staging row may name a live channel, so point a test write at a test channel first.
+Before adding a key for the bot, read `GET /config/settings` and reuse a row with the same purpose. A staging row may name a live channel, so point a test write at a test channel first.
 
 # What is not a setting
 
