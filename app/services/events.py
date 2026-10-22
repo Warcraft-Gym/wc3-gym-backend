@@ -663,9 +663,16 @@ class EventService:
             return _answer(session, ident(event))
 
     def delete(self, event_id: int) -> None:
-        """Delete an event and let its owned rows follow their foreign keys."""
+        """Delete an event and let its owned rows follow their foreign keys; a
+        cup also takes its announcement rows and a rule it was the last cup of."""
         with Session.begin() as session:
-            session.delete(_event(session, event_id))
+            event = _event(session, event_id)
+            if cup_divisions.is_cup(event):
+                from app.services import cup_announcements
+
+                cup_announcements.forget_cup(session, event_id)
+                cup_recurrence.forget_cup(session, event_id)
+            session.delete(event)
             session.flush()
 
     def set_stages(

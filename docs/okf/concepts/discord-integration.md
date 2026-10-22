@@ -63,7 +63,7 @@ A cup posts four messages in the channel the `announcement_channel_id` setting n
 - **Draw:** a stage's first draw and every later round of a stage that draws round by round, from the runner's draw, a result that draws the next round or stage, or a withdrawal. The engine marks each draw in the session, and the post goes out after the commit, so a refused draw posts nothing.
 - **Top three:** after `POST /events/{id}/finish`, per division, or from the overall table with its points for a cup played over rounds. A close after a reopen edits that card.
 
-Each message pings the role `announcement_role_id` names, in the message content with `allowed_mentions` naming that role alone; a missing channel posts nothing, and a missing role posts with no ping. Each is a `discord_post` row of its own kind and goes out once. A member takes or leaves the role on Home with `PUT /me/announcements`; see [the decision](../decisions/cup-announcements.md).
+Each message pings the role `announcement_role_id` names, in the message content with `allowed_mentions` naming that role alone; a missing channel posts nothing, and a missing role posts with no ping. Each is a `discord_post` row of its own kind and goes out once. A deleted cup drops those rows, and its messages stay in the channel. A member takes or leaves the role on Home with `PUT /me/announcements`; see [the decision](../decisions/cup-announcements.md).
 
 # The guild read and the roles
 

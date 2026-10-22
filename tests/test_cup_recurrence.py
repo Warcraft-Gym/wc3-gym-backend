@@ -5,7 +5,7 @@ occurrence. The rule names its days, every week or the nth weekday of the
 month, and a runner of the latest cup with a grant makes the next one on a
 day the rule names: a copy with its own name, its own start, its stages, its
 rounds moved by the same days and its organizers. Stopping the rule keeps
-every cup it made.
+every cup it made, and deleting its last cup deletes the rule.
 """
 
 from datetime import date
@@ -240,6 +240,30 @@ def test_stopping_the_rule_keeps_its_cups(
         read = client.get(f"/events/{event}")
         assert read.status_code == 200
         assert read.json()["cup_recurrence"] is None
+
+
+def test_deleting_a_cup_keeps_its_rule_until_the_last_cup_goes(
+    client: Client, auth_headers: Headers
+) -> None:
+    cup, made = repeat(client, auth_headers)
+    copy = occur(client, auth_headers, made["id"], "2030-01-11").json()
+    path = f"/cup-recurrences/{made['id']}"
+
+    assert (
+        client.delete(f"/events/{copy['id']}", headers=auth_headers).status_code == 204
+    )
+    page = client.get(path)
+    assert page.status_code == 200, page.text
+    assert page.json()["latest_event_id"] == cup["id"]
+    assert [row["event_id"] for row in page.json()["occurrences"]] == [cup["id"]]
+
+    assert (
+        client.delete(f"/events/{cup['id']}", headers=auth_headers).status_code == 204
+    )
+    assert client.get(path).status_code == 404
+    assert made["id"] not in [
+        row["id"] for row in client.get("/cup-recurrences").json()
+    ]
 
 
 def test_a_rule_changes_its_name_and_last_day(

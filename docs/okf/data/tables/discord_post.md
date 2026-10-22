@@ -4,7 +4,7 @@ title: discord_post
 description: One card the app posted in Discord and may edit later, with the two stamps that pace edits to the channel's rate limit.
 resource: ../../../../app/models/discord_post.py
 tags: [discord, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T09:45:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T07:56:14Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -13,6 +13,9 @@ sources:
   - id: posts
     resource: ../../../../app/services/discord_posts.py
     title: remember, refresh_series and wait_for_channel
+  - id: cup-announcements
+    resource: ../../../../app/services/cup_announcements.py
+    title: A cup's announcements, and the rows a deleted cup drops
 ---
 
 # Schema
@@ -33,4 +36,4 @@ Primary key `id`. No foreign keys. Unique constraint on `message_id`. Index on (
 
 # Rules
 
-An edit is claimed with one UPDATE, so a burst of writes collapses to the last state and no process holds a lock. A `result_change` row is never edited or deleted: it records one change, and the row keeps the channel's pacing. The event card's message id is also in [event](event.md) `discord_event_id`. See [Discord integration](../../concepts/discord-integration.md) and [the decision](../../decisions/discord-rate-limit.md).
+An edit is claimed with one UPDATE, so a burst of writes collapses to the last state and no process holds a lock. A `result_change` row is never edited or deleted: it records one change, and the row keeps the channel's pacing. The event card's message id is also in [event](event.md) `discord_event_id`. A deleted cup takes the rows about it, its stages, its rounds and its event card; the messages stay in the channel, and nothing edits them again. See [Discord integration](../../concepts/discord-integration.md) and [the decision](../../decisions/discord-rate-limit.md).

@@ -9,14 +9,15 @@ Each message is one discord_post row of its own kind about its subject, the
 cup, a round of a cup played over rounds, a stage or a round of a stage. The
 row is what makes it go out once: a job that runs every few minutes, a
 redraw, a second publish or a second close posts nothing twice. Only a cup
-announces; GNL seasons, KOTH nights and sign-up lists post nothing here.
+announces; GNL seasons, KOTH nights and sign-up lists post nothing here. A
+deleted cup drops its rows, and its messages stay in the channel.
 """
 
 import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import event, exists, func, select
+from sqlalchemy import and_, delete, event, exists, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import load_only
 from sqlmodel import col
@@ -35,13 +36,14 @@ from app.models.event_award import EventAward
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
+from app.models.relationships import DBEventRound
 from app.models.season import NO_SERIES, Season, series_counts_by_event
 from app.models.settings import Settings
 from app.models.types import utcnow
 from app.models.user import User
 from app.services import cup_engine, cup_rounds, discord, event_cards, series_cards
 from app.services.commands.base import md
-from app.services.discord_posts import remember, wait_for_channel
+from app.services.discord_posts import EVENT, remember, wait_for_channel
 from app.services.events import EventService
 
 logger = logging.getLogger(__name__)
@@ -407,6 +409,32 @@ def announce_result(event_id: int) -> bool:
         if row is not None:
             row.edited_at = utcnow()
     return True
+
+
+# ============ It is deleted ============
+def forget_cup(session: OrmSession, event_id: int) -> None:
+    """Drop the rows of every post about a cup that is deleted, its event card
+    too. The messages stay in the channel, and nothing edits them again."""
+
+    def about(kind: str, ids: Any) -> Any:  # noqa: ANN401
+        return and_(col(DiscordPost.kind) == kind, col(DiscordPost.subject_id).in_(ids))
+
+    stages = select(col(EventStage.id)).where(col(EventStage.event_id) == event_id)
+    rounds = select(col(DBEventRound.id)).where(col(DBEventRound.season_id) == event_id)
+    legs = select(col(CupLeg.id)).where(col(CupLeg.event_id) == event_id)
+    session.execute(
+        delete(DiscordPost).where(
+            or_(
+                and_(
+                    col(DiscordPost.kind).in_((OPEN, REMIND, RESULT, EVENT)),
+                    col(DiscordPost.subject_id) == event_id,
+                ),
+                about(DRAW, stages),
+                about(ROUND, rounds),
+                about(LEG_REMIND, legs),
+            )
+        )
+    )
 
 
 # ============ The Home switch ============
