@@ -144,7 +144,7 @@ FRONTEND_URL="http://localhost:5003"
 | `ADMIN_DISCORD_IDS` | Comma-separated Discord ids that administer the site with no grant row and cannot be revoked; the bootstrap for Config -> Access | `220202568490418179` |
 | `DISCORD_BOT_TOKEN` | Optional bot token; when set, the app mirrors the roles of `discord_role_binding` into the guild (admin bindings excepted: those roles are hand-managed) and Config -> Discord roles reports the difference. Unset, every sync is a no-op | `MTIz...` |
 | `DISCORD_PUBLIC_KEY` | The app's public key from the Discord Developer Portal; `POST /discord/interactions` checks Discord's signature with it and answers 503 while it is unset | 64-character hex string |
-| `DISCORD_APPLICATION_ID` | The Discord application id; `just discord-commands` registers the slash commands on the guild with it | `123456789012345678` |
+| `DISCORD_APPLICATION_ID` | The Discord application id; each production build (`api/discord_setup.py`) and `just discord-commands` register the slash commands on the guild with it | `123456789012345678` |
 | `BNET_CLIENT_ID` | The Blizzard OAuth client the Battle.net link authorizes with; unset, starting a link answers 503 | the client id from the Blizzard developer portal |
 | `BNET_CLIENT_SECRET` | That client's secret, sent when the link exchanges its code; unset, starting a link answers 503 | the client secret from the same portal |
 | `CRON_SECRET` | Bearer token the `/jobs` routes check, except `/jobs/cast-reminders`; Vercel Cron sends it by this exact name. Unset, those routes answer 503 | 64-character hex string |

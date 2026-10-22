@@ -4,7 +4,7 @@ title: Deploy to Vercel
 description: A merge to main builds staging and migrates the staging database in that build; a GitHub Release of a commit on main builds production and migrates it in the build; the Hobby plan sets the limits.
 resource: ../../../vercel.json
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-09T12:46:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T10:00:00Z }
 stale_after: 2027-04-06T00:00:00Z
 sources:
   - id: vercel-json
@@ -16,6 +16,9 @@ sources:
   - id: preview-db
     resource: ../../../api/preview_db.py
     title: The staging and branch databases
+  - id: discord-setup
+    resource: ../../../api/discord_setup.py
+    title: The production build's Discord step
   - id: vercel-just
     resource: ../../../just/vercel.just
     title: The Vercel recipes
@@ -33,7 +36,7 @@ sources:
 
 1. `uv run just release` publishes a GitHub Release of `main`, tagged `vYYYY.MM.DD.N`: the UTC date and that day's release count from 1, for example `v2026.10.09.1`. The notes list the pull requests since the last release.
 2. The `Deploy` workflow uploads the tagged commit, Vercel builds it as production, and the workflow waits until it serves. Release only a commit on `main`, tagged `vYYYY.MM.DD.N`; a pre-release ships nothing. The workflow reads `VERCEL_RELEASE_TOKEN`, a repository secret: set it to a token scoped to this Vercel project only.
-3. The production build runs `alembic upgrade head` against the production database before the new code is promoted. A failed migration stops the deploy, the previous build keeps serving, and the workflow fails.
+3. The production build runs `alembic upgrade head` against the production database before the new code is promoted. A failed migration stops the deploy, the previous build keeps serving, and the workflow fails. After the migrations, the same build registers the slash commands on the guild and uploads the app emojis the application lacks (`api/discord_setup.py`); a Discord failure prints a warning and never stops the deploy. See [Discord setup](discord-setup.md).
 4. Release the backend before the frontend: the backend stays compatible with the old frontend, and a new frontend may need the new backend.
 5. Check what production serves by asking the API for a field the change added, not by looking for a deployment row: a rate-limited day produces no row and production stays on the previous build.
 

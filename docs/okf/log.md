@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-22
+
+* **Update**: each production build registers the slash commands on the guild and uploads the app emojis the application lacks, after the migrations, through `api/discord_setup.py`. A missing Discord value skips the step and a Discord failure only warns, so a release never waits on Discord. The [Discord setup](runbooks/discord-setup.md) and [deploy](runbooks/deploy-vercel.md) runbooks and the [Discord integration](concepts/discord-integration.md) state it.
+
 ## 2026-10-19
 
 * **Update**: [egress_ledger](data/tables/egress_ledger.md) gains `cpu_ms`, the process CPU each route's calls spent, and a `(startup)` row per day with the processes started and the CPU each spent before its first ledger write; `just monitor routes` prints both.
