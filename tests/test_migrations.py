@@ -110,6 +110,8 @@ BEFORE_CUSTOM_GAME = "f2a6c3d8b417"
 BEFORE_CHECKIN_MINUTES = "c5f8e1b3d907"
 # The revision before a runner could close the check-in by hand
 BEFORE_CHECKIN_CLOSE = "d3a8f6c1b294"
+# The revision before the settings rows only the old bot read are dropped
+BEFORE_OLD_BOT_SETTINGS = "d47305003af9"
 
 
 def comparable(
@@ -1990,3 +1992,36 @@ def test_the_check_in_close_stamps_start_null_and_come_and_go(tmp_path: Path) ->
     for name in ("event", "cup_leg"):
         columns = {c["name"] for c in inspector.get_columns(name)}
         assert "checkin_closed_at" not in columns
+
+
+def test_the_old_bot_settings_go_and_every_other_setting_stays(tmp_path: Path) -> None:
+    """The six keys only the old bot read are deleted; the rows the app reads
+    stay, and the downgrade puts nothing back."""
+    url = fresh_database(tmp_path, "old_bot_settings")
+    upgrade_to(url, BEFORE_OLD_BOT_SETTINGS)
+    old = [
+        "captain_coach_role",
+        "admin_role",
+        "signup_channel_id",
+        "dashboard_channel_id",
+        "fantasy_dashboard_channel_id",
+        "scheduling_channel_id",
+    ]
+    kept = ["results_channel_id", "content_channel_id", "discord_invite_url"]
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        for key in old + kept:
+            connection.execute(
+                text("INSERT INTO settings (key, value) VALUES (:key, '1')"),
+                {"key": key},
+            )
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        keys = connection.execute(text("SELECT key FROM settings ORDER BY key")).all()
+    assert [key for (key,) in keys] == sorted(kept)
+
+    downgrade_to(url, BEFORE_OLD_BOT_SETTINGS)
+    with engine.connect() as connection:
+        keys = connection.execute(text("SELECT key FROM settings ORDER BY key")).all()
+    assert [key for (key,) in keys] == sorted(kept)
