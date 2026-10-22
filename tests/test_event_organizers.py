@@ -2,7 +2,8 @@
 the ones it holds a row of; a GNL season and a KOTH night stay the admins'.
 
 The minimum an event is played with, and calling an event off, sit here too:
-both are steps an organizer takes on the evening of a cup.
+both are steps an organizer takes on the evening of a cup. So does deleting
+one, which an organizer does to its own events and an admin to any.
 """
 
 import warnings
@@ -12,12 +13,17 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from httpx2 import Client
-from sqlmodel import select
+from sqlmodel import col, select
 
 from app.core.db import Session
 from app.models.cup_series import CupSeries
+from app.models.cup_settings import CupSettings
+from app.models.discord_post import DiscordPost
 from app.models.enums import LeagueKind
+from app.models.event_award import EventAward
+from app.models.event_entrant import EventEntrant
 from app.models.league import League
+from app.models.organizer import EventOrganizer
 from app.models.season import Season
 from app.models.user import User
 from app.services import organizers
@@ -245,6 +251,76 @@ def test_an_organizer_runs_only_the_events_it_holds_a_row_of(
         ).status_code
         == 403
     )
+
+
+def test_an_organizer_deletes_its_own_cup_with_everything_under_it(
+    client: Client, auth_headers: Headers, member: Member
+) -> None:
+    """A drawn, played and finished cup goes whole, the rows of its
+    announcements too, while a post of another kind stays. Another organizer
+    deletes nothing of it."""
+    grant(client, auth_headers, "50")
+    grant(client, auth_headers, "51")
+    headers = member("50")
+    event = create(client, headers)
+    enter(client, headers, event["id"], players(4))
+    assert draw(client, headers, event).status_code == 200
+    stage = event["stages"][0]["id"]
+    first = client.get(f"/events/{event['id']}/stages/{stage}/series").json()
+    walkover = client.put(
+        f"/cup-series/{first['series'][0]['id']}/result-kind",
+        json={"result_kind": "walkover", "winner": 1},
+        headers=headers,
+    )
+    assert walkover.status_code == 200, walkover.text
+    finished = client.post(f"/events/{event['id']}/finish", headers=headers)
+    assert finished.status_code == 200, finished.text
+    with Session.begin() as session:
+        session.add_all(
+            [
+                DiscordPost(
+                    kind=kind, subject_id=subject, channel_id="1", message_id=message
+                )
+                for kind, subject, message in (
+                    ("cup_open", event["id"], "11"),
+                    ("cup_draw", stage, "12"),
+                    ("announce", event["id"], "13"),
+                )
+            ]
+        )
+
+    path = f"/events/{event['id']}"
+    assert client.delete(path, headers=member("51")).status_code == 403
+    gone = client.delete(path, headers=headers)
+    assert gone.status_code == 204, gone.text
+    assert client.get(path, headers=auth_headers).status_code == 404
+
+    with Session() as session:
+        assert session.scalars(select(CupSeries)).all() == []
+        for column in (
+            EventEntrant.event_id,
+            EventAward.event_id,
+            CupSettings.event_id,
+            EventOrganizer.event_id,
+        ):
+            left = select(column).where(col(column) == event["id"])
+            assert session.scalars(left).all() == [], column
+        posts = session.scalars(select(DiscordPost)).all()
+        assert [(post.kind, post.subject_id) for post in posts] == [
+            ("announce", event["id"])
+        ]
+
+
+def test_an_admin_deletes_an_organizers_cup(
+    client: Client, auth_headers: Headers, member: Member
+) -> None:
+    grant(client, auth_headers, "50")
+    event = create(client, member("50"))
+
+    gone = client.delete(f"/events/{event['id']}", headers=auth_headers)
+
+    assert gone.status_code == 204, gone.text
+    assert client.get(f"/events/{event['id']}", headers=auth_headers).status_code == 404
 
 
 def test_an_organizer_stays_inside_small_events(

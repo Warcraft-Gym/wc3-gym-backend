@@ -2,6 +2,7 @@
 
 ## 2026-10-22
 
+* **Update**: `DELETE /events/{id}` of a cup also deletes the cup's [discord_post](data/tables/discord_post.md) rows, whose messages stay in the channel, and the [cup_recurrence](data/tables/cup_recurrence.md) it was the last cup of. A runner deletes an event, an admin or one of its organizers. The [events module](concepts/events-module.md) and [event](data/tables/event.md) state it.
 * **Remove**: the settings rows `captain_coach_role`, `admin_role`, `signup_channel_id`, `dashboard_channel_id`, `fantasy_dashboard_channel_id` and `scheduling_channel_id`, which nothing reads, through migration `b4e7a2c9d5f1`. Admins come from `admin_grant` and `ADMIN_DISCORD_IDS`, and the roles the app owns are `discord_role_binding` rows. [Settings and the current season](concepts/settings-and-current-season.md) and [roles and permissions](concepts/roles-and-permissions.md) state it.
 * **Update**: each production build registers the slash commands on the guild and uploads the app emojis the application lacks, after the migrations, through `api/discord_setup.py`. A missing Discord value skips the step and a Discord failure only warns, so a release never waits on Discord. The [Discord setup](runbooks/discord-setup.md) and [deploy](runbooks/deploy-vercel.md) runbooks and the [Discord integration](concepts/discord-integration.md) state it.
 

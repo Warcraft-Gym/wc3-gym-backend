@@ -8,7 +8,7 @@ occurrence onto that day as a cup of its own: its format and stages, its
 rounds shifted by the same days, its map pool, its sign-up rules, its
 divisions choice, its points table and its organizers. Changing the rule and
 making a cup from it take a grant too; any runner of its latest cup stops it.
-No job makes a cup by itself.
+Deleting a rule's last cup deletes the rule. No job makes a cup by itself.
 """
 
 import calendar
@@ -214,6 +214,37 @@ def delete(recurrence_id: int, claims: dict[str, Any]) -> None:
             )
         )
         session.delete(rule)
+
+
+def forget_cup(session: OrmSession, event_id: int) -> None:
+    """A cup is deleted: the rule it was the last cup of goes with it, as a rule
+    with no cup has nothing to copy and no runner. A rule that keeps other cups
+    copies the latest of them from then on."""
+    recurrence_id = session.scalar(
+        select(col(CupOccurrence.recurrence_id)).where(
+            col(CupOccurrence.event_id) == event_id
+        )
+    )
+    if recurrence_id is None:
+        return
+    other = session.scalar(
+        select(col(CupOccurrence.event_id))
+        .where(
+            col(CupOccurrence.recurrence_id) == recurrence_id,
+            col(CupOccurrence.event_id) != event_id,
+        )
+        .limit(1)
+    )
+    if other is not None:
+        return
+    session.execute(
+        sa_delete(CupOccurrence).where(
+            col(CupOccurrence.recurrence_id) == recurrence_id
+        )
+    )
+    session.execute(
+        sa_delete(CupRecurrence).where(col(CupRecurrence.id) == recurrence_id)
+    )
 
 
 def create_occurrence(
