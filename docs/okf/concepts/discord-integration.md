@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, cups announce themselves to the members who opt in, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-16T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T10:00:00Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -27,7 +27,7 @@ sources:
 
 Discord sends every slash command, button press and autocomplete to a small adapter in the repository `wc3-gym-discord-bot`. The adapter checks Discord's Ed25519 signature, answers inside Discord's 3 second window with a deferred private reply, and forwards the payload unchanged to `POST /discord/interactions` with the same two headers, `X-Signature-Ed25519` and `X-Signature-Timestamp`. This route checks the signature again with `DISCORD_PUBLIC_KEY`, so it trusts Discord and nothing else, then runs the command and replies through the interaction token: a private edit of the deferred reply, or a public follow-up in the channel. The route answers 503 while `DISCORD_PUBLIC_KEY` is unset. Autocomplete has no deferred form; the adapter waits 2 seconds and answers an empty list on a timeout.
 
-The adapter holds no bot token and knows no command. The command list lives here, in `COMMANDS` in `app/services/interactions.py`, and `uv run just discord-commands` registers it on the guild.
+The adapter holds no bot token and knows no command. The command list lives here, in `COMMANDS` in `app/services/interactions.py`, and each production build registers it on the guild after the migrations (`api/discord_setup.py`); `uv run just discord-commands` does the same by hand. See [Discord setup](../runbooks/discord-setup.md).
 
 # The commands
 
