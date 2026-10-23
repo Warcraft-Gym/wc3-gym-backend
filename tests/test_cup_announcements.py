@@ -157,6 +157,13 @@ def test_a_cup_starting_within_the_hour_is_called_to_check_in_once(
     assert text.endswith("Check in now on the cup page.")
     again = client.get(JOB, headers=SECRET)
     assert again.json()["cup_reminders"] == 0
+    # The job names when the next call falls due, so the Worker wakes for it
+    assert (
+        cup_announcements.next_call(
+            datetime.now(UTC), datetime.now(UTC) + timedelta(hours=3)
+        )
+        is not None
+    )
 
 
 def test_a_cup_over_rounds_calls_each_round_to_check_in(

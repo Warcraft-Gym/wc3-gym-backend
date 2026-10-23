@@ -50,6 +50,31 @@ def starting_soon(now: datetime) -> list[int]:
         return [ident(row) for row in rows]
 
 
+def next_reminder(now: datetime, until: datetime) -> datetime | None:
+    """When the next reminder card falls due, up to `until`: REMINDER_LEAD before
+    the soonest claimed series still to be played that has no card yet.
+
+    A series already due and still without its card (a post that failed) answers
+    `now`, so the next run tries again.
+    """
+    with Session() as session:
+        rows = session.execute(
+            select(col(Series.id), col(Series.date_time))
+            .where(
+                col(Series.id).in_(select(col(SeriesCast.series_id))),
+                col(Series.date_time) >= now - REMINDER_LATE,
+                col(Series.date_time) <= until + REMINDER_LEAD,
+                col(Series.player1_score).is_(None),
+                col(Series.player2_score).is_(None),
+            )
+            .order_by(col(Series.date_time))
+        ).all()
+    for series_id, date_time in rows:
+        if date_time is not None and not discord_posts.reminded(series_id):
+            return max(date_time - REMINDER_LEAD, now)
+    return None
+
+
 def on_now(series: SeriesPublic, now: datetime) -> bool:
     """A claimed series with no result, inside its window. No platform is asked."""
     if not series.casts or series.date_time is None:
