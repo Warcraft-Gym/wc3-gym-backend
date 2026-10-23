@@ -183,24 +183,82 @@ def announce_open(event_id: int) -> bool:
 
 
 # ============ It starts soon ============
-def _due(cup: Season, leg: CupLeg | None, now: datetime) -> bool:
-    """Whether the call of a cup, or of one round of it, is due at `now`.
+def _call_at(
+    cup: Season, leg: CupLeg | None
+) -> tuple[datetime, datetime | None] | None:
+    """When the call of a cup, or of one round of it, goes, and when its
+    check-in closes; None without a start.
 
     It goes an hour before the check-in closes early, else an hour before the
-    start, or when the check-in opens if that is later, and only while the
-    check-in stands open. A cup that takes no check-in is called an hour
-    before it starts.
+    start, or when the check-in opens if that is later. A cup that takes no
+    check-in is called an hour before it starts.
     """
     start = leg.starts_at if leg is not None else cup.starts_at
     if start is None:
-        return False
+        return None
     if leg is None and not cup.checkin_enabled:
-        return start - LEAD <= now
+        return start - LEAD, None
     opens, closes = checkin_window(cup, leg)
     call = (closes or start) - LEAD
     if opens is not None:
         call = max(call, opens)
+    return call, closes
+
+
+def _due(cup: Season, leg: CupLeg | None, now: datetime) -> bool:
+    """Whether the call is due at `now`: past its time, while the check-in stands open."""
+    at = _call_at(cup, leg)
+    if at is None:
+        return False
+    call, closes = at
     return call <= now and (closes is None or now < closes)
+
+
+def _open_cup() -> tuple:
+    return (
+        col(Season.kind) == EventKind.cup,
+        col(Season.published).is_(True),
+        col(Season.closed_at).is_(None),
+        col(Season.cancelled_at).is_(None),
+    )
+
+
+def _ceiling(session: OrmSession, until: datetime) -> datetime:
+    """The latest start whose call falls by `until`: LEAD plus the largest early close."""
+    closes = select(func.max(col(Season.checkin_closes_minutes))).where(*_open_cup())
+    return until + LEAD + timedelta(minutes=session.scalar(closes) or 0)
+
+
+def next_call(now: datetime, until: datetime) -> datetime | None:
+    """The soonest call still to come after `now`, up to `until`. A call already
+    due is left to remind_due, which runs first."""
+    with Session() as session:
+        ceiling = _ceiling(session, until)
+        cups = session.scalars(
+            select(Season)
+            .options(_CALL_COLUMNS)
+            .where(
+                *_open_cup(),
+                col(Season.starts_at) > now,
+                col(Season.starts_at) <= ceiling,
+                ~exists().where(col(CupLeg.event_id) == col(Season.id)),
+            )
+        )
+        calls = [_call_at(cup, None) for cup in cups]
+        legs = session.execute(
+            select(CupLeg, Season)
+            .options(_CALL_COLUMNS)
+            .join(Season, col(Season.id) == col(CupLeg.event_id))
+            .where(
+                *_open_cup(),
+                col(CupLeg.finished_at).is_(None),
+                col(CupLeg.starts_at) > now,
+                col(CupLeg.starts_at) <= ceiling,
+            )
+        ).tuples()
+        calls += [_call_at(cup, leg) for leg, cup in legs]
+    ahead = [at[0] for at in calls if at is not None and now < at[0] <= until]
+    return min(ahead, default=None)
 
 
 def remind_due(now: datetime) -> int:
@@ -211,16 +269,10 @@ def remind_due(now: datetime) -> int:
     A cup played over rounds is called round by round, since each round takes
     its own check-in.
     """
-    open_cup = (
-        col(Season.kind) == EventKind.cup,
-        col(Season.published).is_(True),
-        col(Season.closed_at).is_(None),
-        col(Season.cancelled_at).is_(None),
-    )
+    open_cup = _open_cup()
     with Session() as session:
         # a call falls at most LEAD plus the largest early close before the start
-        closes = select(func.max(col(Season.checkin_closes_minutes))).where(*open_cup)
-        ceiling = now + LEAD + timedelta(minutes=session.scalar(closes) or 0)
+        ceiling = _ceiling(session, now)
         due = [
             cup
             for cup in session.scalars(

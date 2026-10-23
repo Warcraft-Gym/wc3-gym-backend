@@ -341,11 +341,16 @@ def post_cast(series_id: int) -> None:
     _post_card(CAST, series_id)
 
 
+def reminded(series_id: int) -> bool:
+    """Whether the series already carries its reminder card."""
+    return bool(_posts(series_id, (REMINDER,)))
+
+
 def post_reminder(series_id: int) -> bool:
     """Call the audience to a stream about to start, once per series. A series
     that already has its card is left alone, so a job that runs every few
     minutes posts nothing twice."""
-    if _posts(series_id, (REMINDER,)):
+    if reminded(series_id):
         return False
     return _post_card(REMINDER, series_id)
 

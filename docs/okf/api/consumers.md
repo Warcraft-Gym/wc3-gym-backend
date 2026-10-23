@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T11:29:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-23T12:00:00Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -24,7 +24,7 @@ sources:
 | the web app | `wc3-gym-frontend` | most routes | Clerk session or the admin token |
 | the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams/summary`, `/matches`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}/summary`, `GET /users/{user_id}/seasons`, `GET /users/{user_id}/series?event_id=` and `GET /stats/career/{stat_id}` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
-| the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CLOUDFLARE_CRON_SECRET` bearer |
+| the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` on a five-minute tick, skipped until the `next_run` the last call answered | `CLOUDFLARE_CRON_SECRET` bearer |
 | Vercel cron | this repository's `vercel.json` | `GET /jobs/w3c-sync` and `GET /jobs/egress-snapshot`, each once a day | `CRON_SECRET` bearer |
 | Nightbot | no repository | `GET /koth/signup`: the chat form with `q` answers one plain-text line, the parameter form with `battletag` answers JSON; and the deprecated `/koth/*` reads | the Nightbot token |
 | the stream overlay and bookmarks | none | the deprecated `/koth/*` reads | none |

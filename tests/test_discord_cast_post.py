@@ -33,6 +33,11 @@ def claim(client: Client, series_id: int, **body: str) -> None:
     assert resp.status_code == 201, resp.text
 
 
+def counts(body: dict[str, Any]) -> dict[str, Any]:
+    """The reply without next_run, which moves with the clock."""
+    return {key: value for key, value in body.items() if key != "next_run"}
+
+
 def starts_in(series_id: int, minutes: float) -> None:
     with Session.begin() as session:
         series = session.get(Series, series_id)
@@ -133,7 +138,7 @@ def test_the_reminder_calls_the_audience_once(
 
     resp = client.get(JOB, headers=SECRET)
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"posted": 1, "cup_reminders": 0}
+    assert counts(resp.json()) == {"posted": 1, "cup_reminders": 0}
     assert [call[:2] for call in discord_calls] == [("POST", CONTENT)] * 2
     reminder = discord_calls[1][2]
     # The players are called to the game, and to wait for the caster, who is tagged too
@@ -145,7 +150,10 @@ def test_the_reminder_calls_the_audience_once(
     assert "**Casts**\n- <https://twitch.tv/gnlcaster> · P1" in description
 
     # A run every few minutes posts the card once, not once a run
-    assert client.get(JOB, headers=SECRET).json() == {"posted": 0, "cup_reminders": 0}
+    assert counts(client.get(JOB, headers=SECRET).json()) == {
+        "posted": 0,
+        "cup_reminders": 0,
+    }
     assert len(discord_calls) == 2
 
 
@@ -163,10 +171,16 @@ def test_the_reminder_skips_a_series_that_is_not_due(
     claim(client, series_id)  # the claim card alone
     assert len(discord_calls) == 1
 
-    assert client.get(JOB, headers=SECRET).json() == {"posted": 0, "cup_reminders": 0}
+    assert counts(client.get(JOB, headers=SECRET).json()) == {
+        "posted": 0,
+        "cup_reminders": 0,
+    }
     # A series nobody claimed is never announced, however close it is
     starts_in(seeded["series_played_id"], 5)
-    assert client.get(JOB, headers=SECRET).json() == {"posted": 0, "cup_reminders": 0}
+    assert counts(client.get(JOB, headers=SECRET).json()) == {
+        "posted": 0,
+        "cup_reminders": 0,
+    }
     assert len(discord_calls) == 1
 
 
@@ -184,3 +198,33 @@ def test_the_job_answers_only_the_scheduler(
     )
     assert client.get(JOB, headers={"Authorization": "Bearer nope"}).status_code == 401
     assert client.get(JOB, headers=SECRET).status_code == 200
+
+
+def next_run(client: Client) -> timedelta:
+    """How far ahead the job tells the Worker to call it again."""
+    body = client.get(JOB, headers=SECRET).json()
+    return datetime.fromisoformat(body["next_run"]) - datetime.now(UTC)
+
+
+def test_the_job_names_its_next_run(
+    client: Client,
+    discord_calls: list,
+    seeded: dict[str, Any],
+    content_channel: None,
+    cron: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Nothing is scheduled: the Worker sleeps the longest it may
+    assert timedelta(minutes=29) < next_run(client) <= timedelta(minutes=30)
+
+    series_id = seeded["series_open_id"]
+    starts_in(series_id, 40)
+    as_member(monkeypatch, "1")
+    claim(client, series_id)
+    # The card falls due REMINDER_LEAD before the start
+    assert timedelta(minutes=24) < next_run(client) <= timedelta(minutes=25)
+
+    starts_in(series_id, 10)
+    assert client.get(JOB, headers=SECRET).json()["posted"] == 1
+    # A series that has its card no longer holds the Worker awake
+    assert next_run(client) > timedelta(minutes=29)
