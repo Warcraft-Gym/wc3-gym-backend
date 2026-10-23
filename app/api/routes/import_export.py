@@ -2,7 +2,6 @@ import logging
 from io import BytesIO
 from typing import Annotated, Any
 
-import openpyxl
 from fastapi import APIRouter, Depends, File, Response, UploadFile
 
 from app.api.deps import (
@@ -75,6 +74,8 @@ def export_season(
     # get raises NotFoundError, which answers 404
     season = season_service.get(season_id)
     season_query = QueryUtil.parse_query(f"season_id=={season_id}")
+
+    import openpyxl  # loaded by the export alone, not on every cold start
 
     # write_only keeps one row in memory at a time instead of the whole sheet
     workbook = openpyxl.Workbook(write_only=True)
