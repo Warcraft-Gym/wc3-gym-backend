@@ -21,7 +21,7 @@ from sqlalchemy import delete, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import class_mapper
 from sqlalchemy.orm.attributes import flag_modified
-from sqlmodel import col
+from sqlmodel import col, select
 from sqlmodel.main import default_registry
 
 from app.api.routes import jobs
@@ -455,9 +455,30 @@ def content_channel() -> None:
         session.add(Settings(key="content_channel_id", value="content"))
 
 
-@pytest.mark.parametrize(("minutes", "late"), [(5, 1), (15, 0)])
-def test_a_card_posted_after_its_due_time_counts_as_late(
+def backdate_claim(series_id: int, ago: timedelta) -> None:
+    """Move the series' claims to `ago` before now, as a claim made earlier."""
+    with Session.begin() as session:
+        for cast in session.scalars(
+            select(SeriesCast).where(col(SeriesCast.series_id) == series_id)
+        ):
+            cast.created_at = datetime.now(UTC) - ago
+
+
+@pytest.mark.parametrize(
+    ("minutes", "claimed_ago", "late"),
+    [
+        # due 10 minutes ago, claimed 20 minutes ago: owed for 10 minutes
+        (5, timedelta(minutes=20), 1),
+        # due 10 minutes ago, claimed just now: owed since the claim, not late
+        (5, timedelta(0), 0),
+        # due now
+        (15, timedelta(minutes=20), 0),
+    ],
+    ids=["late", "late-claim", "on-time"],
+)
+def test_a_card_posted_after_it_was_owed_counts_as_late(
     minutes: int,
+    claimed_ago: timedelta,
     late: int,
     client: Client,
     seeded: dict[str, Any],
@@ -472,6 +493,7 @@ def test_a_card_posted_after_its_due_time_counts_as_late(
     starts_at(series_id, datetime.now(UTC) + timedelta(minutes=minutes))
     as_member(monkeypatch, "1")
     claim(client, series_id)
+    backdate_claim(series_id, claimed_ago)
     with caplog.at_level(logging.WARNING, logger=jobs.__name__):
         body = client.get(JOB, headers=SECRET).json()
     assert (body["posted"], body["late"]) == (1, late)

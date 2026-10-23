@@ -140,10 +140,10 @@ def test_the_reminder_calls_the_audience_once(
 
     resp = client.get(JOB, headers=SECRET)
     assert resp.status_code == 200, resp.text
-    # Due five minutes before the claim, so the card counts as late
+    # Due five minutes before the claim: owed since the claim, so not late
     assert counts(resp.json()) == {
         "posted": 1,
-        "late": 1,
+        "late": 0,
         "missed": 0,
         "cup_reminders": 0,
     }
