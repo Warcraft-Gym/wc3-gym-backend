@@ -30,7 +30,7 @@ router = APIRouter(tags=["jobs"])
 # The route drains waves this long, under the 60 s Vercel function limit
 DRAIN_SECONDS = 50
 
-# A reminder card posted this long after it fell due counts as late
+# A reminder card posted this long after it was owed counts as late
 LATE_AFTER = timedelta(minutes=2)
 
 
@@ -61,20 +61,22 @@ def cast_reminders(credentials: Credentials) -> dict[str, int | str]:
     `next_run` is wake.next_run: when the next card or call falls due, at most
     wake.FLOOR away. A commit that moves it pushes it to the Worker as well.
     `late` counts the cards this run posted more than LATE_AFTER after they
-    fell due, and `missed` the claimed series of the last day that started
-    without one; either above zero means the Worker did not wake at a due time.
+    were owed, the later of the due time and the first claim, so a claim inside
+    the lead is not late; `missed` counts the claimed series of the last day
+    that started without a card. Either above zero means the Worker did not
+    wake at a due time.
     """
     only_the_scheduler(credentials, "CLOUDFLARE_CRON_SECRET")
     now = utcnow()
     posted = [
-        (series_id, starts)
-        for series_id, starts in casts.starting_soon(now)
+        (series_id, starts, claimed)
+        for series_id, starts, claimed in casts.starting_soon(now)
         if discord_posts.post_reminder(series_id)
     ]
     late = [
         series_id
-        for series_id, starts in posted
-        if starts - casts.REMINDER_LEAD < now - LATE_AFTER
+        for series_id, starts, claimed in posted
+        if max(starts - casts.REMINDER_LEAD, claimed) < now - LATE_AFTER
     ]
     if late:
         log.warning("reminder cards posted late: series %s", late)
