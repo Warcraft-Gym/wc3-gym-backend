@@ -19,6 +19,7 @@ from app.services import (
     egress,
     egress_monitor,
     egress_snapshot,
+    wake,
 )
 from app.services.users import stalest_members
 
@@ -29,9 +30,8 @@ router = APIRouter(tags=["jobs"])
 # The route drains waves this long, under the 60 s Vercel function limit
 DRAIN_SECONDS = 50
 
-# The longest the cast-reminders Worker sleeps between calls: a series claimed
-# meanwhile, or a cup moved, is seen within this
-MAX_SLEEP = timedelta(minutes=30)
+# A reminder card posted this long after it fell due counts as late
+LATE_AFTER = timedelta(minutes=2)
 
 
 def only_the_scheduler(credentials: Credentials, key: str = "CRON_SECRET") -> None:
@@ -49,36 +49,45 @@ def cast_reminders(credentials: Credentials) -> dict[str, int | str]:
     """Call the audience to every claimed series about to start, one card each.
 
     Vercel Hobby runs a cron once a day, so a Cloudflare Worker in
-    wc3-gym-discord-bot (cron/) calls this every five minutes; its failures
-    show in that Worker's Cron Events. A series already carrying its card is
-    skipped, so a run that repeats posts nothing twice. The Worker holds its own
-    secret, so a leak there triggers nothing but this job.
+    wc3-gym-discord-bot (cron/) calls this when a card or a call falls due,
+    and at least once a day; its failures show in that Worker's Cron Events.
+    A series already carrying its card is skipped, so a run that repeats posts
+    nothing twice. The Worker holds its own secret, so a leak there triggers
+    nothing but this job.
 
     The same run calls every cup, and every round of a cup played over
     rounds, that starts within the hour to check in, each once.
 
-    `next_run` is when the next card or call can fall due, at most MAX_SLEEP
-    away. The Worker skips its ticks before it, so the backend sleeps through
-    the hours with nothing scheduled.
+    `next_run` is wake.next_run: when the next card or call falls due, at most
+    wake.FLOOR away. A commit that moves it pushes it to the Worker as well.
+    `late` counts the cards this run posted more than LATE_AFTER after they
+    fell due, and `missed` the claimed series of the last day that started
+    without one; either above zero means the Worker did not wake at a due time.
     """
     only_the_scheduler(credentials, "CLOUDFLARE_CRON_SECRET")
     now = utcnow()
-    due = casts.starting_soon(now)
-    posted = sum(discord_posts.post_reminder(row) for row in due)
-    cup_reminders = cup_announcements.remind_due(now)
-    until = now + MAX_SLEEP
-    soonest = [
-        at
-        for at in (
-            casts.next_reminder(now, until),
-            cup_announcements.next_call(now, until),
-        )
-        if at is not None
+    posted = [
+        (series_id, starts)
+        for series_id, starts in casts.starting_soon(now)
+        if discord_posts.post_reminder(series_id)
     ]
+    late = [
+        series_id
+        for series_id, starts in posted
+        if starts - casts.REMINDER_LEAD < now - LATE_AFTER
+    ]
+    if late:
+        log.warning("reminder cards posted late: series %s", late)
+    missed = casts.missed(now, now - wake.FLOOR)
+    if missed:
+        log.warning("reminder cards never posted: series %s", missed)
+    cup_reminders = cup_announcements.remind_due(now)
     return {
-        "posted": posted,
+        "posted": len(posted),
+        "late": len(late),
+        "missed": len(missed),
         "cup_reminders": cup_reminders,
-        "next_run": min(soonest, default=until).isoformat(),
+        "next_run": wake.next_run(now).isoformat(),
     }
 
 

@@ -153,8 +153,8 @@ def init_engine(db_url: str | None = None) -> Engine:
         event.listen(engine.pool, "connect", _start_received)
         event.listen(engine.pool, "checkin", _count_received)
     Session.configure(bind=engine)
-    # the listeners: the blob store follows the rows, and every fixture and
-    # series names the round it is played in
-    from app.services import blob, round_link  # noqa: F401
+    # the listeners: the blob store follows the rows, every fixture and series
+    # names the round it is played in, and the Worker hears the next run
+    from app.services import blob, round_link, wake  # noqa: F401
 
     return engine

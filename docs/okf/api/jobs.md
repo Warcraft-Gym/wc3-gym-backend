@@ -1,14 +1,17 @@
 ---
 type: API Area
 title: Scheduled jobs
-description: Five job routes behind a shared secret, two called daily by Vercel, one every five minutes by a Cloudflare Worker because a Vercel cron runs at most once a day, and two an operator reads for egress.
+description: Five job routes behind a shared secret, two called daily by Vercel, one by a Cloudflare Worker whenever a reminder or a cup call falls due, and two an operator reads for egress.
 resource: ../../../app/api/routes/jobs.py
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-23T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-23T12:30:00Z }
 sources:
   - id: jobs
     resource: ../../../app/api/routes/jobs.py
     title: The job routes and their guard
+  - id: wake
+    resource: ../../../app/services/wake.py
+    title: The next run and its push to the Worker
   - id: snapshot
     resource: ../../../app/services/egress_snapshot.py
     title: The egress snapshot and its windows
@@ -25,14 +28,20 @@ sources:
 | Route | Does | Called by |
 |---|---|---|
 | `GET /jobs/w3c-sync` | drains the stalest players' ladder matches and stats for 50 seconds, inside the 60 second function limit | Vercel cron at 04:00 UTC, shifted by up to 59 minutes |
-| `GET /jobs/cast-reminders` | posts the reminder card for series that start soon, and calls every cup, or round of a cup, to check in an hour before its check-in closes or it starts, or when its check-in opens if that is later; answers `posted`, `cup_reminders` and `next_run` | the Cloudflare Worker in the Discord adapter repository, on a five-minute tick it skips until `next_run` |
+| `GET /jobs/cast-reminders` | posts the reminder card for series that start soon, and calls every cup, or round of a cup, to check in an hour before its check-in closes or it starts, or when its check-in opens if that is later; answers `posted`, `late`, `missed`, `cup_reminders` and `next_run` | the Cloudflare Worker in the Discord adapter repository, at the `next_run` it holds, and at least once a day |
 | `GET /jobs/egress?days=7` | the [egress ledger](../data/tables/egress_ledger.md) rows of the last `days` days (1 to 90), most rows first, with `Cache-Control: no-store` | an operator, with `just monitor routes` and `just monitor egress` |
 | `GET /jobs/egress-snapshot` | copies pg_stat_statements into [egress_snapshot](../data/tables/egress_snapshot.md) on the server, deletes snapshots older than 35 days, and answers the window since the run before: rows, statements and the ten statements that returned the most rows; then [the egress monitor](#the-egress-monitor) levels the cycle, the database size and the Vercel usage and posts to `DEV_ALERTS_WEBHOOK_URL` when it is set | Vercel cron at 00:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/egress-snapshots?days=7` | one window per snapshot of the last `days` days (1 to 35), oldest first, rows and statements only, with `Cache-Control: no-store` | an operator |
 
 `/jobs/cast-reminders` checks `Authorization: Bearer <CLOUDFLARE_CRON_SECRET>`, the value the Worker holds; the other four check `Authorization: Bearer <CRON_SECRET>`, the name Vercel Cron sends. A route whose secret is unset answers 503, so a deployment without the secrets runs no job.
 
-`next_run` is an ISO 8601 UTC time: the soonest of the next reminder card still to post, the next cup or round call still to come, and `MAX_SLEEP` from now. A series that is due and still has no card answers the current time, so the next tick retries it. The Worker skips every tick before `next_run`, so a series claimed or a cup moved while it sleeps is seen within `MAX_SLEEP`.
+`next_run` is an ISO 8601 UTC time: the soonest of the next reminder card still to post, the next cup or round call still to come, and `FLOOR`, 24 hours, from now. `app/services/wake.py` computes it for the route and for the push. A series that is due and still has no card answers the current time, so the next call retries it.
+
+# The push to the Worker
+
+A commit that writes a table the due time reads, [series](../data/tables/series.md), [series_cast](../data/tables/series_cast.md), [discord_post](../data/tables/discord_post.md), [event](../data/tables/event.md) or [cup_leg](../data/tables/cup_leg.md), recomputes `next_run` and sends it to the Worker: `POST <CLOUDFLARE_WORKER_URL>/next-run` with `Authorization: Bearer <CLOUDFLARE_CRON_SECRET>` and the body `{"next_run": "<ISO 8601 UTC>"}`. The Worker answers 204 when it stored the time, 401 on a wrong bearer and 400 on a bad body. A write through the ORM and a bulk insert, update or delete push alike; a savepoint pushes with the commit around it, and a rollback pushes nothing. The push runs inside the request that wrote, waits 5 seconds at most, and a failure is logged as a warning and never fails the write. With `CLOUDFLARE_WORKER_URL` unset nothing is pushed, and the Worker keeps its own schedule.
+
+`late` counts the cards the run posted more than 2 minutes after they fell due, `REMINDER_LEAD` before the start; a series claimed after its card fell due counts too. `missed` counts the claimed series that started between a day and `REMINDER_LATE`, 30 minutes, ago with no card, though claimed before that cutoff; each run of that day counts it again. `late` is a card posted late and `missed` a card never posted: both are the signs that the Worker did not wake at a due time, and each logs a warning naming the series.
 
 # The egress snapshot
 
