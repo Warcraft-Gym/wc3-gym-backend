@@ -9,11 +9,9 @@ import logging
 import os
 from collections.abc import Callable
 from functools import cache
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import jwt
-from clerk_backend_api import AuthenticateRequestOptions, Clerk
-from clerk_backend_api.models import OAuthAccessToken
 from fastapi import Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -38,6 +36,10 @@ from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 from app.services.settings import SettingsService
 from app.services.soft_blocks import SoftBlockService
+
+if TYPE_CHECKING:
+    from clerk_backend_api import Clerk
+    from clerk_backend_api.models import OAuthAccessToken
 from app.services.teams import TeamService
 from app.services.users import UserService
 
@@ -84,7 +86,10 @@ def event_edge_cache(response: Response, event_id: int) -> None:
 
 
 @cache
-def _clerk() -> Clerk:
+def _clerk() -> "Clerk":
+    # imported on the first signed-in request: most cold starts serve public reads
+    from clerk_backend_api import Clerk
+
     return Clerk(bearer_auth=os.getenv("CLERK_SECRET_KEY"))
 
 
@@ -119,6 +124,8 @@ def _resolve_claims(request: Request) -> dict[str, Any]:
     on the next request.
     """
     # production lists its exact origins; Vercel previews set it empty because their origin changes per branch
+    from clerk_backend_api import AuthenticateRequestOptions
+
     parties = os.getenv("CLERK_AUTHORIZED_PARTIES", "http://localhost:5173")
     state = _clerk().authenticate_request(
         request,
@@ -279,7 +286,7 @@ def _discord_id(clerk_user_id: str) -> str:
     return discord_token(clerk_user_id).provider_user_id
 
 
-def discord_token(clerk_user_id: str, stored: str | None = None) -> OAuthAccessToken:
+def discord_token(clerk_user_id: str, stored: str | None = None) -> "OAuthAccessToken":
     """The Discord OAuth token Clerk holds for that user, for reads as the account.
 
     The clerk_account row is rewritten only when Clerk names another Discord

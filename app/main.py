@@ -183,6 +183,9 @@ def create_app(db_url: str | None = None) -> FastAPI:
         allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
+        # a browser reuses a preflight answer this long (Chrome caps it at two hours), instead of
+        # re-asking every 10 minutes: each OPTIONS is a function invocation, and can be a cold start
+        max_age=7200,
         # Browsers hide custom response headers unless CORS exposes them
         expose_headers=[
             "X-Total-Count",

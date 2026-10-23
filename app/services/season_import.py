@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, time
 from typing import Any, NamedTuple
 
-import openpyxl
 from pydantic import ValidationError
 from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session as OrmSession
@@ -100,6 +99,8 @@ def read_workbook(file_bytes: bytes) -> dict[str, list[Cells]]:
     """Every sheet of the workbook as rows of cells, the header row first.
     Text cells are stripped, empty cells read None, short rows are padded
     to the width of the sheet."""
+    import openpyxl  # loaded by the import alone, not on every cold start
+
     workbook = openpyxl.load_workbook(
         io.BytesIO(file_bytes), read_only=True, data_only=True
     )
