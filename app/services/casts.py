@@ -7,12 +7,13 @@ an admin touches it.
 
 from datetime import datetime, timedelta
 
+from sqlalchemy import Subquery, exists, func
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col, select
 
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.models.base import ident
+from app.models.discord_post import DiscordPost
 from app.models.series import Series, SeriesPublic, has_result
 from app.models.series_cast import CastPublic, SeriesCast, is_video_url
 from app.models.types import utcnow
@@ -33,21 +34,61 @@ REMINDER_LEAD = timedelta(minutes=15)
 REMINDER_LATE = timedelta(minutes=30)
 
 
-def starting_soon(now: datetime) -> list[int]:
-    """The claimed series about to start and not yet played, soonest first."""
+def _first_claims() -> Subquery:
+    """Each claimed series with the time of its first claim, as a subquery."""
+    return (
+        select(
+            col(SeriesCast.series_id).label("series_id"),
+            func.min(col(SeriesCast.created_at)).label("at"),
+        )
+        .group_by(col(SeriesCast.series_id))
+        .subquery()
+    )
+
+
+def starting_soon(now: datetime) -> list[tuple[int, datetime, datetime]]:
+    """The claimed series about to start and not yet played, soonest first, each
+    with its start and the time of its first claim."""
+    claimed = _first_claims()
     with Session() as session:
-        rows = session.scalars(
-            select(Series)
+        rows = session.execute(
+            select(col(Series.id), col(Series.date_time), claimed.c.at)
+            .join(claimed, claimed.c.series_id == col(Series.id))
             .where(
-                col(Series.id).in_(select(col(SeriesCast.series_id))),
                 col(Series.date_time) >= now - REMINDER_LATE,
                 col(Series.date_time) <= now + REMINDER_LEAD,
                 col(Series.player1_score).is_(None),
                 col(Series.player2_score).is_(None),
             )
             .order_by(col(Series.date_time))
-        )
-        return [ident(row) for row in rows]
+        ).all()
+    return [(series_id, starts, at) for series_id, starts, at in rows if starts]
+
+
+def missed(now: datetime, since: datetime) -> list[int]:
+    """The claimed series that started between `since` and REMINDER_LATE before
+    `now` without their reminder card, though claimed in time to get one."""
+    claimed = _first_claims()
+    carded = exists().where(
+        col(DiscordPost.kind) == discord_posts.REMINDER,
+        col(DiscordPost.subject_id) == col(Series.id),
+    )
+    with Session() as session:
+        rows = session.execute(
+            select(col(Series.id), col(Series.date_time), claimed.c.at)
+            .join(claimed, claimed.c.series_id == col(Series.id))
+            .where(
+                col(Series.date_time) >= since,
+                col(Series.date_time) < now - REMINDER_LATE,
+                ~carded,
+            )
+            .order_by(col(Series.date_time))
+        ).all()
+    return [
+        series_id
+        for series_id, date_time, at in rows
+        if date_time is not None and at < date_time + REMINDER_LATE
+    ]
 
 
 def next_reminder(now: datetime, until: datetime) -> datetime | None:
