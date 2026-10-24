@@ -1,8 +1,9 @@
 """A cup's divisions are its choice at creation, and its seeds are run per division.
 
 A cup made without divisions refuses every division write and plays one field.
-A cup made with them is cut on its run page, refuses its draw while a player
-stands in no division, and keeps its divisions once drawn. A cup pins a
+A cup made with them is cut on its run page into one division or more,
+refuses its draw while a player stands in no division, and keeps its
+divisions once drawn. A cup pins a
 player's division and its seed apart, so a new cut keeps the seed pins and a
 reshuffle keeps the division pins. A seed write may name one division and
 leave every other one as it was.
@@ -142,6 +143,30 @@ def test_a_drawn_cup_keeps_its_divisions(client: Client, auth_headers: Headers) 
         ),
     ):
         assert refused.status_code == 409, refused.text
+
+
+def test_a_cup_may_play_one_division(client: Client, auth_headers: Headers) -> None:
+    """One division with no bound takes every player, an unrated one included,
+    so a cup made with divisions can still play one field."""
+    cup = make_cup(client, auth_headers, uses_divisions=True)
+    field_of(cup["id"], (2000, 1500, 1200))
+    enter(cup["id"], add_player(f"D{cup['id']}xnone", {}))
+    (division,) = set_divisions(
+        client, cup["id"], [{"name": "Division 1"}], auth_headers
+    )
+
+    assigned = client.post(
+        f"/events/{cup['id']}/divisions/assign", headers=auth_headers
+    )
+    assert assigned.status_code == 200, assigned.text
+    assert [row["entrant_count"] for row in assigned.json()["divisions"]] == [4]
+    entrants = client.get(f"/events/{cup['id']}/entrants", headers=auth_headers).json()
+    assert {row["division_id"] for row in entrants} == {division["id"]}
+
+    drawn = client.post(
+        f"/events/{cup['id']}/stages/{stage_of(cup)}/generate", headers=auth_headers
+    )
+    assert drawn.status_code == 200, drawn.text
 
 
 def test_a_drawn_cup_keeps_its_sign_up_rules(
