@@ -95,6 +95,18 @@ def series_wins(session: OrmSession, row: CupSeries) -> int:
     return wins_of(cup_reads.rules_of(session, row).best_of)
 
 
+def series_head_start(session: OrmSession, row: CupSeries) -> int:
+    """The games side 1 opens the series with: the head start of a lead grand
+    final, and none in any other series."""
+    round_ = session.get_one(DBEventRound, row.round_id)
+    stage = session.get(EventStage, round_.stage_id) if round_.stage_id else None
+    if stage is None:
+        return 0
+    return brackets.head_start(
+        round_.name, stage.grand_final_modifier, stage.grand_final_lead
+    )
+
+
 def generate(
     event_id: int,
     stage_id: int,

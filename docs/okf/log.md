@@ -2,6 +2,7 @@
 
 ## 2026-10-25
 
+* **Add**: a double elimination's grand final may give the upper-bracket winner a head start: `grand_final_modifier` `lead` with `grand_final_lead` games, through migration `c8f3a6d1e925`. The score counts the head start, a report and a runner's score refuse side 1 below it, the reported games are the ones played, and the series read answers `head_start`. [event_stage](data/tables/event_stage.md) and the [events module](concepts/events-module.md) state it.
 * **Add**: `GET /users/{id}/ladder/w3c-season` answers one player's ladder over the current W3Champions season on one race: the record, the MMR span, the last ten games and the record against each race, from the stored matches, edge-cached as running. [W3C ladder and achievements](concepts/ladder-and-achievements.md) and the [edge cache](concepts/edge-cache.md) state it.
 * **Update**: every cup signup, a hand-add, a swap and each player of a team included, reads the player's rating again from W3Champions, at most once an hour per player, whether or not the cup checks eligibility; once the answer is out it reads the player's ladder games of the current W3Champions season. The daily job also walks the players of every cup not finished or cancelled. [W3Champions](concepts/w3champions.md), [W3C ladder and achievements](concepts/ladder-and-achievements.md) and [jobs](api/jobs.md) state it.
 

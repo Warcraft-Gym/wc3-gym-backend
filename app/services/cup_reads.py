@@ -20,6 +20,7 @@ from sqlalchemy.sql.selectable import FromClause
 from sqlmodel import col
 
 from app.core.best_of import largest_best_of
+from app.core.brackets import head_start
 from app.core.exceptions import BadRequestError
 from app.core.map_order import cup_rules, default_rules, rules_of
 from app.models.base import ident
@@ -162,10 +163,12 @@ def acts_for_side(
 def fill(
     session: OrmSession, rows: Sequence[CupSeries], publics: Sequence[CupSeriesPublic]
 ) -> None:
-    """Fill the rules, the race and the MMR of both sides of every series.
+    """Fill the rules, the head start, the race and the MMR of both sides of
+    every series.
 
-    The rows carry their entrants, so the races cost nothing; the rules are
-    one statement and the MMR two, three while the cup's day is over.
+    The rows carry their entrants, so the races cost nothing; the rules and
+    the head start are one statement and the MMR two, three while the cup's
+    day is over.
     """
     if not rows:
         return
@@ -179,6 +182,9 @@ def fill(
             col(EventStage.map_rules),
             col(EventStage.best_of),
             col(CupSettings.custom_game),
+            col(DBEventRound.name),
+            col(EventStage.grand_final_modifier),
+            col(EventStage.grand_final_lead),
         )
         .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
         .join(Season, col(Season.id) == col(DBEventRound.season_id))
@@ -195,6 +201,9 @@ def fill(
         stage_rules,
         stage_best,
         custom,
+        round_name,
+        modifier,
+        lead,
     ) in found:
         best_of = round_best or stage_best or DEFAULT_BEST_OF
         map_rules = (
@@ -209,6 +218,7 @@ def fill(
         for public in publics:
             if public.id == series_id:
                 public.rules = SeriesRulesPublic(map_rules=map_rules, best_of=best_of)
+                public.head_start = head_start(round_name, modifier, lead)
     for public in publics:
         row = by_id.get(public.id)
         if row is None:

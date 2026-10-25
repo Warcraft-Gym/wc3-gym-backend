@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, cups on tables and an engine of their own, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T07:56:14Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-25T15:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -45,7 +45,7 @@ The cup engine (`app/services/cup_engine.py`) draws the series of a cup's stage,
 
 A bracket stage may name the best-of of each part of its bracket in `best_of_by_round`, counted back from the end; the draw writes it onto each round, and a part it leaves out plays the stage's `best_of`. An event with `veto_by_best_of` vetoes each series by its own best-of, so its pool must hold the longest series; the create, a stage or pool write and the draw refuse a smaller pool. See [the decision](../decisions/cup-veto-by-best-of.md).
 
-In a single elimination that plays a third-place series, that series decides places 3 and 4 and the final decides places 1 and 2; a beaten semi-finalist never ranks above the runner-up. A bracket's table ranks by the deepest round an entrant stood in, then by whether it won there, then by wins, so in a double elimination the grand final's winner ranks first, or the reset's winner when a reset is played; with no grand final (`skip`) the upper final's winner ranks first and the lower final's winner second.
+In a single elimination that plays a third-place series, that series decides places 3 and 4 and the final decides places 1 and 2; a beaten semi-finalist never ranks above the runner-up. A bracket's table ranks by the deepest round an entrant stood in, then by whether it won there, then by wins, so in a double elimination the grand final's winner ranks first, or the reset's winner when a reset is played; a `lead` grand final is one series the upper-bracket winner opens games ahead in (see [event_stage](../data/tables/event_stage.md)); with no grand final (`skip`) the upper final's winner ranks first and the lower final's winner second.
 
 `app/services/series_rules.py` answers the rules a `series` row plays under: a KOTH series reads them from its round, its stage and its event; a GNL series reads them from its season. The shape of the row decides, never the kind. A cup series reads its rules from its round and its stage in `app/services/cup_reads.py`.
 

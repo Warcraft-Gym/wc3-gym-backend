@@ -267,6 +267,9 @@ class CupSeriesPublic(PublicModel):
     # The places a placement bracket series' group plays for
     place_from: int | None = None
     place_to: int | None = None
+    # The games side 1 opens with: the head start of a lead grand final, else 0.
+    # The scores count them, so the games played are the scores less this.
+    head_start: int = 0
 
     @classmethod
     def from_series(cls, series: CupSeries) -> Self:

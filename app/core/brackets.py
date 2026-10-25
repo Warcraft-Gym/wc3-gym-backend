@@ -312,12 +312,26 @@ def elimination_plan(field: int, *, third_place: bool = False) -> Plan:
     return Plan(rounds, series, [_SINGLE_ROLES.get(name) for name in rounds])
 
 
+# The round a double elimination's grand final is played in, by name
+GRAND_FINAL = "Grand final"
+
+
+def head_start(round_name: str | None, modifier: str | None, lead: int | None) -> int:
+    """The games the upper-bracket winner opens a series with: the stage's lead
+    in the grand final of a lead stage, and none in any other series. The
+    upper-bracket winner always holds side 1 of the grand final."""
+    if modifier == "lead" and round_name == GRAND_FINAL:
+        return lead or 0
+    return 0
+
+
 def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
     """Every series of a double elimination bracket, upper then lower then final.
 
     The field is padded to a power of two of at least four, and a padded pair
     is a walkover the engine settles. `grand_final` is 'one', 'reset' for the
-    second series the lower bracket winner earns, or 'skip' for no final series.
+    second series the lower bracket winner earns, 'skip' for no final series,
+    or 'lead', one series the upper-bracket winner opens games ahead in.
     """
     # Two entrants pad to four, so the loser drops down and a grand final exists
     size = max(_power_of_two(field), 4)
@@ -373,7 +387,7 @@ def double_elimination_plan(field: int, *, grand_final: str = "one") -> Plan:
             number += 1
 
     if grand_final != "skip" and lower:
-        final = column("Grand final", [(upper[-1][0], lower[0])])
+        final = column(GRAND_FINAL, [(upper[-1][0], lower[0])])
         if grand_final == "reset":
             column(
                 "Grand final reset",

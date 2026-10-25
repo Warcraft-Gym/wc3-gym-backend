@@ -12,6 +12,8 @@ from pydantic import model_validator
 from sqlalchemy import UniqueConstraint, false
 from sqlmodel import Field, SQLModel
 
+from app.core.best_of import parse_plan
+from app.core.scoring import wins_of
 from app.models.base import DBModel
 from app.models.enums import SchedulingMode, StageFormat
 from app.models.types import (
@@ -99,10 +101,13 @@ class EventStage(DBModel, table=True):
     third_place: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
-    # What a double elimination final holds: one series, a reset, or none
+    # What a double elimination final holds: one series, a reset, none, or one
+    # series the upper-bracket winner opens games ahead in (lead)
     grand_final_modifier: str = Field(
         default="one", max_length=10, sa_column_kwargs={"server_default": "one"}
     )
+    # The games the upper-bracket winner opens a lead grand final with
+    grand_final_lead: int | None = None
     # How many losses end a player's run in a placement bracket; null plays every place
     placement_lives: int | None = None
     # The largest MMR difference a captain draft pairs inside; a gnl stage only
@@ -136,6 +141,7 @@ class EventStagePublic(SQLModel):
     seeds_locked_at: Annotated[datetime | None, AwareUTC] = None
     third_place: bool = False
     grand_final_modifier: str = "one"
+    grand_final_lead: int | None = None
     placement_lives: int | None = None
     # Null on every format but gnl, where an unset stage reads the default
     max_mmr_difference: int | None = None
@@ -177,7 +183,9 @@ class EventStageWrite(SQLModel):
     # How the draw seeds an entrant that has no seed yet
     seed_source: Literal["mmr", "random", "manual"] = "mmr"
     third_place: bool = False
-    grand_final_modifier: Literal["one", "reset", "skip"] = "one"
+    grand_final_modifier: Literal["one", "reset", "skip", "lead"] = "one"
+    # The games the upper-bracket winner opens the grand final with; a lead modifier only
+    grand_final_lead: int | None = Field(default=None, ge=1)
     # How many losses end a player's run in a placement bracket; null plays every place
     placement_lives: int | None = Field(default=None, ge=1)
     # The largest MMR difference a captain draft pairs inside; a gnl stage only
@@ -187,6 +195,31 @@ class EventStageWrite(SQLModel):
     def _gnl_only_max_mmr_difference(self) -> "EventStageWrite":
         if self.max_mmr_difference is not None and self.format != StageFormat.gnl:
             raise ValueError("max_mmr_difference belongs to a gnl stage only")
+        return self
+
+    @model_validator(mode="after")
+    def _lead_fits_the_grand_final(self) -> "EventStageWrite":
+        """A head start names its games, and only a lead grand final names any;
+        it stays below the wins the grand final takes, so a Bo1 allows none."""
+        leads = self.grand_final_modifier == "lead"
+        if leads != (self.grand_final_lead is not None):
+            raise ValueError(
+                "grand_final_lead goes with a lead grand final, and only with it"
+            )
+        if leads:
+            if self.format != StageFormat.double_elimination:
+                raise ValueError(
+                    "A head start belongs to a double elimination grand final"
+                )
+            games = parse_plan(self.best_of_by_round).get("grand_final", self.best_of)
+            wins = wins_of(games)
+            if wins == 1:
+                raise ValueError("A head start needs a grand final of Bo3 or longer")
+            if self.grand_final_lead is not None and self.grand_final_lead >= wins:
+                raise ValueError(
+                    f"A Bo{games} grand final ends at {wins} wins, so the head start "
+                    f"is {wins - 1} {'game' if wins == 2 else 'games'} at most"
+                )
         return self
 
 
