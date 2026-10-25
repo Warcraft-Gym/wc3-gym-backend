@@ -1,8 +1,10 @@
 """Who takes the cup announcements, and what the Home switch reads.
 
-A member joins or leaves the announcement role on Home. The row records the
-choice by the Discord account, which is what the role is granted to; the
-guild's role follows it through the bot.
+A member joins or leaves the announcement role on Home, or answers the question
+a cup sign-up asks. The row records the choice by the Discord account, which is
+what the role is granted to: `subscribed` holds the role, `declined` said no and
+is not asked again. No row means the member has not chosen and is asked at the
+next cup sign-up. The guild's role follows the choice through the bot.
 """
 
 from datetime import datetime
@@ -18,6 +20,12 @@ class AnnouncementSubscriber(DBModel, table=True):
     __tablename__ = "announcement_subscriber"
 
     discord_id: str = Field(max_length=50, primary_key=True)
+    # subscribed or declined
+    status: str = Field(
+        default="subscribed",
+        max_length=10,
+        sa_column_kwargs={"server_default": "subscribed"},
+    )
     subscribed_at: datetime = Field(
         default_factory=utcnow,
         sa_type=UTCDateTime,
@@ -32,6 +40,8 @@ class AnnouncementState(SQLModel):
     available: bool
     # The caller takes the announcement role
     subscribed: bool
+    # The caller has not chosen yet, so a cup sign-up asks
+    ask: bool = False
 
 
 class AnnouncementWrite(SQLModel):

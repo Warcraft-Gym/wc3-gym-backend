@@ -91,7 +91,7 @@ The 71 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [discord_role_binding](discord_role_binding.md) - One binding of a role kind and scope to a guild role, so the sync can grant and take back that role from what the database says.
 * [discord_role_hidden](discord_role_hidden.md) - One guild role an admin marked as none of the app's business, so the binding page hides it and it can never be bound.
 * [discord_post](discord_post.md) - One card the app posted in Discord and may edit later, with the two stamps that pace edits to the channel's rate limit.
-* [announcement_subscriber](announcement_subscriber.md) - One member who takes the cup announcement role, keyed by the Discord account the role is granted to.
+* [announcement_subscriber](announcement_subscriber.md) - One member's choice about the cup announcements, subscribed to the role or declined, keyed by the Discord account the role is granted to; no row is no choice yet.
 
 # Historical evidence and videos
 

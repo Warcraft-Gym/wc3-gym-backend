@@ -70,6 +70,18 @@ type SeedFill = Callable[[OrmSession, EventStage], None]
 # The draws a transaction made, as (event, stage, round or None, round name);
 # the cup announcements post them once it commits, so a refused draw posts nothing
 DRAWS = "cup_draws"
+# The series a transaction filled, both sides or every seat standing, and the ones
+# it emptied again; the announcements name each filled one once it commits, and
+# mark an emptied one's message replaced
+FILLED, EMPTIED = "cup_filled", "cup_emptied"
+
+
+def note_filled(session: OrmSession, series_id: int) -> None:
+    session.info.setdefault(FILLED, []).append(series_id)
+
+
+def note_emptied(session: OrmSession, series_id: int) -> None:
+    session.info.setdefault(EMPTIED, []).append(series_id)
 
 
 def note_draw(
@@ -410,6 +422,9 @@ def _fill_below(session: OrmSession, row: CupSeries) -> Sequence[CupSeries]:
         if other.slot2_from_series_id == row.id and stands_on_side(other, 2) is None:
             other.entrant2_id = entrant_of(row, other.slot2_takes_loser)
             other.player2_id = side_user(row, other.slot2_takes_loser)
+        # a series this result completes is named once the write holds
+        if other.entrant1_id is not None and other.entrant2_id is not None:
+            note_filled(session, ident(other))
     session.flush()
     return below
 
@@ -430,9 +445,11 @@ def on_reopened(session: OrmSession, row: CupSeries, force: bool = False) -> Non
         if other.slot1_from_series_id in cleared:
             other.entrant1_id = None
             other.player1_id = None
+            note_emptied(session, ident(other))
         if other.slot2_from_series_id in cleared:
             other.entrant2_id = None
             other.player2_id = None
+            note_emptied(session, ident(other))
         other.player1_score = None
         other.player2_score = None
         other.result_kind = "played"
@@ -558,6 +575,8 @@ def clear_places(session: OrmSession, row: CupSeries) -> None:
                 side.entrant_id = None
                 side.user_id = 0
                 side.place = None
+        for other in split[2]:
+            note_emptied(session, ident(other))
     for side in seats:
         side.place = None
     row.player1_score = row.player2_score = None
@@ -963,6 +982,12 @@ def _publics(session: OrmSession, rows: Sequence[CupSeries]) -> list[CupSeriesPu
     cup_reads.fill(session, rows, publics)
     _fill_teams(session, publics)
     _fill_sides(session, publics)
+    for public in publics:
+        # a lobby, more than two seats, is hosted by its last seat; a two-sided
+        # series, whose team sides list one row a player, by side 2
+        seats = {side.side_no for side in public.sides}
+        if len(seats) > 2:
+            public.host_side = max(seats)
     _fill_lobby_maps(session, rows, publics)
     return publics
 
@@ -1138,7 +1163,16 @@ def _fill_lobbies(
     through = _through(session, stage, done)
     dealt = brackets.snake(len(through), len(following))
     for lobby, taking in zip(following, dealt, strict=True):
-        _seat(session, lobby, [through[seed - 1] for seed in taking])
+        held = {
+            side.entrant_id for side in seats.get(ident(lobby), []) if side.entrant_id
+        }
+        seated = [through[seed - 1] for seed in taking]
+        _seat(session, lobby, seated)
+        # a lobby is named when it fills, and again only when a correction seats others
+        if held and held != {ident(entrant) for entrant in seated}:
+            note_emptied(session, ident(lobby))
+        if held != {ident(entrant) for entrant in seated}:
+            note_filled(session, ident(lobby))
 
 
 def _through(
