@@ -4,7 +4,16 @@ from datetime import datetime, timedelta
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ColumnElement, Select, func, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    CompoundSelect,
+    Select,
+    func,
+    or_,
+    select,
+    union,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import noload, selectinload
@@ -22,6 +31,9 @@ from app.core.exceptions import (
 )
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
+from app.models.cup_team import CupTeam, CupTeamMember
+from app.models.enums import EventKind
+from app.models.event_entrant import EventEntrant
 from app.models.link_prompt import LinkPromptPublic
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
@@ -65,8 +77,30 @@ W3C_SYNC_WORKERS = 4
 SYNC_MAX_AGE = timedelta(minutes=10)
 
 
+def _members() -> CompoundSelect[tuple[int]]:
+    """Who the nightly sync walks: everyone signed up for a GNL season, and every
+    player of a cup that is not finished or cancelled yet, so a cup's runners read
+    fresh ladder games of each player until the cup is played."""
+    open_cups = select(col(Season.id)).where(
+        col(Season.kind) == EventKind.cup,
+        col(Season.closed_at).is_(None),
+        col(Season.cancelled_at).is_(None),
+    )
+    return union(
+        select(col(DBUserSeasonSignup.user_id)),
+        select(col(EventEntrant.user_id)).where(
+            col(EventEntrant.event_id).in_(open_cups),
+            col(EventEntrant.user_id).is_not(None),
+            col(EventEntrant.withdrawn_at).is_(None),
+        ),
+        select(col(CupTeamMember.user_id))
+        .join(CupTeam, col(CupTeam.id) == col(CupTeamMember.team_id))
+        .where(col(CupTeam.event_id).in_(open_cups)),
+    )
+
+
 def stalest_members(started: datetime) -> list[UserReduced]:
-    """The next sync wave: the signed-up members synced longest ago, none synced since `started`."""
+    """The next sync wave: the members synced longest ago, none synced since `started`."""
     with Session() as session:
         rows = session.execute(
             select(
@@ -75,7 +109,7 @@ def stalest_members(started: datetime) -> list[UserReduced]:
                 col(User.battleTag),
                 col(User.ladder_synced_at),
             )
-            .where(col(User.id).in_(select(col(DBUserSeasonSignup.user_id)).distinct()))
+            .where(col(User.id).in_(_members()))
             .order_by(col(User.ladder_synced_at).asc().nulls_first(), col(User.id))
             .limit(W3C_SYNC_WORKERS)
         ).all()

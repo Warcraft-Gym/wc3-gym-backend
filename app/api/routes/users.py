@@ -16,6 +16,7 @@ from app.api.search import SearchQuery
 from app.core.exceptions import ApiError
 from app.core.security import is_admin
 from app.models.draft_board import PairMeeting
+from app.models.enums import Race
 from app.models.link_prompt import LinkPromptPublic, PromptAnswer
 from app.models.player_history import PlayerHistory
 from app.models.player_reads import (
@@ -33,7 +34,7 @@ from app.models.user import (
 )
 from app.models.user_battle_tag import MergePlan, MergeWrite, TagMoveWrite, TagWrite
 from app.models.user_block import SoftBlocksPublic
-from app.models.w3c_ladder_match import LadderPlayer
+from app.models.w3c_ladder_match import LadderPlayer, W3CSeasonLadder
 from app.services import draft_board, player_history, player_reads
 
 logger = logging.getLogger(__name__)
@@ -239,6 +240,20 @@ def get_user_ladder(
     """
     edge_cache(response, "running")
     return service.user_ladder(user_id, season_id)
+
+
+@router.get("/users/{user_id}/ladder/w3c-season")
+def get_user_w3c_season_ladder(
+    user_id: int,
+    service: LadderServiceDep,
+    response: Response,
+    race: Race | None = None,
+) -> W3CSeasonLadder:
+    """One player's ladder over the current w3champions season, on the race
+    named or else his profile race: the record, the MMR span, the last ten
+    games and the record against each race. A cup's run page reads it."""
+    edge_cache(response, "running")
+    return service.w3c_season_ladder(user_id, race)
 
 
 @router.get("/users/{user_id}/history")

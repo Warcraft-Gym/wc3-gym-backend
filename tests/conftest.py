@@ -177,6 +177,12 @@ def no_third_party_calls(monkeypatch: pytest.MonkeyPatch) -> None:
         raise AssertionError(f"the test called out to {method} {url}")
 
     monkeypatch.setattr(requests.Session, "request", refuse)
+    # A cup sign-up asks for the player's rating and, once it has answered, for
+    # their ladder games; a test of either patches it again
+    from app.services import cup_ladder, events
+
+    monkeypatch.setattr(events, "refresh_rating", lambda *args: None)
+    monkeypatch.setattr(cup_ladder, "sync", lambda user_ids: None)
 
 
 @pytest.fixture

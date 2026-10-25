@@ -1,5 +1,10 @@
 # Bundle history
 
+## 2026-10-25
+
+* **Add**: `GET /users/{id}/ladder/w3c-season` answers one player's ladder over the current W3Champions season on one race: the record, the MMR span, the last ten games and the record against each race, from the stored matches, edge-cached as running. [W3C ladder and achievements](concepts/ladder-and-achievements.md) and the [edge cache](concepts/edge-cache.md) state it.
+* **Update**: every cup signup, a hand-add, a swap and each player of a team included, reads the player's rating again from W3Champions, at most once an hour per player, whether or not the cup checks eligibility; once the answer is out it reads the player's ladder games of the current W3Champions season. The daily job also walks the players of every cup not finished or cancelled. [W3Champions](concepts/w3champions.md), [W3C ladder and achievements](concepts/ladder-and-achievements.md) and [jobs](api/jobs.md) state it.
+
 ## 2026-10-22
 
 * **Update**: `DELETE /events/{id}` of a cup also deletes the cup's [discord_post](data/tables/discord_post.md) rows, whose messages stay in the channel, and the [cup_recurrence](data/tables/cup_recurrence.md) it was the last cup of. A runner deletes an event, an admin or one of its organizers. The [events module](concepts/events-module.md) and [event](data/tables/event.md) state it.

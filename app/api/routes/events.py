@@ -73,6 +73,7 @@ from app.services import (
     awards,
     cup_announcements,
     cup_engine,
+    cup_ladder,
     cup_recurrence,
     cup_rounds,
     cup_teams,
@@ -284,7 +285,11 @@ def get_entrants(
     return service.get_entrants(event_id, claims)
 
 
-@router.post("/events/{event_id}/entrants", status_code=201)
+@router.post(
+    "/events/{event_id}/entrants",
+    status_code=201,
+    dependencies=[Depends(cup_ladder.after_signups)],
+)
 def add_entrant(
     event_id: int,
     data: EntrantSignup,
@@ -298,7 +303,7 @@ def add_entrant(
 @router.post(
     "/events/{event_id}/entrants/admin",
     status_code=201,
-    dependencies=[Depends(require_event_runner)],
+    dependencies=[Depends(require_event_runner), Depends(cup_ladder.after_signups)],
 )
 def add_entrant_as_admin(
     event_id: int, data: EntrantAdd, service: EventServiceDep
@@ -309,7 +314,7 @@ def add_entrant_as_admin(
 
 @router.post(
     "/events/{event_id}/entrants/{entrant_id}/replace",
-    dependencies=[Depends(require_event_runner)],
+    dependencies=[Depends(require_event_runner), Depends(cup_ladder.after_signups)],
 )
 def replace_entrant(
     event_id: int, entrant_id: int, data: EntrantAdd, service: EventServiceDep
@@ -319,7 +324,11 @@ def replace_entrant(
     return service.replace_entrant(event_id, entrant_id, data)
 
 
-@router.post("/events/{event_id}/cup-teams", status_code=201)
+@router.post(
+    "/events/{event_id}/cup-teams",
+    status_code=201,
+    dependencies=[Depends(cup_ladder.after_signups)],
+)
 def sign_up_team(
     event_id: int, data: CupTeamCreate, claims: RequireLogin
 ) -> EventEntrantPublic:
@@ -330,14 +339,18 @@ def sign_up_team(
 @router.post(
     "/events/{event_id}/cup-teams/admin",
     status_code=201,
-    dependencies=[Depends(require_event_runner)],
+    dependencies=[Depends(require_event_runner), Depends(cup_ladder.after_signups)],
 )
 def add_team(event_id: int, data: CupTeamAdd) -> EventEntrantPublic:
     """Enter a whole team by hand, every player confirmed."""
     return cup_teams.add_by_hand(event_id, data)
 
 
-@router.post("/events/{event_id}/cup-teams/{team_id}/accept", status_code=204)
+@router.post(
+    "/events/{event_id}/cup-teams/{team_id}/accept",
+    status_code=204,
+    dependencies=[Depends(cup_ladder.after_signups)],
+)
 def accept_invite(event_id: int, team_id: int, claims: RequireLogin) -> None:
     """Join the team that invited the caller."""
     cup_teams.accept(event_id, team_id, claims)
@@ -349,7 +362,11 @@ def decline_invite(event_id: int, team_id: int, claims: RequireLogin) -> None:
     cup_teams.decline(event_id, team_id, claims)
 
 
-@router.post("/events/{event_id}/cup-teams/{team_id}/invites", status_code=204)
+@router.post(
+    "/events/{event_id}/cup-teams/{team_id}/invites",
+    status_code=204,
+    dependencies=[Depends(cup_ladder.after_signups)],
+)
 def invite_player(
     event_id: int, team_id: int, data: TeamInviteCreate, claims: RequireLogin
 ) -> None:
@@ -381,7 +398,7 @@ def withdraw_team(event_id: int, team_id: int, claims: RequireLogin) -> None:
 
 @router.post(
     "/events/{event_id}/cup-teams/{team_id}/members/{user_id}/replace",
-    dependencies=[Depends(require_event_runner)],
+    dependencies=[Depends(require_event_runner), Depends(cup_ladder.after_signups)],
 )
 def replace_team_member(
     event_id: int, team_id: int, user_id: int, data: MemberReplace

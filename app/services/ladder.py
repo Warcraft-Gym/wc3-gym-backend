@@ -77,10 +77,12 @@ from app.models.w3c_ladder_match import (
     SeasonPlayer,
     W3CLadderMatch,
     W3CLadderMatchCreate,
+    W3CSeasonLadder,
 )
 from app.models.w3c_stats import W3CSyncFailure, W3CSyncResult
 from app.services.users import SYNC_MAX_AGE, W3C_SYNC_WORKERS, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
+from app.services.w3c_stats import w3c_season
 
 # Per rule id, the numbers a scope's price rows override
 ParamSet = Mapping[str, Mapping[str, int]]
@@ -323,6 +325,50 @@ class LadderService:
                 answer.race = signed.race.value if signed and signed.race else None
             return answer
 
+    def w3c_season_ladder(
+        self, user_id: int, race: Race | None = None
+    ) -> W3CSeasonLadder:
+        """One player's ladder over the w3champions season the app rates
+        against, on the race named, else on his profile race.
+
+        It reads the matches the app holds and asks w3champions nothing; the
+        matches are synced for a GNL season's window, so a player outside one
+        answers zeros. Six statements, seven while the w3champions season setting
+        is unset: the player, the season, the record, the MMR span, the record
+        against each race and the form.
+        """
+        with Session.begin() as session:
+            user = session.get(User, user_id)
+            if user is None:
+                raise NotFoundError("User not found")
+            played = race or user.race
+            season = w3c_season(session)
+            if played is None:
+                return W3CSeasonLadder(wc3_season=season, vs_race=_empty_races())
+            # the rated scope keeps the matches too short to count, which still move the MMR
+            rated: list[ColumnElement[bool]] = [
+                col(W3CLadderMatch.user_id) == user_id,
+                col(W3CLadderMatch.wc3_season) == season,
+                col(W3CLadderMatch.race) == played,
+            ]
+            counted = [*rated, ladder.counted_clause(col(W3CLadderMatch.duration_s))]
+            total = _totals(session, counted).get(user_id)
+            span = _mmr_span(session, rated).get(user_id)
+            races = _vs_race(session, counted).get(user_id)
+            form = _form(session, counted).get(user_id, "")
+        games = int(total.games or 0) if total is not None else 0
+        wins = int(total.wins or 0) if total is not None else 0
+        return W3CSeasonLadder(
+            race=played.value,
+            wc3_season=season,
+            wins=wins,
+            losses=games - wins,
+            games=games,
+            mmr=_mmr(span),
+            form=form,
+            vs_race=races or _empty_races(),
+        )
+
     def sync_season(
         self,
         season_id: int,
@@ -402,6 +448,23 @@ class LadderService:
             ).current_season()
             seasons = list(range(open_season, FIRST_W3C_SEASON - 1, -1))
         result = self.sync_users(pending, ALL_TIME, seasons)
+        result.skipped = skipped
+        return result
+
+    def sync_current_season(
+        self, users: Sequence[UserReduced], max_age: timedelta
+    ) -> W3CSyncResult:
+        """Sync these players over the w3champions season the app rates against
+        alone: what a cup reads of a player outside any GNL window.
+
+        The ledger keeps the season's stamp, so a player synced for it more
+        recently than max_age is skipped and a later run reads only the new
+        matches.
+        """
+        with Session() as session:
+            season = w3c_season(session)
+        pending, skipped = self._pending(users, max_age, [season])
+        result = self.sync_users(pending, ALL_TIME, [season])
         result.skipped = skipped
         return result
 
@@ -1258,6 +1321,13 @@ def recent_form(
     """
     if not user_ids:
         return {}
+    return _form(session, _scope(user_ids, None, season_id), count)
+
+
+def _form(
+    session: OrmSession, scope: list[ColumnElement[bool]], count: int = 10
+) -> dict[int, str]:
+    """The newest `count` matches of the scope per player, newest first, as W and L."""
     ranked = (
         select(
             col(W3CLadderMatch.user_id).label("user_id"),
@@ -1272,7 +1342,7 @@ def recent_form(
             )
             .label("n"),
         )
-        .where(*_scope(user_ids, None, season_id))
+        .where(*scope)
         .subquery()
     )
     form: dict[int, str] = defaultdict(str)

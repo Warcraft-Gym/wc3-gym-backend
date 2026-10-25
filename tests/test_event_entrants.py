@@ -643,7 +643,7 @@ def test_a_hand_added_player_is_held_to_the_same_rules(
     assert "rated 1300" in refused.json()["error"]
 
 
-def test_an_event_without_the_switch_still_only_warns_and_asks_nothing(
+def test_a_cup_without_the_switch_only_warns_and_still_asks_for_the_rating(
     client: Client,
     seeded: dict[str, Any],
     member: Member,
@@ -657,7 +657,8 @@ def test_an_event_without_the_switch_still_only_warns_and_asks_nothing(
 
     assert created.status_code == 201, created.text
     assert created.json()["warnings"] == ["under_mmr_min"]
-    assert asked == []
+    # every cup asks, so its runners read a fresh rating beside the run page
+    assert [user_id for user_id, _ in asked] == [seeded["player_ids"][0]]
 
 
 def test_the_bounds_must_hold_together(

@@ -119,6 +119,7 @@ from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services import (
     cup_divisions,
     cup_engine,
+    cup_ladder,
     cup_reads,
     cup_recurrence,
     cup_rounds,
@@ -3107,10 +3108,13 @@ def _refresh_for(
     event_id: int, data: EntrantSignup, claims: dict[str, Any] | None
 ) -> None:
     """Ask W3Champions for the player's rating of the day before an event that
-    checks eligibility decides on it. Any other event reads nothing here."""
+    checks eligibility decides on it, and on every cup, whose runners read the
+    rating beside the run page. A cup also names the player for a read of their
+    ladder games once the answer is out. Any other event reads nothing here."""
     with Session.begin() as session:
         event = _event(session, event_id)
-        if not event.eligibility_required or data.team_id is not None:
+        cup = cup_divisions.is_cup(event)
+        if data.team_id is not None or not (cup or event.eligibility_required):
             return
         named = getattr(data, "user_id", None)
         user = (
@@ -3121,9 +3125,11 @@ def _refresh_for(
             (ident(user), tag.tag) if user is not None and tag is not None else None
         )
         # a race that counts by its lifetime games needs the seasons before the window
-        history = event.race_games_min is not None
+        history = event.eligibility_required and event.race_games_min is not None
     if target is not None:
         refresh_rating(*target, history)
+        if cup:
+            cup_ladder.want(target[0])
 
 
 def _hold_verified(session: OrmSession, user_id: int) -> None:
