@@ -571,7 +571,7 @@ class EventService:
                 if not cup:
                     raise BadRequestError("Only a cup is played as a custom game")
                 if len(set(data.map_ids)) != 1:
-                    raise BadRequestError("A custom game cup is played on one map")
+                    raise BadRequestError(ONE_MAP)
                 # every game is played on the cup's one map, so nothing is vetoed
                 event.veto_by_best_of = False
             if cup and data.legs:
@@ -613,12 +613,30 @@ class EventService:
             return _answer(session, ident(event))
 
     def update(self, event_id: int, data: EventUpdate) -> EventPublic:
-        """Change the event fields the body names; the stages have their own route."""
+        """Change the event fields the body names.
+
+        A cup's Edit cup save also sends its stages, its map pool, its custom
+        game choice and its points table, and they are written together, so
+        the pool is checked against the stages once both are in.
+        """
         with Session.begin() as session:
             event = _event(session, event_id, full=True)
             fields = data.model_dump(
-                exclude_unset=True, exclude={"round_count", "uses_divisions"}
+                exclude_unset=True,
+                exclude={
+                    "round_count",
+                    "uses_divisions",
+                    "custom_game",
+                    "points_by_place",
+                    "stages",
+                    "map_ids",
+                },
             )
+            cup = cup_divisions.is_cup(event)
+            if cup:
+                _hold_cup_mode(session, event, fields, data)
+            elif data.model_fields_set & CUP_ONLY:
+                raise BadRequestError("Only a cup takes these settings")
             if "league_id" in fields and fields["league_id"] != event.league_id:
                 linked_team = session.scalar(
                     select(col(DBTeamSeason.team_id))
@@ -654,11 +672,13 @@ class EventService:
                 from app.services.seasons import fill_rounds
 
                 fill_rounds(session, event, data.round_count or 0)
-            if data.uses_divisions is not None and cup_divisions.is_cup(event):
+            if data.uses_divisions is not None and cup:
                 cup_divisions.set_uses_divisions(session, event, data.uses_divisions)
-            if "starts_at" in fields and cup_divisions.is_cup(event):
+            if "starts_at" in fields and cup:
                 # a cup over rounds starts with its first round
                 cup_rounds.follow_start(session, event)
+            if cup:
+                _edit_cup(session, event, data)
             session.flush()
             hold_pool(session, event)
             return _answer(session, ident(event))
@@ -689,30 +709,11 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id)
-            if cup_divisions.is_cup(event) and cup_rounds.has_legs(session, event_id):
-                cup_rounds.set_leg_stages(session, event_id, stages)
-                hold_pool(session, event)
-                return _answer(session, event_id)
-            rows = list(stages)
-            current = list(
-                session.scalars(
-                    select(EventStage)
-                    .where(col(EventStage.event_id) == event_id)
-                    .order_by(col(EventStage.position))
-                )
-            )
-            for row, stage in zip(current, rows, strict=False):
-                row.sqlmodel_update(stage.model_dump())
-            dropped = current[len(rows) :]
-            if dropped:
-                _refuse_rounds(session, dropped)
-                for row in dropped:
-                    session.delete(row)
-            if len(rows) > len(current):
-                _write_stages(
-                    session, event, rows[len(current) :], start=len(current) + 1
-                )
-            session.flush()
+            if cup_divisions.is_cup(event) and _plays_ffa(stages) != _plays_ffa(
+                _stages_of(session, event_id)
+            ):
+                _hold_unentered(session, event_id)
+            _set_stages(session, event, stages)
             hold_pool(session, event)
             return _answer(session, ident(event))
 
@@ -724,30 +725,9 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id)
-            vetoed = session.scalar(
-                select(col(CupVetoStep.series_id))
-                .join(CupSeries, col(CupSeries.id) == col(CupVetoStep.series_id))
-                .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
-                .where(col(DBEventRound.season_id) == event_id)
-                .limit(1)
-                if event.kind is EventKind.cup
-                else select(col(DBSeriesVetoStep.series_id))
-                .join(Series, col(Series.id) == col(DBSeriesVetoStep.series_id))
-                .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
-                .where(col(DBEventRound.season_id) == event_id)
-                .limit(1)
-            )
-            if vetoed is not None:
-                raise BadRequestError(
-                    "A series of this event has started its veto; the pool stays"
-                )
             if cup_divisions.custom_game(session, event) and len(set(map_ids)) != 1:
-                raise BadRequestError("A custom game cup is played on one map")
-            session.execute(
-                delete(DBMapSeason).where(col(DBMapSeason.season_id) == event_id)
-            )
-            _write_pool(session, event_id, map_ids)
-            session.flush()
+                raise BadRequestError(ONE_MAP)
+            _set_pool(session, event, map_ids)
             hold_pool(session, event)
             return _answer(session, event_id)
 
@@ -1682,6 +1662,137 @@ def _write_pool(session: OrmSession, event_id: int, map_ids: list[int]) -> None:
     session.flush()
 
 
+def _stages_of(session: OrmSession, event_id: int) -> list[EventStage]:
+    return list(
+        session.scalars(
+            select(EventStage)
+            .where(col(EventStage.event_id) == event_id)
+            .order_by(col(EventStage.position))
+        )
+    )
+
+
+def _set_stages(
+    session: OrmSession,
+    event: Season,
+    stages: Sequence[EventStageWrite],
+    one_round: bool = False,
+) -> None:
+    """Write the event's stage list in place; a cup over rounds writes the
+    format of every round, from one round's stages when `one_round` says so."""
+    event_id = ident(event)
+    if cup_divisions.is_cup(event) and cup_rounds.has_legs(session, event_id):
+        cup_rounds.set_leg_stages(session, event_id, stages, one_round)
+        return
+    rows = list(stages)
+    current = _stages_of(session, event_id)
+    for row, stage in zip(current, rows, strict=False):
+        row.sqlmodel_update(stage.model_dump())
+    dropped = current[len(rows) :]
+    if dropped:
+        _refuse_rounds(session, dropped)
+        for row in dropped:
+            session.delete(row)
+    if len(rows) > len(current):
+        _write_stages(session, event, rows[len(current) :], start=len(current) + 1)
+    session.flush()
+
+
+def _set_pool(session: OrmSession, event: Season, map_ids: list[int]) -> None:
+    """Replace the map pool, refused once a series has started its veto."""
+    event_id = ident(event)
+    vetoed = session.scalar(
+        select(col(CupVetoStep.series_id))
+        .join(CupSeries, col(CupSeries.id) == col(CupVetoStep.series_id))
+        .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
+        .where(col(DBEventRound.season_id) == event_id)
+        .limit(1)
+        if event.kind is EventKind.cup
+        else select(col(DBSeriesVetoStep.series_id))
+        .join(Series, col(Series.id) == col(DBSeriesVetoStep.series_id))
+        .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+        .where(col(DBEventRound.season_id) == event_id)
+        .limit(1)
+    )
+    if vetoed is not None:
+        raise BadRequestError(
+            "A series of this event has started its veto; the pool stays"
+        )
+    session.execute(delete(DBMapSeason).where(col(DBMapSeason.season_id) == event_id))
+    _write_pool(session, event_id, map_ids)
+    session.flush()
+
+
+def _plays_ffa(stages: Iterable[EventStage | EventStageWrite]) -> bool:
+    return any(stage.format is StageFormat.ffa for stage in stages)
+
+
+def _hold_unentered(session: OrmSession, event_id: int) -> None:
+    """Refuse a change to a cup's game mode once anyone has signed up: the
+    entrants signed up as players or as teams of its size."""
+    entered = session.scalar(
+        select(col(EventEntrant.id))
+        .where(col(EventEntrant.event_id) == event_id)
+        .limit(1)
+    )
+    if entered is not None:
+        raise ApiError(409, {"error": MODE_LOCKED})
+
+
+def _hold_cup_mode(
+    session: OrmSession, event: Season, fields: dict[str, Any], data: EventUpdate
+) -> None:
+    """A cup's game mode, its team size, entrant kind, custom game and free
+    for all, changes until the first sign-up."""
+    changed = any(
+        fields[key] != getattr(event, key) for key in CUP_MODE & fields.keys()
+    )
+    if data.custom_game is not None:
+        changed |= data.custom_game != cup_divisions.custom_game(session, event)
+    if data.stages is not None:
+        changed |= _plays_ffa(data.stages) != _plays_ffa(
+            _stages_of(session, ident(event))
+        )
+    if changed:
+        _hold_unentered(session, ident(event))
+
+
+def _edit_cup(session: OrmSession, event: Season, data: EventUpdate) -> None:
+    """Write what Edit cup sends beside the event fields: the custom game
+    choice, the stages, the pool and the points table. The stages, the pool
+    and the points change until the draw."""
+    event_id = ident(event)
+    if data.custom_game is not None:
+        cup_divisions.set_custom_game(session, event, data.custom_game)
+    if cup_divisions.custom_game(session, event):
+        # every game is played on the cup's one map, so nothing is vetoed
+        event.veto_by_best_of = False
+    if data.stages is not None:
+        cup_divisions.hold_undrawn(session, event_id, FORMAT_DRAWN)
+        # Edit cup sends one round's stages, whatever their number
+        _set_stages(session, event, data.stages, one_round=True)
+    if data.map_ids is not None:
+        cup_divisions.hold_undrawn(session, event_id, FORMAT_DRAWN)
+        _set_pool(session, event, data.map_ids)
+    if data.points_by_place is not None:
+        if not cup_rounds.has_legs(session, event_id):
+            raise BadRequestError("Only a cup played over rounds pays points per place")
+        cup_divisions.hold_undrawn(session, event_id, POINTS_DRAWN)
+        cup_divisions.set_points(
+            session, event, cup_rounds.points_text(data.points_by_place)
+        )
+    if data.model_fields_set & {"custom_game", "map_ids"} and cup_divisions.custom_game(
+        session, event
+    ):
+        pool = session.scalar(
+            select(func.count())
+            .select_from(DBMapSeason)
+            .where(col(DBMapSeason.season_id) == event_id)
+        )
+        if pool != 1:
+            raise BadRequestError(ONE_MAP)
+
+
 def _refuse_rounds(session: OrmSession, dropped: Sequence[EventStage]) -> None:
     """Refuse to drop a stage that still holds rounds.
 
@@ -2249,6 +2360,8 @@ def _public(
     public.phase = phase_of(session, event, resolved_counts, last_stage)
     public.signups_open = _signups_open(event, public.phase)
     public.unscored_series = resolved_counts[0] - resolved_counts[2]
+    if cup_divisions.is_cup(event):
+        public.drawn = resolved_counts[0] > 0
     public.round_count = event.round_count
     public.fantasy_tiers = tier_count(event.fantasy_tier_cuts)
     public.fantasy_tier_cuts = event.fantasy_tier_cuts or []
@@ -2274,6 +2387,10 @@ def _public(
     if cup_divisions.is_cup(event):
         public.ffa = _cup_formats(session, [event])[ident(event)][0]
         public.cup_legs = cup_rounds.legs_of(session, ident(event)) or None
+        if public.cup_legs:
+            public.points_by_place = cup_rounds.points_of(
+                cup_divisions.points_text(session, event)
+            )
         public.cup_recurrence = cup_recurrence.ref_of(session, ident(event))
     public.stages = [
         EventStagePublic.model_validate(row)
@@ -3062,6 +3179,16 @@ SIGNUP_RULES = {
 RULES_DRAWN = (
     "The cup is drawn, so its sign-up rules are set; undo the draw to change them"
 )
+# The game mode of a cup: what its players signed up as
+CUP_MODE = {"team_size", "entrant_kind"}
+MODE_LOCKED = "Players have signed up, so the cup's game mode stays"
+FORMAT_DRAWN = (
+    "The cup is drawn, so its format and maps are set; undo the draw to change them"
+)
+POINTS_DRAWN = "A round is drawn, so the points table stays"
+ONE_MAP = "A custom game cup is played on one map"
+# What an update takes for a cup alone
+CUP_ONLY = {"custom_game", "points_by_place", "stages", "map_ids"}
 
 RACE_NAMES = {
     "HU": "Human",

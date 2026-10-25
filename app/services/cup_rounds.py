@@ -41,9 +41,14 @@ from app.models.season import Season
 from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
 from app.services import cup_reads, organizers
+from app.services.cup_divisions import hold_undrawn
 
 # What each place of a round pays when the cup names no table of its own
 DEFAULT_POINTS = [10, 8, 6, 5, 4, 3, 2, 1]
+STAGES_DRAWN = (
+    "A round is drawn, so every round keeps the stages it plays; "
+    "change their format, not their number"
+)
 
 
 def points_of(text: str | None) -> list[int]:
@@ -84,24 +89,42 @@ def write_legs(
         )
         session.add(row)
         session.flush()
-        for stage in stages:
-            copy = EventStage(
-                event_id=ident(event), position=position, **stage.model_dump()
-            )
-            session.add(copy)
-            session.flush()
-            session.add(CupLegStage(stage_id=ident(copy), leg_id=ident(row)))
-            position += 1
+        position = _copy_stages(session, ident(event), ident(row), stages, position)
     session.flush()
 
 
+def _copy_stages(
+    session: OrmSession,
+    event_id: int,
+    leg_id: int,
+    stages: Sequence[EventStageWrite],
+    position: int,
+) -> int:
+    """Write a round's copy of the stages from `position` on; answer the next position."""
+    for stage in stages:
+        copy = EventStage(event_id=event_id, position=position, **stage.model_dump())
+        session.add(copy)
+        session.flush()
+        session.add(CupLegStage(stage_id=ident(copy), leg_id=leg_id))
+        position += 1
+    return position
+
+
 def set_leg_stages(
-    session: OrmSession, event_id: int, rows: Sequence[EventStageWrite]
+    session: OrmSession,
+    event_id: int,
+    rows: Sequence[EventStageWrite],
+    one_round: bool = False,
 ) -> None:
     """Write the format of a cup played over rounds. A body of one round's
     stages is written onto every round, so the rounds keep playing the same
-    format; a body of every stage is written in place. The rounds keep their
-    number of stages either way."""
+    format; a body of every stage is written in place, and `one_round` reads
+    any body as one round's stages. Until the first draw a body of one round's
+    stages may hold more or fewer stages than a round plays, and every round
+    then takes a fresh copy of it; after the draw the rounds keep their number
+    of stages."""
+    if not rows:
+        raise BadRequestError("A round plays the cup's stages, so it needs one")
     stages = list(
         session.scalars(
             select(EventStage)
@@ -110,14 +133,20 @@ def set_leg_stages(
             .order_by(col(EventStage.position))
         )
     )
-    legs = len(legs_of(session, event_id))
-    per_leg = len(stages) // legs
+    legs = _rows(session, event_id)
+    per_leg = len(stages) // len(legs)
     if len(rows) == per_leg:
-        rows = [row for _ in range(legs) for row in rows]
-    if len(rows) != len(stages):
-        raise BadRequestError(
-            "Every round of this cup plays the same stages; change their format, not their number"
-        )
+        rows = [row for _ in legs for row in rows]
+    elif one_round or len(rows) != len(stages):
+        hold_undrawn(session, event_id, STAGES_DRAWN)
+        for stage in stages:
+            session.delete(stage)
+        session.flush()
+        position = 1
+        for leg in legs:
+            position = _copy_stages(session, event_id, ident(leg), rows, position)
+        session.flush()
+        return
     for stage, row in zip(stages, rows, strict=True):
         stage.sqlmodel_update(row.model_dump())
     session.flush()

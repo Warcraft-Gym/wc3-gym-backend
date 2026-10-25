@@ -195,9 +195,14 @@ def update_event(
     claims: RequireEventRunner,
     background: BackgroundTasks,
 ) -> EventPublic:
-    """Change the event fields the body names. A cup that now reads
-    published with its signups open is announced, the first time only."""
-    organizers.hold_to_small_events(claims, data.model_dump(exclude_unset=True))
+    """Change the event fields the body names; a cup's Edit cup save sends its
+    stages and pool with them. A cup that now reads published with its signups
+    open is announced, the first time only."""
+    organizers.hold_to_small_events(
+        claims,
+        data.model_dump(exclude_unset=True),
+        [stage.format for stage in data.stages or []],
+    )
     event = service.update(event_id, data)
     background.add_task(cup_announcements.announce_open, event_id)
     return event
