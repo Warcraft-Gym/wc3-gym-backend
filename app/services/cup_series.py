@@ -162,9 +162,13 @@ def report(
                 raise BadRequestError("A result needs both map scores")
             if not decided(data.player1_score, data.player2_score, wins):
                 raise BadRequestError(f"A series of this cup ends at {wins} map wins.")
+            lead = _hold_head_start(session, row, data.player1_score)
             played = series_games.parse(data.games)
             if played:
-                series_games.check(played, data.player1_score, data.player2_score)
+                # the games are the ones played; a head start is in the score alone
+                series_games.check(
+                    played, data.player1_score - lead, data.player2_score
+                )
             # a reported score is a played result, even over a walkover or a forfeit
             row.result_kind = "played"
         fields = data.model_fields_set
@@ -356,6 +360,18 @@ def _withdrawn(session: OrmSession, row: CupSeries, side: int | None) -> bool:
     return entrant is not None and entrant.withdrawn_at is not None
 
 
+def _hold_head_start(session: OrmSession, row: CupSeries, first: int) -> int:
+    """Refuse a score below the head start side 1 opens a lead grand final
+    with, and answer the head start; every other series has none."""
+    lead = cup_engine.series_head_start(session, row)
+    if first < lead:
+        raise BadRequestError(
+            f"The upper-bracket winner starts {lead}-0, so their score is "
+            f"{lead} or more"
+        )
+    return lead
+
+
 def _hold_both_sides(
     session: OrmSession, row: CupSeries, first: int, second: int
 ) -> None:
@@ -431,6 +447,8 @@ def _write(
             )
         if first is not None and second is not None:
             _hold_both_sides(session, row, first, second)
+            if (first, second) != (0, 0):
+                _hold_head_start(session, row, first)
         row.player1_score, row.player2_score = first, second
     for side, race in races.items():
         setattr(row, side, race)

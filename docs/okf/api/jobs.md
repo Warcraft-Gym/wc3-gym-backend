@@ -4,7 +4,7 @@ title: Scheduled jobs
 description: Five job routes behind a shared secret, two called daily by Vercel, one by a Cloudflare Worker whenever a reminder or a cup call falls due, and two an operator reads for egress.
 resource: ../../../app/api/routes/jobs.py
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-23T12:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-25T12:00:00Z }
 sources:
   - id: jobs
     resource: ../../../app/api/routes/jobs.py
@@ -27,7 +27,7 @@ sources:
 
 | Route | Does | Called by |
 |---|---|---|
-| `GET /jobs/w3c-sync` | drains the stalest players' ladder matches and stats for 50 seconds, inside the 60 second function limit | Vercel cron at 04:00 UTC, shifted by up to 59 minutes |
+| `GET /jobs/w3c-sync` | drains the ladder matches and stats of the stalest members, the GNL sign-ups and the players of every cup not finished or cancelled, for 50 seconds, inside the 60 second function limit | Vercel cron at 04:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/cast-reminders` | posts the reminder card for series that start soon, and calls every cup, or round of a cup, to check in an hour before its check-in closes or it starts, or when its check-in opens if that is later; answers `posted`, `late`, `missed`, `cup_reminders` and `next_run` | the Cloudflare Worker in the Discord adapter repository, at the `next_run` it holds, and at least once a day |
 | `GET /jobs/egress?days=7` | the [egress ledger](../data/tables/egress_ledger.md) rows of the last `days` days (1 to 90), most rows first, with `Cache-Control: no-store` | an operator, with `just monitor routes` and `just monitor egress` |
 | `GET /jobs/egress-snapshot` | copies pg_stat_statements into [egress_snapshot](../data/tables/egress_snapshot.md) on the server, deletes snapshots older than 35 days, and answers the window since the run before: rows, statements and the ten statements that returned the most rows; then [the egress monitor](#the-egress-monitor) levels the cycle, the database size and the Vercel usage and posts to `DEV_ALERTS_WEBHOOK_URL` when it is set | Vercel cron at 00:00 UTC, shifted by up to 59 minutes |

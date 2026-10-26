@@ -231,10 +231,12 @@ def test_a_format_edit_reaches_every_round(
     assert edited.status_code == 200, edited.text
     assert [stage["best_of"] for stage in edited.json()["stages"]] == [5, 5, 5]
 
+    # before the first draw a round may play more stages, and every round takes them
     more = client.put(
         f"/events/{cup['id']}/stages", json=one_round * 2, headers=auth_headers
     )
-    assert more.status_code == 400, more.text
+    assert more.status_code == 200, more.text
+    assert [len(leg["stage_ids"]) for leg in more.json()["cup_legs"]] == [2, 2, 2]
 
 
 def test_a_signup_after_the_first_draw_joins_the_later_rounds(

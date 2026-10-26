@@ -763,6 +763,10 @@ class EventPublic(SQLModel):
     uses_divisions: bool | None = None
     # A cup played as a custom game on one map; null on any other kind
     custom_game: bool | None = None
+    # A cup with a series drawn in any stage; null on any other kind
+    drawn: bool | None = None
+    # A cup played over rounds: the points each place of a round pays; null otherwise and on a list read
+    points_by_place: list[int] | None = None
     # A cup whose stages play free for all lobbies; null on any other kind
     ffa: bool | None = None
     # A cup played over rounds: its rounds in order; null on any other event and on a list read
@@ -896,6 +900,13 @@ class EventUpdate(SQLModel):
     team_size: int | None = Field(default=None, ge=2, le=4)
     # A cup's choice to split into divisions; off takes them back before the draw
     uses_divisions: bool | None = None
+    # A cup's custom game choice; with team_size and entrant_kind it changes until a player signs up
+    custom_game: bool | None = None
+    # A cup played over rounds: the points each place of a round pays; it changes until a round is drawn
+    points_by_place: list[int] | None = None
+    # A cup's stages and map pool in the same write, as Edit cup saves them; they change until the draw
+    stages: list[EventStageWrite] | None = None
+    map_ids: list[int] | None = None
     entrant_cap: int | None = None
     entrant_min: int | None = Field(default=None, ge=2)
     series_per_round: int | None = None

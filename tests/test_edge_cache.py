@@ -28,6 +28,7 @@ ROUTES = [
     ("/users/{player}/profile?event_id={season_id}", RUNNING),
     ("/users/{player}/ladder", RUNNING),
     ("/users/{player}/ladder?season_id={season_id}", RUNNING),
+    ("/users/{player}/ladder/w3c-season", RUNNING),
     ("/users/{player}/history", RUNNING),
     ("/leagues/{league_id}/teams", RUNNING),
     ("/leagues/{league_id}/teams/basic", RUNNING),

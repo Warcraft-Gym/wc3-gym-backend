@@ -4,7 +4,7 @@ title: W3C ladder and achievements
 description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and the badge rules run as one SQL union.
 resource: ../../../app/services/ladder.py
 tags: [w3champions]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-25T10:00:00Z }
 sources:
   - id: ladder
     resource: ../../../app/services/ladder.py
@@ -43,6 +43,7 @@ Two sync pipelines exist and must not be confused: **matches** (this table, this
 - A series row of a finished event (closed or past its end) carries the MMR of the time per side: `mmr_at` at the series time, else its round's first day, on the race the row names, inside the event's W3Champions seasons, one statement per finished event and no ladder row sent. One statement tells the list's finished events from its running ones. No match in bound is null, never today's figure. A running event's rows read `w3cstats`. The draft board's meetings read `mmr_at` inside each meeting's own event, plus the current W3Champions season while that event runs (not closed, its end not passed); the fantasy tiers read `mmr_on` on the Apply date inside the season's W3Champions seasons, else the current one while the season runs and nothing once it is finished; a Discord series card reads the ladder summary of `w3cstats` on the race the row names.
 - A roster of an event that is over (closed or past its end) carries `mmr_entered` per player: `mmr_at` at the event's first day, midnight UTC, on his signup race, inside the event's W3Champions seasons, read on the statement that names every player's signup race, so it costs no statement and no row more. No signup race or no match in bound is null.
 - `GET /events/{id}/ladder` and `GET /users/{id}/ladder` answer the totals, per-day bars, MMR spans and badges. The event read is edge-cached; see [the pitfall](../pitfalls/edge-cache-cors.md).
+- `GET /users/{id}/ladder/w3c-season` answers one player's record, MMR span, last ten counted games (`form`, newest first) and record against each race over the current W3Champions season (`w3c_season`), on the race `race` names or else the profile race. A cup's run page reads it in the player stats panel. It reads the stored matches alone and asks W3Champions nothing: a cup signup reads the player's games of that season once the answer is out (`cup_ladder`, at most once an hour per player), and the daily job keeps them fresh until the cup is finished or cancelled, so a player who never signed up for one answers zeros. Six statements, seven while the W3Champions season setting is unset; edge-cached as running.
 - A team card of the event ladder carries `icon_url`, and a row of `GET /events/{id}/ladder/players` carries `team`, `team_id` and `team_icon_url`. The roster read carries the logo, so neither costs a statement.
 
 # Achievements
@@ -59,4 +60,4 @@ The `settings` row `current_w3c_season` pins the season the ratings read: the li
 
 # Synchronisation
 
-`GET /jobs/w3c-sync`, called by the daily Vercel cron with `CRON_SECRET`, drains the stalest players first for 50 seconds. The manual buttons stay and have no throttle. Every W3Champions call has a 10 second timeout and a throttled answer maps to a 502 with a fixed message.
+`GET /jobs/w3c-sync`, called by the daily Vercel cron with `CRON_SECRET`, drains the stalest members first for 50 seconds: every player signed up for a GNL season, and every player of a cup that is not finished or cancelled. The manual buttons stay and have no throttle. Every W3Champions call has a 10 second timeout and a throttled answer maps to a 502 with a fixed message.

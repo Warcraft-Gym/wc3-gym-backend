@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, cups announce themselves to the members who opt in, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-25T18:00:00Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -57,13 +57,14 @@ Card rules: a mention is a call to action, so `/upcoming` tags nobody and the re
 
 # Cup announcements
 
-A cup posts four messages in the channel the `announcement_channel_id` setting names, through `app/services/cup_announcements.py`:
+A cup posts five kinds of message in the channel the `announcement_channel_id` setting names, through `app/services/cup_announcements.py`:
 - **Open:** a cup that reads published with its signups open, after `POST /events`, `PUT /events/{id}` or a recurring cup made, with the event card's description and a link to sign up on the site.
 - **Reminder:** `GET /jobs/cast-reminders` also calls every cup to check in, once: an hour before its check-in closes early (`checkin_closes_minutes`), else an hour before it starts, or when its check-in opens if that is later, and only while the check-in stands open and the cup is not drawn. A cup played over rounds is called round by round, each round on its own start and window; a start that has passed is not called. A cup that takes no check-in is called an hour before it starts.
-- **Draw:** a stage's first draw and every later round of a stage that draws round by round, from the runner's draw, a result that draws the next round or stage, or a withdrawal. The engine marks each draw in the session, and the post goes out after the commit, so a refused draw posts nothing.
+- **Draw:** a stage's first draw and every later round of a stage that draws round by round, from the runner's draw, a result that draws the next round or stage, or a withdrawal. The engine marks each draw in the session, and the post goes out after the commit, so a refused draw posts nothing. It lists every series the draw set, one line each: the game name (`GYM` and the series id), the two sides with the host marked, side 2 or the last seat of a lobby, and a link to the series' veto on the event page (`?tab=draw&veto=`), or to the draw on a custom game cup or a lobby; a bye is named. A draw too long for one message goes out in several, so no ping and no line is lost to Discord's limits.
+- **Series:** a later series, once a result sets both its sides or every seat of a lobby, in the same form as one line of the draw, once (`cup_series`). A series a draw set in the same write is in the draw's message already. When a corrected or cleared result takes a side back off a series already called, its message is edited to say the pairing changed and its row goes, so the new pairing is called again; an edit pings nobody.
 - **Top three:** after `POST /events/{id}/finish`, per division, or from the overall table with its points for a cup played over rounds. A close after a reopen edits that card.
 
-Each message pings the role `announcement_role_id` names, in the message content with `allowed_mentions` naming that role alone; a missing channel posts nothing, and a missing role posts with no ping. Each is a `discord_post` row of its own kind and goes out once. A deleted cup drops those rows, and its messages stay in the channel. A member takes or leaves the role on Home with `PUT /me/announcements`; see [the decision](../decisions/cup-announcements.md).
+The open, reminder and top-three messages ping the role `announcement_role_id` names; the draw and series messages ping the players of their series instead, a team's captain for a team, and a player with no Discord login is named without a ping. Every ping rides in the message content, with `allowed_mentions` naming those accounts alone; a missing channel posts nothing, and a missing role posts with no ping. Each is a `discord_post` row of its own kind and goes out once. A deleted cup drops those rows, and its messages stay in the channel. A member takes or leaves the role on Home, or answers the question a cup sign-up asks, with `PUT /me/announcements`; see [the decision](../decisions/cup-announcements.md).
 
 # The guild read and the roles
 

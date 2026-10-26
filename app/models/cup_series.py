@@ -196,6 +196,12 @@ class CupSeriesSidePublic(SeriesSidePublic):
     left: bool = False
 
 
+def game_name(series_id: int) -> str:
+    """The lobby name a series is played under in Warcraft III: short, so it
+    fits the game's name field, and one of its own, so it is found in the list."""
+    return f"GYM {series_id}"
+
+
 class LobbyMapPublic(SQLModel):
     """The map a lobby is played on."""
 
@@ -267,6 +273,13 @@ class CupSeriesPublic(PublicModel):
     # The places a placement bracket series' group plays for
     place_from: int | None = None
     place_to: int | None = None
+    # The games side 1 opens with: the head start of a lead grand final, else 0.
+    # The scores count them, so the games played are the scores less this.
+    head_start: int = 0
+    # The name the game is hosted under, and the side that hosts it: side 2 of a
+    # two-sided series, the last seat of a lobby. Never stored; the read derives both
+    game_name: str = ""
+    host_side: int = 2
 
     @classmethod
     def from_series(cls, series: CupSeries) -> Self:
@@ -297,6 +310,7 @@ class CupSeriesPublic(PublicModel):
             slot1_takes_loser=series.slot1_takes_loser,
             slot2_from_series_id=series.slot2_from_series_id,
             slot2_takes_loser=series.slot2_takes_loser,
+            game_name=game_name(ident(series)),
         )
 
 

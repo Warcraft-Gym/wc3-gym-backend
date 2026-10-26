@@ -48,7 +48,7 @@ Each route's deprecated aliases carry the same header.
 | `GET /home/series`, `GET /home/series/upcoming` | running |
 | `GET /users/{key}`, for an anonymous caller only | running |
 | `GET /users/{user_id}/summary`, `GET /users/{user_id}/profile` | running |
-| `GET /users/{user_id}/ladder`, `GET /users/{user_id}/history` | running |
+| `GET /users/{user_id}/ladder`, `GET /users/{user_id}/ladder/w3c-season`, `GET /users/{user_id}/history` | running |
 | `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | running |
 | `GET /events/{event_id}`, for an anonymous caller only | by the event's phase |
 | `GET /events/{event_id}/entrants`, for an anonymous caller only | by the event's phase |

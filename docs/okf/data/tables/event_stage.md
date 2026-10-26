@@ -4,7 +4,7 @@ title: event_stage
 description: One format played over the entrants of an event, with the points, the tie breaks and the advance rule; standings are computed from it, never stored.
 resource: ../../../../app/models/event_stage.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-12T19:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-25T15:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -46,7 +46,8 @@ sources:
 | `seed_source` | VARCHAR | no | How the draw seeds a live entrant that has no seed yet on the first stage: `mmr`, the newest rating first and the unrated last; `random`, a shuffle; or `manual`, which refuses the draw until every entrant has a seed. `mmr` by default. |
 | `seeds_locked_at` | TIMESTAMP | yes | When the seeds were locked, by hand or by the draw. A locked stage refuses a reseed with a 409 until it is unlocked, and the unlock waits until the stage holds no series. Null means unlocked. |
 | `third_place` | BOOLEAN | no | On: a single elimination adds the series the beaten semi-finalists play. |
-| `grand_final_modifier` | VARCHAR | no | What a double elimination final holds: `one` series, a `reset`, or `skip`. |
+| `grand_final_modifier` | VARCHAR | no | What a double elimination final holds: `one` series, a `reset`, `skip`, or `lead`, one series the upper-bracket winner opens with `grand_final_lead` games won. |
+| `grand_final_lead` | INTEGER | yes | The games the upper-bracket winner, side 1 of the grand final, opens a `lead` grand final with: 1 or more and fewer than the wins the grand final's best-of takes, so a Bo1 grand final allows none. Set with `lead` and only with it. The score counts it, so a Bo3 that opens 1-0 ends 2-0, 2-1 or 1-2; a report and a runner's score refuse side 1 below it, and the games reported are the ones played. The series read answers it as `head_start`, 0 on every other series. |
 | `placement_lives` | INTEGER | yes | A placement bracket: the losses that end a player's run, who then shares the places of the group they stopped in. Null plays every place. |
 | `max_mmr_difference` | INTEGER | yes | The largest MMR difference a captain draft pairs inside, 1 or more. A `gnl` stage only; the write refuses it on any other format. Null on a `gnl` stage reads as 100, which is never written into the row. Answered on the stage read, and read behind the working value one fixture's draft keeps in [match_draft_state](match_draft_state.md). |
 

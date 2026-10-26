@@ -70,13 +70,36 @@ def custom_game(session: OrmSession, event: Season) -> bool | None:
     return row is not None and row.custom_game
 
 
-def set_uses_divisions(session: OrmSession, event: Season, divisions: bool) -> None:
-    """Switch a cup's divisions on or off. Off takes the divisions back, so it
-    waits until the cup is not drawn."""
+def points_text(session: OrmSession, event: Season) -> str | None:
+    """The points table the cup stores, or null for the default."""
+    row = session.get(CupSettings, ident(event))
+    return row.points_by_place if row is not None else None
+
+
+def _settings(session: OrmSession, event: Season) -> CupSettings:
     row = session.get(CupSettings, ident(event))
     if row is None:
         row = CupSettings(event_id=ident(event))
         session.add(row)
+    return row
+
+
+def set_custom_game(session: OrmSession, event: Season, on: bool) -> None:
+    """Turn a cup's custom game on or off; the caller holds the game mode."""
+    _settings(session, event).custom_game = on
+    session.flush()
+
+
+def set_points(session: OrmSession, event: Season, points: str | None) -> None:
+    """Write the points table of a cup played over rounds; null keeps the default."""
+    _settings(session, event).points_by_place = points
+    session.flush()
+
+
+def set_uses_divisions(session: OrmSession, event: Season, divisions: bool) -> None:
+    """Switch a cup's divisions on or off. Off takes the divisions back, so it
+    waits until the cup is not drawn."""
+    row = _settings(session, event)
     if row.uses_divisions == divisions:
         return
     if not divisions:

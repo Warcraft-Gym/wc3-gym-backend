@@ -4,7 +4,7 @@ title: cup_settings
 description: A cup's own settings beside its event row; its choice to split its players into divisions, and the points each place of a round pays.
 resource: ../../../../app/models/cup_settings.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-15T09:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-25T21:00:00Z }
 sources:
   - id: model
     resource: ../../../../app/models/cup_settings.py
@@ -31,6 +31,6 @@ Primary key `event_id`, a foreign key to [event](event.md), `ON DELETE CASCADE`.
 
 - `POST /events` writes the row of every new cup from its `uses_divisions` field. The full event read answers it as `uses_divisions`; it reads null on any other kind and on a list read.
 - With `uses_divisions` off, every division write of the cup is refused, and the cup plays one field. `PUT /events/{id}` with `uses_divisions` false takes the cup's divisions back, and is refused once the cup is drawn.
-- `POST /events` for a cup with `custom_game` writes it on; the cup must name exactly one map in `map_ids`, its `veto_by_best_of` is turned off, and `PUT /events/{id}/maps` keeps its pool at one map. Every series of the cup reads `fixed` for each game, its veto board names the one map as the fixed map, and its lobbies play it. The full event read answers `custom_game`, null on any other kind.
-- `POST /events` for a cup with `legs` writes `points_by_place` from its list of the same name; a negative value is refused. `GET /events/{id}/overall` answers the table the cup pays.
+- `POST /events` for a cup with `custom_game` writes it on; the cup must name exactly one map in `map_ids`, its `veto_by_best_of` is turned off, and `PUT /events/{id}/maps` keeps its pool at one map. `PUT /events/{id}` turns it on or off until the cup's first sign-up, with the same one-map pool when on. Every series of the cup reads `fixed` for each game, its veto board names the one map as the fixed map, and its lobbies play it. The full event read answers `custom_game`, null on any other kind.
+- `POST /events` for a cup with `legs` writes `points_by_place` from its list of the same name; a negative value is refused. `PUT /events/{id}` rewrites it until a round is drawn. The full event read answers it as `points_by_place`, and `GET /events/{id}/overall` answers the table the cup pays.
 - The row exists so a cup-only choice needs no column on [event](event.md), which GNL and KOTH read. See [events module](../../concepts/events-module.md#entrants-seeds-divisions).

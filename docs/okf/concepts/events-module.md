@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, cups on tables and an engine of their own, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T07:56:14Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-25T21:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -45,7 +45,7 @@ The cup engine (`app/services/cup_engine.py`) draws the series of a cup's stage,
 
 A bracket stage may name the best-of of each part of its bracket in `best_of_by_round`, counted back from the end; the draw writes it onto each round, and a part it leaves out plays the stage's `best_of`. An event with `veto_by_best_of` vetoes each series by its own best-of, so its pool must hold the longest series; the create, a stage or pool write and the draw refuse a smaller pool. See [the decision](../decisions/cup-veto-by-best-of.md).
 
-In a single elimination that plays a third-place series, that series decides places 3 and 4 and the final decides places 1 and 2; a beaten semi-finalist never ranks above the runner-up. A bracket's table ranks by the deepest round an entrant stood in, then by whether it won there, then by wins, so in a double elimination the grand final's winner ranks first, or the reset's winner when a reset is played; with no grand final (`skip`) the upper final's winner ranks first and the lower final's winner second.
+In a single elimination that plays a third-place series, that series decides places 3 and 4 and the final decides places 1 and 2; a beaten semi-finalist never ranks above the runner-up. A bracket's table ranks by the deepest round an entrant stood in, then by whether it won there, then by wins, so in a double elimination the grand final's winner ranks first, or the reset's winner when a reset is played; a `lead` grand final is one series the upper-bracket winner opens games ahead in (see [event_stage](../data/tables/event_stage.md)); with no grand final (`skip`) the upper final's winner ranks first and the lower final's winner second.
 
 `app/services/series_rules.py` answers the rules a `series` row plays under: a KOTH series reads them from its round, its stage and its event; a GNL series reads them from its season. The shape of the row decides, never the kind. A cup series reads its rules from its round and its stage in `app/services/cup_reads.py`.
 
@@ -61,7 +61,7 @@ A player's own check-in on `POST /events/{id}/entrants/{entrant_id}/checkin`, th
 
 # The list reads
 
-`GET /events` and the events of `GET /leagues/{league_id}` read newest start first: by the start time, else the start date, with an event that has neither last and the newer id first on a tie. The order and the page are cut in SQL. Both reads take `archived`: `false` leaves out every event that has a [koth_history_event](../data/tables/koth_history_event.md) row, `true` keeps only those, and no value keeps both. Each listed event carries `archived`: `true` when it has that row, else `false`, read as a column of the page statement. `POST /events/search` carries it the same way. Each listed cup also carries `ffa` (a stage plays free for all lobbies) and `custom_game`, both read for the whole page in one grouped statement, so a list names a cup's mode; every other kind reads them null. `GET /events/{id}` carries both for a cup too. `X-Total-Count` on `GET /events` counts the filtered set.
+`GET /events` and the events of `GET /leagues/{league_id}` read newest start first: by the start time, else the start date, with an event that has neither last and the newer id first on a tie. The order and the page are cut in SQL. Both reads take `archived`: `false` leaves out every event that has a [koth_history_event](../data/tables/koth_history_event.md) row, `true` keeps only those, and no value keeps both. Each listed event carries `archived`: `true` when it has that row, else `false`, read as a column of the page statement. `POST /events/search` carries it the same way. Each listed cup also carries `ffa` (a stage plays free for all lobbies) and `custom_game`, both read for the whole page in one grouped statement, so a list names a cup's mode; every other kind reads them null. `GET /events/{id}` carries both for a cup too. A cup also reads `drawn`, true once any of its stages holds a series, from the same series counts the phase reads; every other kind reads it null. `X-Total-Count` on `GET /events` counts the filtered set.
 
 # The member read
 
@@ -129,6 +129,15 @@ One rule answers every write on a cup series: the player a side names, or a memb
 
 A cup series posts no Discord card of its own; the cup announces itself, its draws and its top three to the members who opt in, see [cup announcements](discord-integration.md#cup-announcements). A cup series takes no replay and no cast, and shows in no player history, head-to-head or Home list. The `/series` and `/player-series` routes answer `series` rows alone.
 
+# Editing a cup
+
+Edit cup saves with one `PUT /events/{id}`: beside the event fields, a cup's body may carry `stages`, `map_ids`, `custom_game` and `points_by_place`, written in the same transaction, so the pool is checked against the stages once both are in. Any other kind answers 400 for those four fields.
+
+- The game mode changes until the first sign-up: `team_size`, `entrant_kind`, `custom_game`, and a switch between free for all and head-to-head stages, by this write or by `PUT /events/{id}/stages`, answer 409 once the cup holds any entrant row.
+- The stages and the pool change until the cup is drawn, and answer 409 after it. On a cup over rounds `stages` are one round's stages, which every round takes, however many there are.
+- `custom_game` on turns `veto_by_best_of` off and needs a pool of exactly one map once the write is in.
+- `points_by_place` rewrites the points table of a cup played over rounds until a round is drawn (409), and a cup without rounds answers 400. The full read of a cup over rounds carries `points_by_place`, the default table when the cup names none.
+
 # Cup rounds
 
 A cup is played on one evening, or over several rounds, each a competition of its own on its own date (`app/services/cup_rounds.py`). `POST /events` for a cup with `legs`, two or more, writes one [cup_leg](../data/tables/cup_leg.md) per entry and copies the body's `stages` into every round ([cup_leg_stage](../data/tables/cup_leg_stage.md)), so every round plays the same format. Players sign up once and check in per round ([cup_leg_checkin](../data/tables/cup_leg_checkin.md)); the cup-wide check-in is off. The full event read answers the rounds as `cup_legs`.
@@ -136,7 +145,7 @@ A cup is played on one evening, or over several rounds, each a competition of it
 - A round draws and seeds the entrants checked in for it, and its stages seed from, and advance into, stages of the same round alone. A check-in is refused once the round is drawn, a player's own one also outside the round's [window](#check-in), and a finished round keeps its draw until it is reopened.
 - A signup after the first round is drawn joins the later rounds and goes on no waitlist; the entrant cap still holds.
 - While the cup is open, `PUT /events/{id}/legs/{leg_id}` renames a round or moves its start, a start staying after the round before and before the round after; `POST /events/{id}/legs` adds a round after the last, playing the same stages; and `DELETE /events/{id}/legs/{leg_id}` removes a round that is not drawn, with its stages and check-ins, the later rounds moving up a number and a cup keeping two rounds or more. The first round's start is the cup's start, both ways: moving one moves the other.
-- `PUT /events/{id}/stages` takes one round's stages and writes them onto every round; a body that changes how many stages a round plays is refused.
+- `PUT /events/{id}/stages` takes one round's stages and writes them onto every round. Until the cup's first draw such a body may hold more or fewer stages than a round plays, and every round then takes a fresh copy of it; after the draw a body that changes how many stages a round plays is refused.
 - A runner finishes a round once every series of it holds a result (`POST /events/{id}/legs/{leg_id}/finish`). Its places, read by `awards.event_places` over the round's stages alone, pay points from `cup_settings.points_by_place`, and every entrant's seed is cleared, so the next round seeds afresh. `DELETE` on the same path takes the finish back while the cup is open.
 - `GET /events/{id}/overall` answers the overall table: each entrant's points from every finished round, a missed round paying 0, the points per round, and the best single place. Points rank first, then the best single place, then more of that place; entrants still level share their position. It is edge cached as the event is, and reads a fixed number of statements, each round's places one more.
 - Closing a cup with rounds pays its awards from the overall table, one per entrant who played a finished round, the position its place.

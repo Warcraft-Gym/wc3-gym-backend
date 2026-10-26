@@ -282,14 +282,20 @@ def test_the_draw_each_round_and_the_playoff_are_announced_then_the_podium(
     finished = client.post(f"/events/{event}/finish", headers=auth_headers)
     assert finished.status_code == 200, finished.text
 
-    texts = [text.removeprefix(f"<@&{ROLE}> ") for text in posts(discord_calls)]
-    assert texts == [
+    # a draw and a series pings its players on the line after it; the podium the role
+    heads = [
+        text.split("\n")[0].removeprefix(f"<@&{ROLE}> ")
+        for text in posts(discord_calls)
+    ]
+    assert heads == [
         "The draw of **Autumn Cup** is out.",
         "Round 2 of **Autumn Cup** is drawn.",
         "Round 3 of **Autumn Cup** is drawn.",
         "Stage 2 of **Autumn Cup** is drawn.",
+        "**Final** of **Autumn Cup** is set.",
         "**Autumn Cup** is over. The podium:",
     ]
+    assert not any(f"<@&{ROLE}>" in text for text in posts(discord_calls)[:5])
     podium = discord_calls[-1][2]["embeds"][0]["description"].splitlines()
     assert podium[0] == "## 🏆 Autumn Cup"
     assert [line[:1] for line in podium[1:]] == ["🥇", "🥈", "🥉"]
@@ -298,7 +304,7 @@ def test_the_draw_each_round_and_the_playoff_are_announced_then_the_podium(
     client.post(f"/events/{event}/reopen", headers=auth_headers)
     again = client.post(f"/events/{event}/finish", headers=auth_headers)
     assert again.status_code == 200, again.text
-    assert len(posts(discord_calls)) == 5
+    assert len(posts(discord_calls)) == 6
     assert discord_calls[-1][0] == "PATCH"
 
 
@@ -342,19 +348,42 @@ def test_the_home_switch_takes_and_leaves_the_role(
     client: Client, member: Member, discord_calls: list, announcements: None
 ) -> None:
     headers = member("777")
+    # a member who never chose is asked at the next cup sign-up
     assert client.get("/me/announcements", headers=headers).json() == {
         "available": True,
         "subscribed": False,
+        "ask": True,
     }
     taken = client.put("/me/announcements", json={"subscribed": True}, headers=headers)
     assert taken.status_code == 200, taken.text
-    assert taken.json() == {"available": True, "subscribed": True}
+    assert taken.json() == {"available": True, "subscribed": True, "ask": False}
     assert discord_calls[-1][0] == "PUT"
     assert discord_calls[-1][1].endswith(f"/members/777/roles/{ROLE}")
     assert client.get("/me/announcements", headers=headers).json()["subscribed"] is True
     left = client.put("/me/announcements", json={"subscribed": False}, headers=headers)
     assert left.json()["subscribed"] is False
     assert discord_calls[-1][0] == "DELETE"
+    # leaving is a choice too, so no sign-up asks again
+    assert client.get("/me/announcements", headers=headers).json() == {
+        "available": True,
+        "subscribed": False,
+        "ask": False,
+    }
+
+
+def test_no_thanks_from_the_sign_up_question_is_kept(
+    client: Client, member: Member, discord_calls: list, announcements: None
+) -> None:
+    headers = member("779")
+    declined = client.put(
+        "/me/announcements", json={"subscribed": False}, headers=headers
+    )
+    assert declined.status_code == 200, declined.text
+    read = client.get("/me/announcements", headers=headers).json()
+    assert (read["subscribed"], read["ask"]) == (False, False)
+    # the Home switch still takes the role afterwards
+    taken = client.put("/me/announcements", json={"subscribed": True}, headers=headers)
+    assert taken.json()["subscribed"] is True
 
 
 def test_the_switch_says_when_discord_refuses_or_nothing_is_set_up(

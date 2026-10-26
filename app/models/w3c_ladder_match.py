@@ -115,6 +115,23 @@ class LadderPlayer(SQLModel):
     synced_at: datetime | None = None
 
 
+class W3CSeasonLadder(SQLModel):
+    """One player's ladder over the w3champions season the app rates against, on
+    one race: what a cup's runner reads beside the run page. Only the matches
+    the app already holds count, so a player no sync has read answers zeros."""
+
+    race: Annotated[str | None, EnumValue] = None
+    wc3_season: int
+    wins: int = 0
+    losses: int = 0
+    games: int = 0
+    mmr: LadderMmr = LadderMmr()
+    # The newest counted games, newest first, as W and L
+    form: str = ""
+    # Wins and losses against each race, keyed by the race the opponent selected
+    vs_race: dict[str, list[int]] = {}
+
+
 class SeasonPlayer(LadderPlayer):
     """One signup of the season with his ladder record, and the tag of his team."""
 

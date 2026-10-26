@@ -1,9 +1,13 @@
-"""A cup's announcements in Discord: it opens, it starts soon, it is drawn, it is over.
+"""A cup's announcements in Discord: it opens, it starts soon, it is drawn, a
+series is set, it is over.
 
-Every message goes to the channel the `announcement_channel_id` setting names
-and pings the role `announcement_role_id` names. A member joins or leaves that
-role on Home, and an `announcement_subscriber` row keeps the choice. A missing
-channel posts nothing, and a missing role posts without a ping.
+Every message goes to the channel the `announcement_channel_id` setting names.
+The news of a cup pings the role `announcement_role_id` names; a member joins or
+leaves that role on Home or at a cup sign-up, and an `announcement_subscriber` row
+keeps the choice. A draw and every series set after it ping the players of those
+series instead, a team's captain for a team, with each series' game name, its
+host and a link to its veto. A missing channel posts nothing, and a missing role
+posts the news without a ping.
 
 Each message is one discord_post row of its own kind about its subject, the
 cup, a round of a cup played over rounds, a stage or a round of a stage. The
@@ -14,6 +18,8 @@ deleted cup drops its rows, and its messages stay in the channel.
 """
 
 import logging
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -22,13 +28,16 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import load_only
 from sqlmodel import col
 
+from app.core.battle_tags import has_login
 from app.core.checkin_hint import checkin_window
 from app.core.config import frontend_url
 from app.core.db import Session, rel
 from app.core.exceptions import ApiError, BadRequestError
+from app.core.outcome import scored
 from app.models.announcement import AnnouncementState, AnnouncementSubscriber
 from app.models.base import ident
 from app.models.cup_rounds import CupLeg, CupLegStage
+from app.models.cup_series import CupSeries, CupSeriesSide, game_name
 from app.models.cup_team import CupTeam, CupTeamMember
 from app.models.discord_post import DiscordPost
 from app.models.enums import EventKind
@@ -36,6 +45,7 @@ from app.models.event_award import EventAward
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
+from app.models.map import Map
 from app.models.relationships import DBEventRound
 from app.models.season import NO_SERIES, Season, series_counts_by_event
 from app.models.settings import Settings
@@ -54,6 +64,11 @@ CHANNEL_KEY, ROLE_KEY = "announcement_channel_id", "announcement_role_id"
 # played over rounds, a stage's first draw, one more round of a stage
 OPEN, REMIND, LEG_REMIND = "cup_open", "cup_remind", "cup_leg_remind"
 DRAW, ROUND, RESULT = "cup_draw", "cup_round", "cup_result"
+# One later series, once both its sides stand
+SERIES = "cup_series"
+# What one message holds: the accounts it pings, the width of a mention in the
+# content, the content and the embed, inside Discord's 100, 2000 and 4096
+MAX_PINGS, MENTION_WIDTH, MAX_CONTENT, MAX_EMBED = 100, 23, 1800, 4000
 # How long before its check-in closes, or it starts, a cup or a round is called to check in
 LEAD = timedelta(hours=1)
 # The event columns the call reads
@@ -72,6 +87,8 @@ MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 NOT_SET_UP = "Announcements are not set up"
 NO_ROLE = "Discord did not take the role; try again in a moment"
 GUILD_ONLY = "Join the guild to take the announcements"
+# What a member chose about the announcements; no row is no choice yet
+SUBSCRIBED, DECLINED = "subscribed", "declined"
 
 
 def _settings() -> tuple[str | None, str | None]:
@@ -329,11 +346,275 @@ def remind_due(now: datetime) -> int:
     return posted
 
 
-# ============ It is drawn ============
+# ============ It is drawn, and each series after ============
+@dataclass(frozen=True)
+class _Side:
+    """One side as a message names it: the player or the team, and the Discord
+    account it pings, the player's own or a team's captain's."""
+
+    name: str
+    ping: str | None
+
+
+@dataclass(frozen=True)
+class _Line:
+    """One series as a message lists it, and the accounts it pings."""
+
+    text: str
+    pings: tuple[str, ...]
+    # a bye names its one side and is no series to call
+    bye: bool = False
+
+
+def _sides(session: OrmSession, entrant_ids: set[int]) -> dict[int, _Side]:
+    """Every entrant named, in two reads: the players, and the captains of the
+    teams. A side with no Discord login is named and pings nobody."""
+    if not entrant_ids:
+        return {}
+    found: dict[int, _Side] = {}
+    teams: dict[int, tuple[int, str]] = {}
+    for entrant_id, name, discord_id, team_id, team_name in session.execute(
+        select(
+            col(EventEntrant.id),
+            col(User.name),
+            col(User.discordId),
+            col(CupTeam.id),
+            col(CupTeam.name),
+        )
+        .outerjoin(User, col(User.id) == col(EventEntrant.user_id))
+        .outerjoin(CupTeam, col(CupTeam.id) == col(EventEntrant.cup_team_id))
+        .where(col(EventEntrant.id).in_(entrant_ids))
+    ):
+        if team_id is not None:
+            teams[team_id] = (entrant_id, team_name or "A team")
+        else:
+            found[entrant_id] = _Side(
+                md(name or "A player"), discord_id if has_login(discord_id) else None
+            )
+    # a team cup pings the captains, who pass the word on
+    captains: dict[int, str | None] = (
+        {
+            team_id: discord_id
+            for team_id, discord_id in session.execute(
+                select(col(CupTeamMember.team_id), col(User.discordId))
+                .join(User, col(User.id) == col(CupTeamMember.user_id))
+                .where(
+                    col(CupTeamMember.team_id).in_(list(teams)),
+                    col(CupTeamMember.captain),
+                )
+            )
+        }
+        if teams
+        else {}
+    )
+    for team_id, (entrant_id, team_name) in teams.items():
+        captain = captains.get(team_id)
+        found[entrant_id] = _Side(
+            md(team_name), captain if has_login(captain) else None
+        )
+    return found
+
+
+def _link_to(site: str | None, event_id: int, series_id: int | None) -> str | None:
+    """The cup's draw, with one series' veto open when it names one."""
+    if not site:
+        return None
+    return f"{site}/events/{event_id}?tab=draw" + (
+        f"&veto={series_id}" if series_id is not None else ""
+    )
+
+
+def _lines(session: OrmSession, cup: Season, rows: Sequence[CupSeries]) -> list[_Line]:
+    """The series of a message, each a line: its game name, who plays whom with
+    the host marked, and a link to its veto. A bye is named and pings nobody; a
+    series still waiting for a side, and one played, are left out. The host is
+    side 2, the bottom row of the box, and the last seat of a lobby."""
+    from app.services.cup_divisions import custom_game
+
+    seats: dict[int, list[CupSeriesSide]] = {}
+    for seat in session.scalars(
+        select(CupSeriesSide)
+        .where(col(CupSeriesSide.series_id).in_([ident(row) for row in rows]))
+        .order_by(col(CupSeriesSide.series_id), col(CupSeriesSide.side_no))
+    ):
+        seats.setdefault(seat.series_id, []).append(seat)
+    entrants = {
+        entrant_id
+        for row in rows
+        for entrant_id in (
+            row.entrant1_id,
+            row.entrant2_id,
+            *(seat.entrant_id for seat in seats.get(ident(row), [])),
+        )
+        if entrant_id is not None
+    }
+    sides = _sides(session, entrants)
+    maps: dict[int, str] = {
+        map_id: map_name
+        for map_id, map_name in session.execute(
+            select(col(Map.id), col(Map.name)).where(
+                col(Map.id).in_(
+                    [row.lobby_map_id for row in rows if row.lobby_map_id is not None]
+                )
+            )
+        )
+    }
+    vetoes = not custom_game(session, cup)
+    site = frontend_url()
+    lines: list[_Line] = []
+    for row in rows:
+        series_id = ident(row)
+        lobby = seats.get(series_id, [])
+        if len({seat.side_no for seat in lobby}) > 2:
+            if any(seat.entrant_id is None for seat in lobby) or scored(row):
+                continue
+            named = [
+                sides[seat.entrant_id] for seat in lobby if seat.entrant_id in sides
+            ]
+            if not named:
+                continue
+            names = [side.name for side in named[:-1]] + [
+                f"**{named[-1].name}** (hosts)"
+            ]
+            where = (
+                f" · {md(maps[row.lobby_map_id])}" if row.lobby_map_id in maps else ""
+            )
+            link = _link_to(site, ident(cup), None)
+            text = f"`{game_name(series_id)}` · {', '.join(names)}{where}"
+            lines.append(
+                _Line(
+                    text + (f" · [Open]({link})" if link else ""),
+                    tuple(side.ping for side in named if side.ping),
+                )
+            )
+            continue
+        first = sides.get(row.entrant1_id) if row.entrant1_id is not None else None
+        second = sides.get(row.entrant2_id) if row.entrant2_id is not None else None
+        if (first is None) != (second is None) and row.result_kind == "walkover":
+            alone = first or second
+            if alone is not None:
+                lines.append(_Line(f"**{alone.name}** · bye", (), bye=True))
+            continue
+        if first is None or second is None or scored(row):
+            continue
+        link = _link_to(site, ident(cup), series_id if vetoes else None)
+        label = "Veto" if vetoes else "Open"
+        lines.append(
+            _Line(
+                f"`{game_name(series_id)}` · **{first.name}** vs **{second.name}** (hosts)"
+                + (f" · [{label}]({link})" if link else ""),
+                tuple(side.ping for side in (first, second) if side.ping),
+            )
+        )
+    return lines
+
+
+def _ping_message(
+    text: str,
+    pings: Sequence[str],
+    lines: Sequence[str],
+    components: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """The text and the pings of the players in the content, where a mention
+    notifies, allowed for those accounts alone; the series in an embed."""
+    return {
+        "content": f"{text}\n{' '.join(f'<@{ping}>' for ping in pings)}"
+        if pings
+        else text,
+        "allowed_mentions": {"users": list(pings)} if pings else {"parse": []},
+        "embeds": (
+            [{"description": "\n".join(lines), "color": series_cards.COLOR}]
+            if lines
+            else []
+        ),
+        "components": components,
+    }
+
+
+def _chunks(lines: Sequence[_Line]) -> list[list[_Line]]:
+    """The lines split over as many messages as Discord's limits need: the
+    pings of a message in its content, at most 100 accounts, and its series in
+    one embed. Every ping and every line goes out."""
+    chunks: list[list[_Line]] = [[]]
+    pings = length = 0
+    for line in lines:
+        mentions = len(line.pings)
+        if chunks[-1] and (
+            pings + mentions > MAX_PINGS
+            or (pings + mentions) * MENTION_WIDTH > MAX_CONTENT
+            or length + len(line.text) + 1 > MAX_EMBED
+        ):
+            chunks.append([])
+            pings = length = 0
+        chunks[-1].append(line)
+        pings += mentions
+        length += len(line.text) + 1
+    return chunks
+
+
+def _send_lines(
+    kind: str,
+    subject_id: int,
+    text: str,
+    lines: Sequence[_Line],
+    components: list[dict[str, Any]],
+) -> bool:
+    """Post the series of a draw or of one later series once, pinging their
+    players and not the role; a long draw goes out in several messages, each
+    kept against the same subject."""
+    if _post_of(kind, subject_id) is not None:
+        return False
+    channel, _ = _settings()
+    if not channel:
+        return False
+    sent = False
+    for index, chunk in enumerate(_chunks(lines) if lines else [[]]):
+        pings = list(dict.fromkeys(ping for line in chunk for ping in line.pings))
+        wait_for_channel(channel)
+        message_id = discord.post_to_channel(
+            channel,
+            _ping_message(
+                text if index == 0 else f"{text} (continued)",
+                pings,
+                [line.text for line in chunk],
+                components,
+            ),
+        )
+        if not message_id:
+            return sent
+        remember(kind, subject_id, channel, message_id)
+        sent = True
+    return sent
+
+
+def _drawn_rows(
+    session: OrmSession, stage_id: int, round_id: int | None
+) -> list[CupSeries]:
+    """The series a draw made: every series of the stage, or of its new round,
+    in play order."""
+    query = select(CupSeries).join(
+        DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id)
+    )
+    query = (
+        query.where(col(CupSeries.round_id) == round_id)
+        if round_id is not None
+        else query.where(col(DBEventRound.stage_id) == stage_id)
+    )
+    return list(
+        session.scalars(
+            query.order_by(
+                col(DBEventRound.number), col(CupSeries.sequence), col(CupSeries.id)
+            )
+        )
+    )
+
+
 def post_draw(
     event_id: int, stage_id: int, round_id: int | None, round_name: str | None
 ) -> bool:
-    """Say a stage is drawn, or one more of its rounds; a redraw of a stage
+    """Say a stage is drawn, or one more of its rounds, with every series it
+    set: who plays whom, the game name, the host and a link to each veto. It
+    pings the players of those series, not the role. A redraw of a stage
     already announced posts nothing."""
     kind, subject = (DRAW, stage_id) if round_id is None else (ROUND, round_id)
     if _post_of(kind, subject) is not None:
@@ -357,6 +638,7 @@ def post_draw(
             if stage.position > 1
             else None
         )
+        lines = _lines(session, cup, _drawn_rows(session, stage_id, round_id))
     if round_id is not None:
         part = md(round_name or "A new round")
         text = f"{part}{f' of {where}' if where else ''} of {name} is drawn."
@@ -364,25 +646,106 @@ def post_draw(
         text = f"{where} of {name} is drawn."
     else:
         text = f"The draw of {name} is out."
-    return _send(
-        kind, subject, text, components=_link(event_id, "See the draw", "draw")
+    return _send_lines(
+        kind, subject, text, lines, _link(event_id, "See the draw", "draw")
     )
+
+
+def post_series(series_id: int, drawn: set[int] | None = None) -> bool:
+    """Say one later series is set once both its sides stand, or every seat of
+    a lobby, the way the draw names its series. A series of a stage drawn in the
+    same write is in the draw's message already, and each goes out once."""
+    if _post_of(SERIES, series_id) is not None:
+        return False
+    with Session() as session:
+        row = session.get(CupSeries, series_id)
+        round_row = session.get(DBEventRound, row.round_id) if row is not None else None
+        if row is None or round_row is None:
+            return False
+        if drawn and round_row.stage_id in drawn:
+            return False
+        cup = _cup(session, round_row.season_id)
+        if cup is None or cup.closed_at is not None:
+            return False
+        lines = _lines(session, cup, [row])
+        text = (
+            f"**{md(round_row.name or f'Round {round_row.number}')}** of "
+            f"**{md(cup.name or 'Cup')}** is set."
+        )
+        event_id = ident(cup)
+    # a bye, a played series or a side still missing is no series to call
+    if not lines or lines[0].bye:
+        return False
+    return _send_lines(
+        SERIES, series_id, text, lines, _link(event_id, "See the draw", "draw")
+    )
+
+
+def replace_series(series_id: int) -> None:
+    """A series named before whose pairing a corrected result took back: its
+    message says so, and its row goes, so the new pairing is named when it
+    stands. An edit pings nobody, which is why the new pairing has a message of
+    its own."""
+    with Session() as session:
+        posted = list(
+            session.scalars(
+                select(DiscordPost).where(
+                    col(DiscordPost.kind) == SERIES,
+                    col(DiscordPost.subject_id) == series_id,
+                )
+            )
+        )
+    for post in posted:
+        wait_for_channel(post.channel_id)
+        discord.edit_channel_message(
+            post.channel_id,
+            post.message_id,
+            {
+                "content": "A corrected result changed this pairing; the new one follows.",
+                "allowed_mentions": {"parse": []},
+                "embeds": [],
+                "components": [],
+            },
+        )
+    with Session.begin() as session:
+        session.execute(
+            delete(DiscordPost).where(
+                col(DiscordPost.kind) == SERIES,
+                col(DiscordPost.subject_id) == series_id,
+            )
+        )
 
 
 @event.listens_for(Session, "after_commit")
 def _announce_draws(session: OrmSession) -> None:
-    """Post the draws the transaction made once it holds; a failure is logged
-    and never reaches the write that drew."""
-    for draw in dict.fromkeys(session.info.pop(cup_engine.DRAWS, [])):
+    """Post the draws the transaction made once it holds, then mark the series
+    it emptied as replaced and name the ones it filled. A failure is logged and
+    never reaches the write that drew or scored."""
+    draws = list(dict.fromkeys(session.info.pop(cup_engine.DRAWS, [])))
+    emptied = list(dict.fromkeys(session.info.pop(cup_engine.EMPTIED, [])))
+    filled = list(dict.fromkeys(session.info.pop(cup_engine.FILLED, [])))
+    for draw in draws:
         try:
             post_draw(*draw)
         except Exception:
             logger.exception("The draw announcement of event %s failed", draw[0])
+    drawn = {draw[1] for draw in draws}
+    for series_id in emptied:
+        try:
+            replace_series(series_id)
+        except Exception:
+            logger.exception("The replaced series %s was not marked", series_id)
+    for series_id in filled:
+        try:
+            post_series(series_id, drawn)
+        except Exception:
+            logger.exception("The announcement of series %s failed", series_id)
 
 
 @event.listens_for(Session, "after_rollback")
 def _forget_draws(session: OrmSession) -> None:
-    session.info.pop(cup_engine.DRAWS, None)
+    for key in (cup_engine.DRAWS, cup_engine.EMPTIED, cup_engine.FILLED):
+        session.info.pop(key, None)
 
 
 # ============ It is over ============
@@ -474,6 +837,7 @@ def forget_cup(session: OrmSession, event_id: int) -> None:
     stages = select(col(EventStage.id)).where(col(EventStage.event_id) == event_id)
     rounds = select(col(DBEventRound.id)).where(col(DBEventRound.season_id) == event_id)
     legs = select(col(CupLeg.id)).where(col(CupLeg.event_id) == event_id)
+    series = select(col(CupSeries.id)).where(col(CupSeries.round_id).in_(rounds))
     session.execute(
         delete(DiscordPost).where(
             or_(
@@ -484,6 +848,7 @@ def forget_cup(session: OrmSession, event_id: int) -> None:
                 about(DRAW, stages),
                 about(ROUND, rounds),
                 about(LEG_REMIND, legs),
+                about(SERIES, series),
             )
         )
     )
@@ -504,13 +869,20 @@ def state_of(claims: dict[str, Any] | None) -> AnnouncementState:
     if not (channel and role and member):
         return AnnouncementState(available=False, subscribed=False)
     with Session() as session:
-        subscribed = session.get(AnnouncementSubscriber, member) is not None
-    return AnnouncementState(available=True, subscribed=subscribed)
+        row = session.get(AnnouncementSubscriber, member)
+    # a member who never chose is asked at the next cup sign-up
+    return AnnouncementState(
+        available=True,
+        subscribed=row is not None and row.status == SUBSCRIBED,
+        ask=row is None,
+    )
 
 
 def subscribe(claims: dict[str, Any] | None, subscribed: bool) -> AnnouncementState:
     """Take or leave the announcement role. The role is written first, so a
-    refusal changes nothing and the switch says it did not go through."""
+    refusal changes nothing and the switch says it did not go through. Leaving
+    it, from Home or from the sign-up question, is a choice too: the row stays
+    as declined, so no sign-up asks again."""
     channel, role = _settings()
     if not (channel and role):
         raise BadRequestError(NOT_SET_UP)
@@ -521,8 +893,9 @@ def subscribe(claims: dict[str, Any] | None, subscribed: bool) -> AnnouncementSt
         raise ApiError(502, {"error": NO_ROLE})
     with Session.begin() as session:
         row = session.get(AnnouncementSubscriber, member)
-        if subscribed and row is None:
-            session.add(AnnouncementSubscriber(discord_id=member))
-        elif not subscribed and row is not None:
-            session.delete(row)
+        status = SUBSCRIBED if subscribed else DECLINED
+        if row is None:
+            session.add(AnnouncementSubscriber(discord_id=member, status=status))
+        else:
+            row.status = status
     return AnnouncementState(available=True, subscribed=subscribed)
