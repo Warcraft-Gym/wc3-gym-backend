@@ -24,5 +24,6 @@ class EgressLedger(SQLModel, table=True):
     db_bytes: int = Field(default=0, sa_type=BigInteger)
     # Bytes of the response body sent to the client
     bytes: int = Field(sa_type=BigInteger)
-    # Process CPU in ms since the ledger write before; on the (startup) row, the CPU before the first
+    # Process CPU in ms since the ledger write before; on the (import) row, the CPU to import and build
+    # the app; on a (startup) row, the rest before the process's first write
     cpu_ms: int = Field(default=0, sa_type=BigInteger)

@@ -34,17 +34,21 @@ from app.core.exceptions import (
     NotFoundError,
     W3CThrottledError,
 )
+from app.models.types import utcnow
 from app.services import egress
 
 logger = logging.getLogger(__name__)
 
 # The ledger's own read route stays out of the ledger
 UNRECORDED_ROUTES = {"/jobs/egress"}
-# The ledger row, under method "-", that holds the CPU a process spent before its first write
+# The ledger rows a process's first write adds: "(startup) <first route>" and "(import) <UTC hour>"
 STARTUP_ROUTE = "(startup)"
+IMPORT_ROUTE = "(import)"
 
 # Process CPU in whole ms that the ledger holds; None before the process's first write
 _cpu_in_ledger: int | None = None
+# Process CPU in whole ms when the process's first app was built: the import and the app build
+_cpu_at_build: int | None = None
 
 
 def take_cpu() -> tuple[int | None, int]:
@@ -146,10 +150,18 @@ def record_egress(
     route: str, method: str, cost: Cost, size: int, cpu_ms: int, startup: int | None
 ) -> None:
     """Add the request, and on a process's first write its startup, to the ledger;
-    a failed write is logged, never raised."""
+    a failed write is logged, never raised.
+
+    The startup splits in two rows: "(import) <UTC hour>" holds the CPU to import and build
+    the app, so its calls count the starts in that hour, and "(startup) <route>" the rest
+    up to this write, named by the process's first route."""
     try:
         if startup is not None:
-            egress.record(STARTUP_ROUTE, "-", Cost(), 0, startup)
+            built = _cpu_at_build or 0
+            egress.record(f"{IMPORT_ROUTE} {utcnow():%H}:00", "-", Cost(), 0, built)
+            egress.record(
+                f"{STARTUP_ROUTE} {route}", method, Cost(), 0, startup - built
+            )
         egress.record(route, method, cost, size, cpu_ms)
     except Exception:
         logger.warning(
@@ -282,5 +294,8 @@ def create_app(db_url: str | None = None) -> FastAPI:
     for router in routers:
         app.include_router(router)
 
+    global _cpu_at_build
+    if _cpu_at_build is None:
+        _cpu_at_build = int(process_time() * 1000)
     logger.debug("Application built")
     return app

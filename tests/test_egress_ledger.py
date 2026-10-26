@@ -1,5 +1,6 @@
 """Every request reports its database cost and adds it to the daily ledger."""
 
+import re
 import socket
 from collections.abc import Iterator
 from types import SimpleNamespace
@@ -74,11 +75,16 @@ def test_the_ledger_records_the_cpu_of_each_route_and_of_the_start(
     client.get("/users")
 
     rows = client.get("/jobs/egress", headers=scheduler).json()
-    starts = [row for row in rows if row["route"] == main.STARTUP_ROUTE]
+    starts = [row for row in rows if row["route"].startswith(main.STARTUP_ROUTE)]
     assert len(starts) == 1
     start = starts[0]
-    assert (start["method"], start["calls"], start["statements"]) == ("-", 1, 0)
+    assert start["route"] == "(startup) /events/{event_id}/series"
+    assert (start["method"], start["calls"], start["statements"]) == ("GET", 1, 0)
     assert start["cpu_ms"] > 0
+    built = next(row for row in rows if row["route"].startswith(main.IMPORT_ROUTE))
+    assert re.fullmatch(r"\(import\) [0-2]\d:00", built["route"])
+    assert (built["method"], built["calls"]) == ("-", 1)
+    assert built["cpu_ms"] == main._cpu_at_build > 0
     routes = {row["route"]: row for row in rows}
     assert routes["/events/{event_id}/series"]["cpu_ms"] > 0
     assert routes["/users"]["cpu_ms"] > 0
