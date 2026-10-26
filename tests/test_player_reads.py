@@ -443,3 +443,44 @@ def test_an_unknown_player_has_no_summary(client: Client) -> None:
     assert resp.status_code == 404
     assert resp.json() == client.get("/users/999999").json()
     assert resp.json() == {"error": "User not found: 999999"}
+
+
+def test_the_profile_answers_what_the_four_reads_answer(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """A captain-only season names no series, and an event not named adds none."""
+    events = [league["season_id"], league["second_id"], league["third_id"]]
+    query = "&".join(f"event_id={event_id}" for event_id in events)
+    for user_id in league["player_ids"]:
+        resp = client.get(f"/users/{user_id}/profile?{query}")
+        assert resp.status_code == 200, resp.text
+        profile = resp.json()
+        assert profile["summary"] == client.get(f"/users/{user_id}/summary").json()
+        seats = client.get(f"/users/{user_id}/seasons").json()
+        assert profile["seasons"] == seats
+        career = client.get(f"/stats/career/{user_id}")
+        assert profile["career"] == (
+            career.json() if career.status_code == 200 else None
+        )
+        played = [
+            seat["season_id"]
+            for seat in seats
+            if seat["team"] and not seat["captain_only"] and seat["season_id"] in events
+        ]
+        named = "&".join(f"event_id={event_id}" for event_id in played)
+        assert profile["series"] == (
+            client.get(f"/users/{user_id}/series?{named}").json() if played else []
+        )
+
+    first = league["player_ids"][0]
+    only_first = client.get(f"/users/{first}/profile?event_id={league['season_id']}")
+    assert {row["season_id"] for row in only_first.json()["series"]} == {
+        league["season_id"]
+    }
+    assert client.get(f"/users/{first}/profile").json()["series"] == []
+
+
+def test_an_unknown_player_has_no_profile(client: Client) -> None:
+    resp = client.get("/users/999999/profile")
+    assert resp.status_code == 404
+    assert resp.json() == {"error": "User not found: 999999"}

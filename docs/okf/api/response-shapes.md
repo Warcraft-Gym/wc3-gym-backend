@@ -4,7 +4,7 @@ title: Response shapes
 description: An entity inside another answer is its summary shape, bounded by the read's event; the detail comes only from the entity's own read, a write answers through that read, and the relationships of the main models refuse an on-the-spot load.
 resource: ../../../app/models/user.py
 tags: [api, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-26T10:00:00Z }
 sources:
   - id: user
     resource: ../../../app/models/user.py
@@ -96,11 +96,12 @@ The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTa
 
 # A player's own reads
 
-Three reads answer one player from the player's side, computed in SQL, and embed no entity but a team summary.
+Four reads answer one player from the player's side, computed in SQL, and embed no entity but a team summary.
 
 - `GET /users/{user_id}/seasons` answers `PlayerSeasonPublic` per season the player held a roster or a captain seat in, newest first: `season_id`, `team` as `TeamSummaryPublic` (the roster team, else the captained team), `is_captain`, `captain_only`, `signup_race`, `played_as`, and `record` (`games`, `wins`, `losses`, `matchup_history`, counted as `gnl_stats` counts them). Three statements.
 - `GET /users/{user_id}/series?event_id=...` answers `PlayerSeriesSummaryPublic` per GNL series of the named events, flat: the player's `race` and `score`, the opponent's id, name, race and score, the two team names, and one cast. Two statements: the page as columns with its count, and the casts of the page.
 - `GET /users/{user_id}/summary` answers `UserProfileSummaryPublic`, the player page's header: `id`, `name`, `battleTag`, `country`, `tag_names` (the tag texts, the active one first) and the ladder summary, `race_mmrs` with the stale races and `main_race`, as `GET /users/{key}` answers them. One statement; `summarize` orders the races. An unknown id answers 404 as `GET /users/{key}` does.
+- `GET /users/{user_id}/profile?event_id=...` answers `PlayerProfilePublic`, what a player page reads in one call: `summary`, `seasons`, `career` (the row `GET /stats/career/{stat_id}` answers, null where that answers 404) and `series`, the series of the named events the player held a roster seat in; a captain-only seat and an event not named add none, and no `event_id` answers no series. It costs the statements of the reads it joins. An unknown id answers 404 as the summary does. `tests/test_player_reads.py` holds each part equal to its own route.
 
 # An event's series list row
 

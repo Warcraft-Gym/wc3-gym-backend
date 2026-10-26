@@ -20,6 +20,7 @@ from app.models.enums import Race
 from app.models.link_prompt import LinkPromptPublic, PromptAnswer
 from app.models.player_history import PlayerHistory
 from app.models.player_reads import (
+    PlayerProfilePublic,
     PlayerSeasonPublic,
     PlayerSeriesSummaryPublic,
     UserProfileSummaryPublic,
@@ -270,6 +271,20 @@ def get_user_summary(user_id: int, response: Response) -> UserProfileSummaryPubl
     summary = player_reads.summary(user_id)
     edge_cache(response, "running")
     return summary
+
+
+@router.get("/users/{user_id}/profile")
+def get_user_profile(
+    user_id: int,
+    response: Response,
+    event_id: Annotated[list[int], Query(max_length=50)] = [],  # noqa: B006
+) -> PlayerProfilePublic:
+    """What a player page reads, in one call: `/users/{id}/summary`,
+    `/users/{id}/seasons`, `/stats/career/{id}` (null when it holds none) and
+    `/users/{id}/series` for the named events he held a roster seat in."""
+    profile = player_reads.profile(user_id, event_id)
+    edge_cache(response, "running")
+    return profile
 
 
 @router.get("/users/{user_id}/seasons")

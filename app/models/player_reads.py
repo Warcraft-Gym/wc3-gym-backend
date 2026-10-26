@@ -5,6 +5,7 @@ from the player's side of each row, except the summary's race order and main_rac
 """
 
 from datetime import datetime
+from typing import Any
 
 from sqlmodel import SQLModel
 
@@ -73,3 +74,14 @@ class PlayerSeriesSummaryPublic(SQLModel):
     cast_name: str | None = None
     cast_channel_url: str | None = None
     cast_vod_url: str | None = None
+
+
+class PlayerProfilePublic(SQLModel):
+    """Everything a player page reads about the player, in one answer."""
+
+    summary: UserProfileSummaryPublic
+    seasons: list[PlayerSeasonPublic] = []
+    # The row /stats/career/{id} answers, null when the career list holds none
+    career: dict[str, Any] | None = None
+    # The series of every named event the player held a roster seat in
+    series: list[PlayerSeriesSummaryPublic] = []
