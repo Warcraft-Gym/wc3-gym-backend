@@ -2011,11 +2011,13 @@ def test_a_lobby_place_write_pins_its_statements(
 ) -> None:
     """PUT /cup-series/{id}/places on the first lobby of a four player FFA: the
     check that the cup is open, the write, the advance and the stage row it
-    answers."""
+    answers. The lobby plays out its stage, so the write also asks whether it
+    closes the cup: the stage's series, the event and the stage after it, five
+    statements a result mid-stage stops short of."""
     event, stage, _ = ffa(4)
     generate(client, auth_headers, event, stage)
     lobby = lobbies(client, event, stage)[0]
     with count_statements() as tally:
         response = play(client, auth_headers, lobby, [1, 2, 3, 4])
     assert response.status_code == 200, response.text
-    assert tally[0] <= 17
+    assert tally[0] <= 22

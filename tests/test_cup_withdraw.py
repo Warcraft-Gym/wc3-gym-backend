@@ -190,14 +190,15 @@ def test_a_withdrawn_player_acts_for_no_side(
     """A player who left reports, clears and vetoes for nobody, even on a
     result played before they left; they still read the board, and a runner
     still writes."""
-    event, (stage,) = cup(2)
+    # a semifinal, since the result that plays out a cup closes it to every write
+    event, (stage,) = cup(4)
     generate(client, auth_headers, event, stage)
-    [final] = bracket(stage)
-    assert score(client, auth_headers, final["id"], 2, 0).status_code == 200
-    loser = final["sides"][1]
+    semi, *_ = bracket(stage)
+    assert score(client, auth_headers, semi["id"], 2, 0).status_code == 200
+    loser = semi["sides"][1]
     withdraw(client, auth_headers, event, entrant_of(event, loser))
     headers = headers_of(member, loser)
-    path = f"/cup-series/{final['id']}"
+    path = f"/cup-series/{semi['id']}"
 
     flipped = client.put(
         f"{path}/report", json={"player1_score": 0, "player2_score": 2}, headers=headers

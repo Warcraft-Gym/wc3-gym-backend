@@ -355,6 +355,9 @@ def test_the_season_plays_out_to_one_winner_in_each_division(
         won = next(row for row in finals if row["division_id"] == table["division_id"])
         assert table["rows"][0]["user_id"] == winner_of(won)
 
+    # the last final closed the cup, so clearing a result reopens it first
+    reopen = client.post(f"/events/{event}/reopen", headers=auth_headers)
+    assert reopen.status_code == 200, reopen.text
     last = finals[0]
     cleared = client.put(
         f"/cup-series/{last['id']}?force=true",

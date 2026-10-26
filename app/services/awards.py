@@ -101,6 +101,15 @@ def finish(event_id: int) -> list[EventAwardPublic]:
         return [EventAwardPublic.model_validate(row.model_dump()) for row in rows]
 
 
+def close_cup(session: OrmSession, event: Season) -> None:
+    """Close a cup played out, inside the write that played it out: stamp it,
+    pay its places, and mark it, so its podium goes to Discord once the write
+    holds."""
+    event.closed_at = event.closed_at or utcnow()
+    close_event(session, ident(event))
+    cup_engine.note_closed(session, ident(event))
+
+
 def reopen(event_id: int) -> None:
     """Take the close back: clear the stamp and the places it paid.
 
