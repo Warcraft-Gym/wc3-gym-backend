@@ -167,12 +167,16 @@ def test_an_organizer_edits_and_clears_a_result_of_its_own_cup_only(
     grant(client, auth_headers, "54")
     headers = member("54")
     event = create(client, headers, name="Result Edit Cup")
-    enter(client, headers, event["id"], players(2))
+    # four players, so the series edited is a semifinal: the result that plays
+    # out a cup closes it to every write
+    enter(client, headers, event["id"], players(4))
     assert draw(client, headers, event).status_code == 200
-    [row] = client.get(
+    rows = client.get(
         f"/events/{event['id']}/stages/{event['stages'][0]['id']}/series"
     ).json()["series"]
-    series_id = row["id"]
+    series_id = next(
+        row["id"] for row in rows if row["entrant1_id"] and row["entrant2_id"]
+    )
 
     scored = client.put(
         f"/cup-series/{series_id}",

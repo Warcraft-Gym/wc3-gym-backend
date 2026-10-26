@@ -28,6 +28,11 @@ REQUEST_TIMEOUT = 10
 RETRY_WAIT_LIMIT = 5.0
 # Seconds a guild membership answer is reused before the bot asks again.
 ROLE_TTL = 60.0
+# Minutes a thread stays in the channel list after its last message: a week,
+# Discord's longest; a new message brings an archived thread back.
+THREAD_ARCHIVE_MINUTES = 10080
+# The longest name Discord takes for a thread.
+THREAD_NAME_LIMIT = 100
 
 # One connection pool for every Discord call, so a call pays no new TCP handshake.
 _session = requests.Session()
@@ -289,6 +294,21 @@ def post_to_channel(channel_id: str, message: dict[str, Any]) -> str | None:
     """Post a message in a channel as the bot. The id of the message, or None
     when it did not go out."""
     response = _channel_call("POST", f"{channel_id}/messages", message)
+    return str(response.json()["id"]) if response else None
+
+
+def start_thread(channel_id: str, message_id: str, name: str) -> str | None:
+    """Open a public thread under a message in a channel, which the channel
+    lists under its name. The id of the thread, which Discord gives the
+    message's own, or None when it did not open."""
+    response = _channel_call(
+        "POST",
+        f"{channel_id}/messages/{message_id}/threads",
+        {
+            "name": name[:THREAD_NAME_LIMIT],
+            "auto_archive_duration": THREAD_ARCHIVE_MINUTES,
+        },
+    )
     return str(response.json()["id"]) if response else None
 
 

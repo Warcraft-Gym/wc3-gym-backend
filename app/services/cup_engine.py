@@ -48,7 +48,7 @@ from app.models.event_stage import (
 )
 from app.models.map import Map
 from app.models.relationships import DBEventRound, DBMapSeason, EventRoundPublic
-from app.models.season import Season
+from app.models.season import Season, series_counts
 from app.models.series import ResultKindWrite
 from app.models.series_side import LobbySidesWrite, PlacesWrite
 from app.models.types import utcnow
@@ -74,6 +74,14 @@ DRAWS = "cup_draws"
 # it emptied again; the announcements name each filled one once it commits, and
 # mark an emptied one's message replaced
 FILLED, EMPTIED = "cup_filled", "cup_emptied"
+
+
+# The cups a transaction closed; the announcements post each podium once it commits
+CLOSED = "cup_closed"
+
+
+def note_closed(session: OrmSession, event_id: int) -> None:
+    session.info.setdefault(CLOSED, []).append(event_id)
 
 
 def note_filled(session: OrmSession, series_id: int) -> None:
@@ -487,13 +495,13 @@ def _follow_score(
             return
         on_reopened(session, row, force)
         on_scored(session, row)
-        _auto_advance(session, row)
+        _play_on(session, row)
         return
     if now == was_scored:
         return
     if now:
         on_scored(session, row)
-        _auto_advance(session, row)
+        _play_on(session, row)
     else:
         on_reopened(session, row, force)
 
@@ -504,7 +512,7 @@ def set_result_kind(session: OrmSession, row: CupSeries, data: ResultKindWrite) 
         raise BadRequestError("This series already carries a result")
     _award(session, row, data.winner == 1, data.result_kind)
     on_scored(session, row)
-    _auto_advance(session, row)
+    _play_on(session, row)
 
 
 def set_places(session: OrmSession, row: CupSeries, data: PlacesWrite) -> None:
@@ -558,7 +566,7 @@ def set_places(session: OrmSession, row: CupSeries, data: PlacesWrite) -> None:
     row.result_kind = "played"
     session.flush()
     _fill_lobbies(session, row, refill=correcting, split=split)
-    _auto_advance(session, row)
+    _play_on(session, row)
 
 
 def clear_places(session: OrmSession, row: CupSeries) -> None:
@@ -2381,6 +2389,45 @@ def _names(session: OrmSession, field: Sequence[EventEntrant]) -> dict[int, str 
         else users.get(row.user_id)
         for row in field
     }
+
+
+def _play_on(session: OrmSession, row: CupSeries) -> None:
+    """What a new result sets going: the next round or stage, and the close of
+    a cup it plays out."""
+    _auto_advance(session, row)
+    _close_when_played(session, row)
+
+
+def _close_when_played(session: OrmSession, row: CupSeries) -> None:
+    """Close a cup on the result that plays out its last stage: every series of
+    the cup scored, no stage after this one and no Swiss round left to draw.
+    The close pays the places and posts the podium once the write holds. A cup
+    played over rounds closes when its last round is finished instead."""
+    # the checks run cheapest first, so a result mid-stage costs one statement
+    stage = _stage_of(session, row)
+    if stage is None:
+        return
+    played = _series_of(session, ident(stage))
+    if not played or any(not scored(other) for other in played):
+        return
+    event = session.get(Season, stage.event_id)
+    if (
+        event is None
+        or event.kind is not EventKind.cup
+        or event.closed_at is not None
+        or event.cancelled_at is not None
+        or _next_stage(session, stage.event_id, stage) is not None
+        or _leg_of(session, ident(stage)) is not None
+    ):
+        return
+    if stage.format is StageFormat.swiss and _rounds_left(session, stage, played):
+        return
+    total, _, done = series_counts(session, stage.event_id)
+    if done < total:
+        return
+    from app.services import awards
+
+    awards.close_cup(session, event)
 
 
 def _auto_advance(session: OrmSession, row: CupSeries) -> None:

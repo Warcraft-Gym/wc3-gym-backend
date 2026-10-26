@@ -649,6 +649,10 @@ def test_a_corrected_winner_is_refused_while_the_final_is_scored(
     score(client, auth_headers, rows[1]["id"], 2, 0)
     final_id = bracket(stage)[2]["id"]
     score(client, auth_headers, final_id, 2, 0)
+    # the final closes the cup, so a correction reopens it first
+    assert (
+        client.post(f"/events/{event}/reopen", headers=auth_headers).status_code == 200
+    )
     refused = score(client, auth_headers, rows[0]["id"], 0, 2)
     assert refused.status_code == 400
     assert "force" in refused.json()["error"]
@@ -680,6 +684,10 @@ def test_a_corrected_score_with_the_same_winner_leaves_the_final_alone(
     score(client, auth_headers, rows[1]["id"], 2, 0)
     before = bracket(stage)[2]
     score(client, auth_headers, before["id"], 2, 0)
+    # the final closes the cup, so a correction reopens it first
+    assert (
+        client.post(f"/events/{event}/reopen", headers=auth_headers).status_code == 200
+    )
     # The final carries a result and needs no force, because it does not move
     assert score(client, auth_headers, rows[0]["id"], 2, 1).status_code == 200
     final = bracket(stage)[2]

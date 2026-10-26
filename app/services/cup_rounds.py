@@ -328,7 +328,7 @@ def finish_leg(event_id: int, leg_id: int) -> list[CupLegPublic]:
     """Close a played round: its places count from now on, and the seeds go,
     so the next round seeds afresh from the players checked in for it."""
     with Session.begin() as session:
-        _cup(session, event_id)
+        event = _cup(session, event_id)
         leg = _leg(session, event_id, leg_id)
         if leg.finished_at is not None:
             raise BadRequestError("This round is finished already")
@@ -347,6 +347,14 @@ def finish_leg(event_id: int, leg_id: int) -> list[CupLegPublic]:
             .values(seed=None, seed_source=None, mmr_at_seed=None)
         )
         session.flush()
+        # the last round finished closes the cup, which pays the overall table
+        open_legs = select(col(CupLeg.id)).where(
+            col(CupLeg.event_id) == event_id, col(CupLeg.finished_at).is_(None)
+        )
+        if event.closed_at is None and session.scalar(open_legs.limit(1)) is None:
+            from app.services import awards
+
+            awards.close_cup(session, event)
         return legs_of(session, event_id)
 
 

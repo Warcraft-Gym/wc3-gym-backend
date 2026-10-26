@@ -198,8 +198,9 @@ class CupSeriesSidePublic(SeriesSidePublic):
 
 def game_name(series_id: int) -> str:
     """The lobby name a series is played under in Warcraft III: short, so it
-    fits the game's name field, and one of its own, so it is found in the list."""
-    return f"GYM {series_id}"
+    fits the game's name field, one of its own, so it is found in the list, and
+    without a space, so a double-click marks it whole."""
+    return f"GYM_{series_id}"
 
 
 class LobbyMapPublic(SQLModel):

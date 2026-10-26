@@ -2,8 +2,8 @@
 
 A cup announces itself once it takes signups, calls its players to check in an
 hour before it starts, says when it is drawn and when a round is drawn, and
-posts its top three when it closes. Every message pings the announcement role,
-and each goes out once.
+posts its podium when it closes, which its last result does. Its news pings the
+announcement role, and each message goes out once.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -53,6 +53,24 @@ def posts(calls: list[tuple[str, str, Any]]) -> list[str]:
         for method, url, body in calls
         if (method, url) == ("POST", ANNOUNCE)
     ]
+
+
+def thread_of(calls: list[tuple[str, str, Any]]) -> str:
+    """The cup's thread: the id Discord answered its start with, msg-N as the
+    recorder numbers every post."""
+    count = 0
+    for method, url, _ in calls:
+        count += method == "POST"
+        if url.endswith("/threads"):
+            return f"msg-{count}"
+    raise AssertionError("no thread opened")
+
+
+def in_thread(calls: list[tuple[str, str, Any]]) -> list[dict[str, Any]]:
+    """Every message posted in the cup's thread, in order: first the one that
+    says what it holds, then the draws and the series."""
+    url = f"{discord.API_URL}/channels/{thread_of(calls)}/messages"
+    return [body for method, at, body in calls if (method, at) == ("POST", url)]
 
 
 def starts_in(event_id: int, minutes: float) -> None:
@@ -282,29 +300,34 @@ def test_the_draw_each_round_and_the_playoff_are_announced_then_the_podium(
     finished = client.post(f"/events/{event}/finish", headers=auth_headers)
     assert finished.status_code == 200, finished.text
 
-    # a draw and a series pings its players on the line after it; the podium the role
-    heads = [
-        text.split("\n")[0].removeprefix(f"<@&{ROLE}> ")
-        for text in posts(discord_calls)
+    # the channel keeps the news, which pings the role; the cup's thread takes
+    # each draw and series, which ping their players on the line after it
+    # the playoff's last result closed the cup and posted its podium, which
+    # the Finish after it edits
+    assert [text.split("\n")[0] for text in posts(discord_calls)] == [
+        "**Autumn Cup**: its draw and every series follow in its thread.",
+        f"<@&{ROLE}> 🏆 **Autumn Cup** is over!",
     ]
-    assert heads == [
+    threaded = [body["content"] for body in in_thread(discord_calls)]
+    assert [text.split("\n")[0] for text in threaded] == [
+        "The draw and every series of **Autumn Cup** go here.",
         "The draw of **Autumn Cup** is out.",
         "Round 2 of **Autumn Cup** is drawn.",
         "Round 3 of **Autumn Cup** is drawn.",
         "Stage 2 of **Autumn Cup** is drawn.",
         "**Final** of **Autumn Cup** is set.",
-        "**Autumn Cup** is over. The podium:",
     ]
-    assert not any(f"<@&{ROLE}>" in text for text in posts(discord_calls)[:5])
+    assert not any(f"<@&{ROLE}>" in text for text in threaded)
     podium = discord_calls[-1][2]["embeds"][0]["description"].splitlines()
     assert podium[0] == "## 🏆 Autumn Cup"
-    assert [line[:1] for line in podium[1:]] == ["🥇", "🥈", "🥉"]
+    assert [line[:1] for line in podium[1:4]] == ["🥇", "🥈", "🥉"]
+    assert podium[-1] == cup_announcements.THANKS
 
     # a second close edits the card and pings nobody again
     client.post(f"/events/{event}/reopen", headers=auth_headers)
     again = client.post(f"/events/{event}/finish", headers=auth_headers)
     assert again.status_code == 200, again.text
-    assert len(posts(discord_calls)) == 6
+    assert len(posts(discord_calls)) == 2
     assert discord_calls[-1][0] == "PATCH"
 
 
@@ -340,7 +363,7 @@ def test_a_team_cups_podium_names_each_team_with_its_players(
         client.post(f"/events/{event}/finish", headers=auth_headers).status_code == 200
     )
     podium = discord_calls[-1][2]["embeds"][0]["description"].splitlines()
-    assert podium[1].startswith("🥇 T")
+    assert podium[1].startswith("🥇 **T")
     assert "(E" in podium[1]
 
 
