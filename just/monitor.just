@@ -45,17 +45,25 @@ routes env="prod" days="1":
     for row in table:
         print("  ".join(cell.rjust(w) for cell, w in zip(row, widths)), row[-1])
     print("\ndb_mb: bytes the database connections received (the egress); response_mb: the JSON sent")
-    print("cpu_s: process CPU; the (startup) row holds each process's CPU before its first ledger write\n")
+    print("cpu_s: process CPU; (import) <UTC hour> holds the CPU to import and build the app of the")
+    print("processes started that hour, (startup) <route> the rest before their first ledger write\n")
     days: dict[str, list[int]] = {}
     for r in rows:
-        total = days.setdefault(r["day"], [0, 0, 0])
-        if r["route"] == "(startup)":
-            total[0] += r["calls"]
+        total = days.setdefault(r["day"], [0, 0, 0, 0])
+        if r["route"].startswith("(import)"):
             total[1] += r["cpu_ms"]
-        else:
+        elif r["route"].startswith("(startup)"):
+            total[0] += r["calls"]
             total[2] += r["cpu_ms"]
-    for day, (starts, startup, routed) in sorted(days.items()):
-        print(f"{day}: cold starts {starts}, startup CPU {startup / 1000:.1f} s, routed CPU {routed / 1000:.1f} s")
+        else:
+            total[3] += r["cpu_ms"]
+    for day, (starts, imported, rest, routed) in sorted(days.items()):
+        split = f" (import {imported / 1000:.1f} s, rest {rest / 1000:.1f} s)" if imported else ""
+        startup = (imported + rest) / 1000
+        print(f"{day}: cold starts {starts}, startup CPU {startup:.1f} s{split}, routed CPU {routed / 1000:.1f} s")
+        hours = sorted((r["route"].removeprefix("(import) "), r["calls"]) for r in rows if r["day"] == day and r["route"].startswith("(import) "))
+        if hours:
+            print("  cold starts by UTC hour: " + ", ".join(f"{hour} {n}" for hour, n in hours))
     PY
 
 # Each day's measured egress over the last days, oldest first.

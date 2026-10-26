@@ -2,6 +2,7 @@
 
 ## 2026-10-26
 
+* **Update**: a process's first [egress_ledger](data/tables/egress_ledger.md) write splits its start in two rows: `(import) <hour>`, the CPU to import and build the app under the UTC hour of the start, and `(startup) <route>`, the rest, named by the process's first route. `just monitor routes` prints the split and the starts by hour per day.
 * **Add**: `GET /users/{user_id}/profile?event_id=` answers `PlayerProfilePublic`, the summary, seasons, career row and series of a player page in one call, edge cached as running. The GNL website reads it in place of the four player reads. [Response shapes](api/response-shapes.md#a-players-own-reads), the [edge cache](concepts/edge-cache.md) and the [consumers](api/consumers.md) state it.
 
 ## 2026-10-22
