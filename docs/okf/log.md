@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-26
+
+* **Add**: `GET /users/{user_id}/profile?event_id=` answers `PlayerProfilePublic`, the summary, seasons, career row and series of a player page in one call, edge cached as running. The GNL website reads it in place of the four player reads. [Response shapes](api/response-shapes.md#a-players-own-reads), the [edge cache](concepts/edge-cache.md) and the [consumers](api/consumers.md) state it.
+
 ## 2026-10-22
 
 * **Update**: `DELETE /events/{id}` of a cup also deletes the cup's [discord_post](data/tables/discord_post.md) rows, whose messages stay in the channel, and the [cup_recurrence](data/tables/cup_recurrence.md) it was the last cup of. A runner deletes an event, an admin or one of its organizers. The [events module](concepts/events-module.md) and [event](data/tables/event.md) state it.
