@@ -5,7 +5,8 @@ per race of his ladder summary. The seasons read costs three statements: one
 for his roster and captain seats with their team and his signup, and the
 season record pair of app.services.derived. The series read costs two: one for
 the page of series as columns with its total, and one for their casts. None
-grows with the number of tags, races, seasons or series.
+grows with the number of tags, races, seasons or series. The profile read is
+the three of them and the career row, in one call.
 
 Each statement is built once per process, with bound parameters for the values
 of a call: building one costs more Python time than running it.
@@ -40,6 +41,7 @@ from app.core.exceptions import NotFoundError
 from app.core.fantasy import race_value
 from app.models.match import Match
 from app.models.player_reads import (
+    PlayerProfilePublic,
     PlayerSeasonPublic,
     PlayerSeasonRecordPublic,
     PlayerSeriesSummaryPublic,
@@ -438,3 +440,33 @@ def series(
                 row.id
             ]
     return rows, total or 0
+
+
+def profile(user_id: int, event_ids: Sequence[int]) -> PlayerProfilePublic:
+    """The summary, the seasons, the career row and the series a player page reads.
+
+    The series are those of the named events the player held a roster seat in;
+    a captain-only seat holds none. A missing user raises NotFoundError.
+    """
+    head = summary(user_id)
+    seats = seasons(user_id)
+    with Session.begin() as session:
+        career = derived.career_row(session, user_id)
+    named = set(event_ids)
+    played = [
+        s.season_id
+        for s in seats
+        if s.team and not s.captain_only and s.season_id in named
+    ]
+    rows: list[PlayerSeriesSummaryPublic] = []
+    while played:
+        page, total = series(user_id, played, offset=len(rows))
+        rows += page
+        if not page or len(rows) >= total:
+            break
+    return PlayerProfilePublic(
+        summary=head,
+        seasons=seats,
+        career=career.to_dict() if career else None,
+        series=rows,
+    )

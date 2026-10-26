@@ -25,6 +25,7 @@ ROUTES = [
     ("/cup-recurrences", RUNNING),
     ("/users/{player}", RUNNING),
     ("/users/{player}/summary", RUNNING),
+    ("/users/{player}/profile?event_id={season_id}", RUNNING),
     ("/users/{player}/ladder", RUNNING),
     ("/users/{player}/ladder?season_id={season_id}", RUNNING),
     ("/users/{player}/history", RUNNING),

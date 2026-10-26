@@ -34,6 +34,8 @@ ALLOWED: dict[tuple[str, str], str] = {}
 # Entities with no summary, and a player's own summary read: they answer at
 # the top level only, never embedded
 TOP_LEVEL_ONLY = (FantasyTeamPublic, FantasyBetPublic, UserProfileSummaryPublic)
+# A read that bundles a top-level read whole, as its own field
+BUNDLES = {("PlayerProfilePublic", "summary")}
 
 # Schema names of entities, which a summary may not hold a list of
 ENTITY_PREFIXES = (
@@ -127,7 +129,7 @@ def test_a_top_level_entity_is_never_embedded(client: Client) -> None:
         f"{name}.{prop} embeds {sorted(embedded)}"
         for name in sorted(_answered(spec))
         for prop, sub in (schemas[name].get("properties") or {}).items()
-        if (embedded := _refs(sub, set()) & names)
+        if (embedded := _refs(sub, set()) & names) and (name, prop) not in BUNDLES
     ]
     assert wrong == []
 
