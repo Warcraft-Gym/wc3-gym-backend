@@ -1,7 +1,10 @@
 import os
 import secrets
 from typing import Any
+from urllib.parse import urlencode
 
+import jwt
+import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
@@ -10,15 +13,22 @@ from app.api.deps import (
     SeasonServiceDep,
     TeamServiceDep,
     UserServiceDep,
-    discord_token,
-    refresh_claims,
 )
+from app.core.config import frontend_url
 from app.core.exceptions import ApiError
-from app.core.security import create_access_token
+from app.core.security import (
+    SESSION_KIND,
+    SESSION_MINUTES,
+    create_access_token,
+    decode_token,
+)
 from app.models.login import LoginRequest
 from app.services import discord, discord_roles, organizers
 
 router = APIRouter(tags=["Authentication"])
+
+AUTHORIZE_URL = "https://discord.com/oauth2/authorize"
+STATE_KIND = "discord_state"
 
 
 @router.get("/")
@@ -40,6 +50,73 @@ def login(data: LoginRequest) -> dict[str, str]:
     }
 
 
+def _discord_callback_url(request: Request) -> str:
+    """This backend's callback; Vercel names the public scheme in x-forwarded-proto."""
+    url = request.url_for("discord_callback")
+    return str(url.replace(scheme=request.headers.get("x-forwarded-proto", url.scheme)))
+
+
+def _to_frontend(path: str) -> RedirectResponse:
+    return RedirectResponse(
+        f"{frontend_url()}{path}", headers={"Cache-Control": "no-store"}
+    )
+
+
+@router.get("/auth/discord/start")
+def start_discord_login(request: Request) -> RedirectResponse:
+    """Send the browser to Discord's consent page; its state is a signed token that names no one."""
+    client_id = os.getenv("DISCORD_APPLICATION_ID")
+    if not client_id or not os.getenv("DISCORD_CLIENT_SECRET"):
+        raise ApiError(503, {"error": "Discord login is not configured"})
+    query = urlencode(
+        {
+            "response_type": "code",
+            "scope": "identify",
+            "client_id": client_id,
+            "redirect_uri": _discord_callback_url(request),
+            "state": create_access_token("start", 10, STATE_KIND),
+            "prompt": "none",
+        }
+    )
+    return RedirectResponse(f"{AUTHORIZE_URL}?{query}", status_code=302)
+
+
+@router.get("/auth/discord/callback", name="discord_callback")
+def discord_callback(
+    request: Request, code: str = "", state: str = "", error: str = ""
+) -> RedirectResponse:
+    """Send the browser to the frontend with a session token for the Discord account.
+
+    The token rides in the URL fragment, which the browser never sends to a
+    server or in a Referer. The role is not in it: every request reads it live.
+    """
+    if error or not code:
+        return _to_frontend("/login?login=error&reason=denied")
+    try:
+        valid_state = decode_token(state).get("type") == STATE_KIND
+    except jwt.InvalidTokenError:
+        valid_state = False
+    if not valid_state:
+        return _to_frontend("/login?login=error&reason=state")
+    try:
+        account = discord.identify(
+            discord.exchange_code(code, _discord_callback_url(request))
+        )
+        discord_id = str(account["id"])
+    except (requests.RequestException, ApiError, KeyError, ValueError):
+        return _to_frontend("/login?login=error&reason=token")
+    session = create_access_token(
+        discord_id,
+        SESSION_MINUTES,
+        SESSION_KIND,
+        {
+            "name": account.get("global_name") or account.get("username"),
+            "avatar": account.get("avatar"),
+        },
+    )
+    return _to_frontend(f"/sso-callback#{urlencode({'token': session})}")
+
+
 @router.get("/me")
 def me(
     request: Request,
@@ -51,16 +128,11 @@ def me(
     """The logged-in account, the users row linked to its Discord id, and every
     season that is still running, with this account's place in each."""
     # The admin token carries no Discord account, so it reads no name. A local
-    # dev login names a player but has no Clerk account to read Discord through.
+    # dev login names a player but carries no avatar, so it rewrites none.
     superadmin = claims.get("sub") == "admin"
-    account: dict[str, Any] = {}
-    if "clerk_user_id" in claims:
-        token = discord_token(claims["clerk_user_id"], stored=claims["sub"])
-        if token.provider_user_id != claims["sub"]:
-            # the frontend keeps this answer all session, so a Discord account
-            # relinked in Clerk must show now, not one request later
-            claims = refresh_claims(request)
-        account = discord.identify(token.token)
+    account: dict[str, Any] = (
+        {"id": claims["sub"], "avatar": claims["avatar"]} if "avatar" in claims else {}
+    )
     users = user_service.find_by_discord_id(claims["sub"])
     user = users[0] if users else None
     avatar = discord.avatar_url(account)
@@ -87,10 +159,7 @@ def me(
         "discord_id": claims["sub"],
         "name": "Super Admin"
         if superadmin
-        else account.get("global_name")
-        or account.get("username")
-        or claims.get("name")
-        or (user.name if user else None),
+        else claims.get("name") or (user.name if user else None),
         "avatar": avatar,
         "role": claims.get("role", "admin"),
         # the role behind an X-View-As switch, so the frontend keeps the switch visible

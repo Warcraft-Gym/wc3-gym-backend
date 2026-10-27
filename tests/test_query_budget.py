@@ -1274,7 +1274,7 @@ def test_a_member_read_costs_its_pinned_statements(
                 )
             )
     headers = member("1")
-    # the first login writes its clerk_account row and its avatar
+    # the first login writes its avatar
     assert client.get(path, headers=headers).status_code == 200
     with count_statements() as tally:
         response = client.get(path, headers=headers)

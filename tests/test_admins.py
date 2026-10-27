@@ -1,6 +1,6 @@
 """The admins the app names: the grants, the environment bootstrap, and /me.
 
-The routes are the Config page's; the caller of a self-revoke is a Clerk
+The routes are the Config page's; the caller of a self-revoke is a Discord
 session, because the token login is nobody's grant.
 """
 
@@ -12,7 +12,7 @@ from httpx2 import Client
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.relationships import DBUserSeasonSignup
-from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
+from tests.test_discord_auth import ACCOUNT, SESSION, stub_login
 
 ENV_ID = "220202568490418179"
 
@@ -48,7 +48,7 @@ def test_an_admin_cannot_revoke_itself(
         "/config/admins", json={"discord_id": ACCOUNT["id"]}, headers=auth_headers
     )
     assert resp.status_code == 201, resp.text
-    stub_clerk(monkeypatch)
+    stub_login(monkeypatch)
 
     resp = client.delete(f"/config/admins/{ACCOUNT['id']}", headers=SESSION)
 
@@ -93,7 +93,7 @@ def test_me_names_the_token_login_a_superadmin(
 def test_me_says_whether_the_player_signed_up(
     client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
 ) -> None:
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "1"})
     assert client.get("/me", headers=SESSION).json()["signed_up"] is False
 
     with Session() as session:

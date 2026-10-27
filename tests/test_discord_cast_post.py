@@ -11,7 +11,7 @@ from app.core.db import Session
 from app.models.series import Series
 from app.models.settings import Settings
 from app.services import discord, wake
-from tests.test_discord_auth import SESSION, stub_clerk
+from tests.test_discord_auth import SESSION, stub_login
 
 CONTENT = f"{discord.API_URL}/channels/content/messages"
 JOB = "/jobs/cast-reminders"
@@ -22,8 +22,8 @@ NOTHING = {"posted": 0, "late": 0, "missed": 0, "cup_reminders": 0}
 
 
 def as_member(monkeypatch: pytest.MonkeyPatch, discord_id: str) -> None:
-    """A Clerk session of the seeded player with that Discord id."""
-    stub_clerk(monkeypatch, account={"id": discord_id, "username": f"p{discord_id}"})
+    """A Discord session of the seeded player with that Discord id."""
+    stub_login(monkeypatch, account={"id": discord_id, "username": f"p{discord_id}"})
 
 
 def claim(client: Client, series_id: int, **body: str) -> None:

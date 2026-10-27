@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-27
+
+* **Update**: members sign in with a Discord OAuth flow the backend runs, `GET /auth/discord/start` and `GET /auth/discord/callback`; the callback signs a 30-day session token of type `discord` that names the Discord account. `DISCORD_CLIENT_SECRET` is new; the `CLERK_*` variables are gone. [Authentication](api/auth.md) and [the decision](decisions/discord-login.md) state it, in place of the decision that Clerk owns the session. [clerk_account](data/tables/clerk_account.md) is no longer read and is dropped in a later release.
+
 ## 2026-10-26
 
 * **Update**: a cup closes itself in the write that plays it out: the result that leaves every series scored on its last stage with no Swiss round left, or the finish of its last round. The close pays the awards and posts the podium, which now congratulates the podium by mention, credits each place with its series record and the champion's final, carries a card per division, and ends with the cup's figures and a thank-you. [Events module](concepts/events-module.md) and [Discord integration](concepts/discord-integration.md) state it.

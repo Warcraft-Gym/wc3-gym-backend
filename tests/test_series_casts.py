@@ -13,14 +13,14 @@ from sqlalchemy import create_engine, text
 from app.models.series_cast import vod_url
 from tests.conftest import Client
 from tests.migrate import fresh_database, upgrade_to
-from tests.test_discord_auth import SESSION, stub_clerk
+from tests.test_discord_auth import SESSION, stub_login
 
 TWITCH = "https://www.twitch.tv/gnlcaster"
 
 
 def as_member(monkeypatch: pytest.MonkeyPatch, discord_id: str) -> None:
-    """A Clerk session of the seeded player with that Discord id."""
-    stub_clerk(monkeypatch, account={"id": discord_id, "username": f"p{discord_id}"})
+    """A Discord session of the seeded player with that Discord id."""
+    stub_login(monkeypatch, account={"id": discord_id, "username": f"p{discord_id}"})
 
 
 def test_a_member_claims_edits_and_unclaims(
@@ -232,7 +232,7 @@ def test_a_channel_is_not_a_vod(url: str) -> None:
 def test_a_guest_cannot_claim(
     client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch, a_member=False, account={"id": "1", "username": "p1"})
+    stub_login(monkeypatch, a_member=False, account={"id": "1", "username": "p1"})
     resp = client.post(
         f"/series/{seeded['series_open_id']}/casts",
         json={"channel_url": TWITCH},

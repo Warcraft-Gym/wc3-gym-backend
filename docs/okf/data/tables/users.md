@@ -4,7 +4,7 @@ title: users
 description: One person, made by the first way in that meets them and found by any battle tag they hold or by Discord id, with the profile fields the forms write and three sync stamps.
 resource: ../../../../app/models/user.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-08T14:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-27T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-24T10:21:07Z }
 sources:
   - id: model
@@ -31,7 +31,7 @@ sources:
 | `id` | INTEGER | no | Primary key. |
 | `name` | VARCHAR | no | Display name. The career import matches `player_career_stats.player_name` on it. |
 | `discordTag` | VARCHAR | yes | Discord username. Unique among non-blank values. Null or blank means unknown. A person who never logged in may keep an old sheet handle here as a hint. |
-| `discordId` | VARCHAR | yes | Discord account id. Unique among non-blank values. A Clerk session finds its player through it. Null means the person never logged in; blank means unknown. |
+| `discordId` | VARCHAR | yes | Discord account id. Unique among non-blank values. A member's session finds its player through it. Null means the person never logged in; blank means unknown. |
 | `mmr` | INTEGER | yes | The MMR typed on the signup or profile form. The W3Champions sync writes `w3cstats`, not this column. |
 | `country` | VARCHAR | yes | ISO 3166-1 alpha-2 code, or a UK nation as `GB-SCT`. Drives the flag on cards. |
 | `timezone` | VARCHAR | yes | IANA zone name. Soft blocks resolve their local times against it. Validated by `KnownTimeZone`. |

@@ -6,10 +6,8 @@ database; the engine work happens in create_app.
 """
 
 import logging
-import os
 from collections.abc import Callable
-from functools import cache
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import Annotated, Any, Literal
 
 import jwt
 from fastapi import Depends, Request, Response
@@ -17,8 +15,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.db import Session
 from app.core.exceptions import ApiError
-from app.core.security import decode_token, dev_login_enabled, is_admin
-from app.models.clerk_account import ClerkAccount
+from app.core.security import (
+    SESSION_KIND,
+    decode_token,
+    dev_login_enabled,
+    is_admin,
+)
 from app.models.season import EventPhase, Season
 from app.services import admins, discord, discord_roles, organizers
 from app.services.availability import AvailabilityService
@@ -36,10 +38,6 @@ from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 from app.services.settings import SettingsService
 from app.services.soft_blocks import SoftBlockService
-
-if TYPE_CHECKING:
-    from clerk_backend_api import Clerk
-    from clerk_backend_api.models import OAuthAccessToken
 from app.services.teams import TeamService
 from app.services.users import UserService
 
@@ -85,70 +83,24 @@ def event_edge_cache(response: Response, event_id: int) -> None:
     phase_edge_cache(response, phase)
 
 
-@cache
-def _clerk() -> "Clerk":
-    # imported on the first signed-in request: most cold starts serve public reads
-    from clerk_backend_api import Clerk
+def _session_claims(request: Request, token: dict[str, Any]) -> dict[str, Any]:
+    """The Discord identity and the role behind a member's session, resolved once per request.
 
-    return Clerk(bearer_auth=os.getenv("CLERK_SECRET_KEY"))
-
-
-def clerk_claims(request: Request) -> dict[str, Any]:
-    """The claims of this request's Clerk session, resolved once per request.
-
-    Several routes guard twice (a route dependency and a helper it calls), so
-    the answer is kept on request.state: one Clerk verification, one guild read
-    and one captain query per request instead of one per guard.
+    The session token names the Discord account; the role is read live, so a
+    kick, grant or seat change shows on the next request. Several routes guard
+    twice, so the answer is kept on request.state.
     """
     cached = getattr(request.state, "claims", None)
     if cached is not None:
         return cached
-    return refresh_claims(request)
-
-
-def refresh_claims(request: Request) -> dict[str, Any]:
-    """Resolve the claims again, for a route that just changed them (a relink)."""
-    request.state.claims = _resolve_claims(request)
-    return request.state.claims
-
-
-def _resolve_claims(request: Request) -> dict[str, Any]:
-    """The Discord identity and the role behind the request's Clerk session.
-
-    Clerk verifies the session token locally (its JWKS is cached). The Discord
-    account behind the Clerk user is read from clerk_account, filled on the
-    first request. An admin is one the database or ADMIN_DISCORD_IDS names, so
-    it needs no guild read; everyone else is a member of the guild or a guest.
-    A captain is one the database names on a current-season team, never a
-    Discord role. Every check is live, so a kick, grant or seat change shows
-    on the next request.
-    """
-    # production lists its exact origins; Vercel previews set it empty because their origin changes per branch
-    from clerk_backend_api import AuthenticateRequestOptions
-
-    parties = os.getenv("CLERK_AUTHORIZED_PARTIES", "http://localhost:5173")
-    state = _clerk().authenticate_request(
+    discord_id = str(token["sub"])
+    request.state.claims = _claims_for(
         request,
-        AuthenticateRequestOptions(
-            authorized_parties=parties.replace(" ", "").split(",") if parties else None
-        ),
-    )
-    if not state.is_signed_in or state.payload is None:
-        logger.warning(
-            "Clerk refused the session: %s (bearer %s)",
-            state.message,
-            "present" if request.headers.get("authorization") else "missing",
-        )
-        raise ApiError(401, {"error": state.message or "Not signed in"})
-
-    clerk_user_id = str(state.payload["sub"])
-    discord_id = _discord_id(clerk_user_id)
-    return _claims_for(
-        request,
-        {"sub": discord_id, "clerk_user_id": clerk_user_id},
+        {"sub": discord_id, "name": token.get("name"), "avatar": token.get("avatar")},
         admin=admins.is_admin(discord_id),
         guild_role=lambda: discord.role_for(discord_id),
     )
+    return request.state.claims
 
 
 def _claims_for(
@@ -162,7 +114,7 @@ def _claims_for(
 
     An admin needs no guild read. Everyone else is what `guild_role` answers,
     "member" or "guest", and a member with a seat in a running season is a
-    captain. The Clerk session and the local dev login both come through here.
+    captain. A member's session and the local dev login both come through here.
     """
     discord_id = claims["sub"]
     if admin:
@@ -183,7 +135,7 @@ def _claims_for(
 def _dev_claims(request: Request, token: dict[str, Any]) -> dict[str, Any]:
     """The claims of a local dev login: the player the token names, as the role it asked for.
 
-    Cached on request.state like a Clerk session, so the guards that run twice
+    Cached on request.state like a member's session, so the guards that run twice
     on one request resolve it once.
     """
     cached = getattr(request.state, "claims", None)
@@ -277,45 +229,8 @@ def _view_as(request: Request, claims: dict[str, Any]) -> dict[str, Any]:
     return claims
 
 
-def _discord_id(clerk_user_id: str) -> str:
-    """The Discord id behind a Clerk user: one row, written by its first request."""
-    with Session.begin() as session:
-        account = session.get(ClerkAccount, clerk_user_id)
-        if account:
-            return account.discord_id
-    return discord_token(clerk_user_id).provider_user_id
-
-
-def discord_token(clerk_user_id: str, stored: str | None = None) -> "OAuthAccessToken":
-    """The Discord OAuth token Clerk holds for that user, for reads as the account.
-
-    The clerk_account row is rewritten only when Clerk names another Discord
-    account, so a relink is picked up by the next login (/me reads the token
-    every time) and an unchanged login writes nothing. `stored` is the Discord
-    id the caller already read off the row; a token that names it reads no row.
-    """
-    tokens = _clerk().users.get_o_auth_access_token(
-        user_id=clerk_user_id, provider="oauth_discord"
-    )
-    if not tokens:
-        raise ApiError(401, {"error": "No Discord account on this login"})
-    if tokens[0].provider_user_id == stored:
-        return tokens[0]
-    with Session.begin() as session:
-        account = session.get(ClerkAccount, clerk_user_id)
-        # the row only changes when Clerk relinks the account, so a read costs
-        # less than a write on every guarded request
-        if account is None or account.discord_id != tokens[0].provider_user_id:
-            session.merge(
-                ClerkAccount(
-                    clerk_user_id=clerk_user_id, discord_id=tokens[0].provider_user_id
-                )
-            )
-    return tokens[0]
-
-
 def require_login(request: Request, credentials: Credentials) -> dict[str, Any]:
-    """Admit the admin token or a Clerk session, and answer the claims.
+    """Admit the admin token or a member's Discord session, and answer the claims.
 
     A guest is admitted too: it logs in and reads the public pages.
     """
@@ -323,8 +238,10 @@ def require_login(request: Request, credentials: Credentials) -> dict[str, Any]:
         raise ApiError(401, {"error": "Missing Authorization Header"})
     try:
         claims = decode_token(credentials.credentials)
-    except jwt.InvalidTokenError:
-        return clerk_claims(request)
+    except jwt.InvalidTokenError as invalid:
+        raise ApiError(401, {"error": "Not signed in"}) from invalid
+    if claims.get("type") == SESSION_KIND:
+        return _session_claims(request, claims)
     if claims.get("type") == "dev" and dev_login_enabled():
         return _dev_claims(request, claims)
     if claims.get("type") != "access":

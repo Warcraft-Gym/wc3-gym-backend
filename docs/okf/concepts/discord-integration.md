@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, cups announce themselves to the members who opt in, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-26T16:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-27T12:00:00Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -70,7 +70,7 @@ The cup's thread opens with its first draw or series message, under its open mes
 
 # The guild read and the roles
 
-An account's Discord token from Clerk only identifies it; the bot token reads the guild membership. `DISCORD_GUILD_ID` names the guild. Which guild it names is a maintainers' decision, never a configuration fix for a guest classification.
+The Discord login reads the account once, with a token that only identifies it, and keeps no token; the bot token reads the guild membership. `DISCORD_GUILD_ID` names the guild. Which guild it names is a maintainers' decision, never a configuration fix for a guest classification.
 
 Every Discord call goes through one `requests.Session` in `app/services/discord.py`, so calls reuse a connection. `role_for` keeps each account's member or guest answer for `ROLE_TTL` seconds in the process, so a guild join or leave shows within a minute; a failed read is never kept. `app_emojis` keeps the first successful read for the life of the process and reads again after a failure.
 

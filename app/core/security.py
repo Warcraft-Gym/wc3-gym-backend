@@ -1,4 +1,4 @@
-"""The admin token's JWT."""
+"""The JWTs the backend signs: the admin token's, a member's Discord session, and the short-lived ones."""
 
 import os
 import uuid
@@ -7,6 +7,11 @@ from typing import Any
 
 import jwt
 
+# A member's session: the Discord login mints it, and it names the Discord account
+SESSION_KIND = "discord"
+# shortcut: no refresh or revocation, a session lives this long; add a sessions table if one must end early
+SESSION_MINUTES = 30 * 24 * 60
+
 
 def create_access_token(
     identity: str,
@@ -14,9 +19,9 @@ def create_access_token(
     kind: str = "access",
     extra: dict[str, Any] | None = None,
 ) -> str:
-    """The admin token's access token; a player's session belongs to Clerk.
-    Another `kind` is no login: the Battle.net link signs its state with it,
-    and the local dev login mints `dev`. `extra` adds claims of its own."""
+    """A signed token of one `kind`: `access` for the admin token, SESSION_KIND
+    for a member's Discord login, `dev` for the local dev login. The OAuth flows
+    sign their state with a kind of their own. `extra` adds claims of its own."""
     now = datetime.now(UTC)
     return jwt.encode(
         (extra or {})

@@ -13,7 +13,7 @@ from httpx2 import Client
 
 from app.models.enums import Race
 from app.models.types import utcnow
-from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
+from tests.test_discord_auth import ACCOUNT, SESSION, stub_login
 from tests.test_fantasy_locks import COMMENCED, schedule, score
 
 
@@ -53,7 +53,7 @@ def open_season(
 def test_the_captain_edits_and_drafts_its_own_team(
     client: Client, open_season: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "1"})
     team_id = open_season["fantasy_team_id"]
     p2 = open_season["player_ids"][1]
 
@@ -104,7 +104,7 @@ def test_the_list_answers_the_drafted_players_stats(
 def test_a_member_who_is_not_the_captain_is_refused(
     client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "2"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "2"})
     resp = client.put(
         f"/fantasy/teams/{seeded['fantasy_team_id']}",
         json={"name": "Taken over"},
@@ -117,7 +117,7 @@ def test_a_member_who_is_not_the_captain_is_refused(
 def test_the_captain_cannot_reseat_the_team(
     client: Client, open_season: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "1"})
     team_id = open_season["fantasy_team_id"]
     p1, p2 = open_season["player_ids"][:2]
 
@@ -146,7 +146,7 @@ def test_a_commenced_season_closes_the_captain_writes(
 
     The admin routes stay open, so a mistake is still fixed there.
     """
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "1"})
     team_id = seeded["fantasy_team_id"]
     p2 = seeded["player_ids"][1]
 
@@ -188,7 +188,7 @@ def test_an_owner_keeps_one_player_per_tier(
 ) -> None:
     """The owner routes apply the draft rule the public draft applies: one
     player per tier, and no more than the season's tiers. An admin reseats freely."""
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "1"})
     team_id = open_season["fantasy_team_id"]
     p1, p2, p3, p4 = open_season["player_ids"][:4]
     refused = {"error": "A fantasy team drafts one player from each of the 3 tiers"}

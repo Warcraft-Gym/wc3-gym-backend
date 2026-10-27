@@ -20,7 +20,7 @@ sources:
 
 # Steps
 
-1. In the Discord Developer Portal, create the application with a bot. Set `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID` on the backend. The interactions endpoint URL is the adapter's, not the backend's; see the `wc3-gym-discord-bot` repository.
+1. In the Discord Developer Portal, create the application with a bot. Set `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID` on the backend. For the member login, set `DISCORD_CLIENT_SECRET` from the application's OAuth2 page, and add each deployment's `<backend>/auth/discord/callback` as an OAuth2 redirect. The interactions endpoint URL is the adapter's, not the backend's; see the `wc3-gym-discord-bot` repository.
 2. Each production build registers the commands on the guild `DISCORD_GUILD_ID` names, after the migrations: `api/discord_setup.py`, run by the `buildCommand` in `vercel.json`. It replaces the guild's command list with `COMMANDS` from `app/services/interactions.py`, and guild commands update at once. A new guild or a new application needs its values set on the production deployment and a release. On staging or locally, `uv run just discord-commands` registers them by hand.
 3. The same step uploads the emojis in `docs/discord-emojis` that the application lacks, and leaves an emoji it holds as it is. `/stats` and the cards show race icons and the W3Champions crown once they exist. By hand: `uv run just discord-emojis`.
 4. In the guild, place the bot's role directly above the season and team roles and below everything else, with Manage Roles. A bot manages only roles below its own; a role higher up is out of its reach on purpose.
