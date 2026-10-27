@@ -6,6 +6,7 @@ database; the engine work happens in create_app.
 """
 
 import logging
+import time
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
@@ -16,6 +17,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.core.security import (
+    ADMIN_SESSION_MINUTES,
     SESSION_KIND,
     decode_token,
     dev_login_enabled,
@@ -94,10 +96,14 @@ def _session_claims(request: Request, token: dict[str, Any]) -> dict[str, Any]:
     if cached is not None:
         return cached
     discord_id = str(token["sub"])
+    admin = admins.is_admin(discord_id)
+    # an admin's session older than a day is dead: the browser signs in again, which Discord makes silent
+    if admin and time.time() - token["iat"] > ADMIN_SESSION_MINUTES * 60:
+        raise ApiError(401, {"error": "Not signed in"})
     request.state.claims = _claims_for(
         request,
         {"sub": discord_id, "name": token.get("name"), "avatar": token.get("avatar")},
-        admin=admins.is_admin(discord_id),
+        admin=admin,
         guild_role=lambda: discord.role_for(discord_id),
     )
     return request.state.claims

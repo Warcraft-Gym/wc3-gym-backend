@@ -4,16 +4,24 @@ Discord is stood in for: the code exchange, the account read and the bot's
 guild reads are patched per test.
 """
 
+import os
+import time
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+import jwt
 import pytest
 import requests
 from httpx2 import Client
 from starlette.requests import Request
 
 from app.core.db import Session
-from app.core.security import SESSION_KIND, create_access_token, decode_token
+from app.core.security import (
+    SESSION_KIND,
+    SESSION_MINUTES,
+    create_access_token,
+    decode_token,
+)
 from app.services import discord
 
 ACCOUNT = {"id": "42", "username": "player", "global_name": "Player", "avatar": "abc"}
@@ -134,7 +142,17 @@ def test_the_login_starts_at_discord(client: Client, discord_app: None) -> None:
     assert query["scope"] == ["identify"]
     assert query["client_id"] == ["an-app"]
     assert query["redirect_uri"][0].endswith("/auth/discord/callback")
-    assert decode_token(query["state"][0])["type"] == "discord_state"
+    state = decode_token(query["state"][0])
+    assert state["type"] == "discord_state"
+    # the browser carries the nonce back, so the state only works where it started
+    assert resp.cookies["discord_state"] == state["sub"]
+    assert "HttpOnly" in resp.headers["set-cookie"]
+
+
+def _state(client: Client, nonce: str = "a-nonce") -> str:
+    """A state as the start route hands it out: signed, with its nonce in the browser's cookie."""
+    client.cookies.set("discord_state", nonce)
+    return create_access_token(nonce, 10, "discord_state")
 
 
 def test_the_login_is_off_without_the_client_secret(
@@ -163,8 +181,7 @@ def test_the_callback_hands_the_frontend_a_session(
 
     monkeypatch.setattr(discord, "exchange_code", exchange_code)
     monkeypatch.setattr(discord, "identify", lambda token: ACCOUNT)
-    state = create_access_token("start", 10, "discord_state")
-    location = _callback(client, code="a-code", state=state)
+    location = _callback(client, code="a-code", state=_state(client))
 
     url = urlparse(location)
     assert (
@@ -184,6 +201,7 @@ def test_the_callback_hands_the_frontend_a_session(
         ({"error": "access_denied"}, "denied"),
         ({"code": "a-code", "state": "forged"}, "state"),
         ({"code": "a-code", "state": "bnet"}, "state"),
+        ({"code": "a-code", "state": "other-browser"}, "state"),
     ],
 )
 def test_a_failed_callback_says_why(
@@ -191,6 +209,10 @@ def test_a_failed_callback_says_why(
 ) -> None:
     if query.get("state") == "bnet":  # a state signed for another flow
         query = {**query, "state": create_access_token("start", 10, "bnet_state")}
+    if (
+        query.get("state") == "other-browser"
+    ):  # a good state whose nonce this browser never held
+        query = {**query, "state": create_access_token("a-nonce", 10, "discord_state")}
     location = _callback(client, **query)
     assert location == f"https://app.example/login?login=error&reason={reason}"
 
@@ -202,9 +224,45 @@ def test_a_code_discord_refuses_says_token(
         raise requests.HTTPError("400 invalid_grant")
 
     monkeypatch.setattr(discord, "exchange_code", refuse)
-    state = create_access_token("start", 10, "discord_state")
-    location = _callback(client, code="old-code", state=state)
+    location = _callback(client, code="old-code", state=_state(client))
     assert location == "https://app.example/login?login=error&reason=token"
+
+
+def _session_from(discord_id: str, days_ago: int) -> str:
+    """A session minted that many days ago, still inside its 30 days."""
+    issued = int(time.time()) - days_ago * 86400
+    return jwt.encode(
+        {
+            "sub": discord_id,
+            "type": SESSION_KIND,
+            "name": "Player",
+            "iat": issued,
+            "nbf": issued,
+            "exp": issued + SESSION_MINUTES * 60,
+        },
+        os.environ["JWT_SECRET_KEY"],
+        algorithm="HS256",
+    )
+
+
+def test_an_admin_needs_a_sign_in_within_a_day(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    old = _session_from("220202568490418179", days_ago=2)
+    resp = client.get("/me", headers={"Authorization": f"Bearer {old}"})
+    assert resp.status_code == 401
+    assert resp.json() == {"error": "Not signed in"}
+
+
+def test_a_member_keeps_an_old_session(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub_login(monkeypatch)
+    old = _session_from(ACCOUNT["id"], days_ago=2)
+    resp = client.get("/me", headers={"Authorization": f"Bearer {old}"})
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "member"
 
 
 def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> None:
