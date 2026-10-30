@@ -3315,7 +3315,7 @@ def _hold_eligible(
                 f"W3Champions has no current rating for {tag.tag} on a race with {event.race_games_min} games or more, so this event cannot take the signup."
             )
         mmr, games = rated.mmr, rated.games
-        name = RACE_NAMES.get(rated.race.value, rated.race.value)
+        name = f"{RACE_NAMES.get(rated.race.value, rated.race.value)}, the best of their races with {event.race_games_min} games or more"
         played = f"{user.name} played {games} games recently"
     else:
         name = RACE_NAMES.get(race.value, race.value)
