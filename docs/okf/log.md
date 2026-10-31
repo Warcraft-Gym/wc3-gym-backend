@@ -3,6 +3,7 @@
 ## 2026-10-27
 
 * **Update**: members sign in with a Discord OAuth flow the backend runs, `GET /auth/discord/start` and `GET /auth/discord/callback`; the callback signs a 30-day session token of type `discord` that names the Discord account. `DISCORD_CLIENT_SECRET` is new; the `CLERK_*` variables are gone. [Authentication](api/auth.md) and [the decision](decisions/discord-login.md) state it, in place of the decision that Clerk owns the session. [clerk_account](data/tables/clerk_account.md) is no longer read and is dropped in a later release.
+* **Update**: a cup lets its sign-ups in by a line ([cup_entrant_line](data/tables/cup_entrant_line.md)). The first places are in and the rest wait. On a cup with divisions `entrant_cap` counts one division, and the waitlist comes in a whole division at a time. A withdrawal lets the first in line in, and before the draw it sends the players past the places back; once a cup over rounds is drawn the line only moves forward. A runner's hand-add joins the line as a signup does, and an admit or swap holds its entrant in. A waiting player checks in for the cup or a round, the `GET /me/events` row carries `waitlisted`, and an admit works between the rounds of a cup over rounds. The Discord card answers a waiting player. The [events module](concepts/events-module.md), [event](data/tables/event.md), [event_entrant](data/tables/event_entrant.md), [cup_leg_checkin](data/tables/cup_leg_checkin.md) and [Discord integration](concepts/discord-integration.md) state it.
 
 ## 2026-10-26
 

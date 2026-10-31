@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T07:56:14Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-27T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -70,7 +70,7 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `veto_by_best_of` | BOOLEAN | no | On: each series derives its veto from its own best-of and the pool, and game 1 plays the map the veto leaves, see [the decision](../../decisions/cup-veto-by-best-of.md). A cup turns it on; off plays `pick_ban` and the round map. Off by default. |
 | `bnet_required` | BOOLEAN | no | On: a player enters only with an active battle tag verified through Battle.net, with or without `eligibility_required`, and the event takes members only. A player already in when it turns on stays, and their row warns `not_verified`. Off by default. |
 | `hide_seeds` | BOOLEAN | no | On: the entrants read and the stage series read answer seed numbers only to the event's admins and organizers; every other reader gets null, and the entrants in signup order. Off by default. |
-| `entrant_cap` | INTEGER | yes | The most live entrants the event takes. A signup past it is refused, except on a cup, which puts it on its waitlist (`event_entrant.waitlisted_at`). Null means no cap. |
+| `entrant_cap` | INTEGER | yes | The most live entrants the event takes. A signup past it is refused, except on a cup, which puts it on its waitlist (`event_entrant.waitlisted_at`). On a cup with divisions it counts the entrants of one division, and the cup takes a further division each time its line fills one ([cup_entrant_line](cup_entrant_line.md)). Null means no cap. |
 | `entrant_min` | INTEGER | yes | The fewest entrants the event is played with, at least 2. The draw of the first stage refuses while fewer would play: every entrant that has not withdrawn, across the divisions. A later stage is never held to it. Null means no minimum. |
 | `region` | VARCHAR | yes | Where the event is played, as free text. Set by the admin form; answered on the event payload; no service reads it. |
 | `fantasy_tier_cuts` | JSON | yes | The ascending MMRs each fantasy tier opens at, 1 to 5 of them. The tier count is one more. Null until a tier allocation is applied. |

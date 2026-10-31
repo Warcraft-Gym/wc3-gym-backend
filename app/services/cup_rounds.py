@@ -668,14 +668,17 @@ def leg_drawn(session: OrmSession, leg_id: int) -> bool:
     )
 
 
-def _playing(session: OrmSession, event_id: int) -> list[EventEntrant]:
+def _playing(
+    session: OrmSession, event_id: int, waiting: bool = False
+) -> list[EventEntrant]:
+    """The cup's entrants that are in; `waiting` takes the waitlist too."""
     return list(
         session.scalars(
             select(EventEntrant)
             .where(
                 col(EventEntrant.event_id) == event_id,
                 col(EventEntrant.withdrawn_at).is_(None),
-                col(EventEntrant.waitlisted_at).is_(None),
+                *([] if waiting else [col(EventEntrant.waitlisted_at).is_(None)]),
             )
             .order_by(col(EventEntrant.id))
         )
@@ -689,7 +692,9 @@ def _entrant_for(
     claims: dict[str, Any] | None,
     runs: bool,
 ) -> EventEntrant:
-    """The entry a check-in is for: one a runner names, or the caller's own."""
+    """The entry a check-in is for: one a runner names, or the caller's own.
+    A player on the waitlist checks in too, so a runner can let them in for a
+    player who does not show; the round's draw seats only the players in."""
     if entrant_id is not None:
         entrant = session.get(EventEntrant, entrant_id)
         if entrant is None or entrant.event_id != ident(event):
@@ -697,7 +702,7 @@ def _entrant_for(
         if runs or _owns(session, entrant, claims):
             return entrant
         raise ApiError(403, {"error": "Check in your own entry"})
-    for entrant in _playing(session, ident(event)):
+    for entrant in _playing(session, ident(event), waiting=True):
         if _owns(session, entrant, claims):
             return entrant
     raise BadRequestError("You are not signed up for this cup")
