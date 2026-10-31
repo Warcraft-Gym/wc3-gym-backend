@@ -7,7 +7,7 @@ The 71 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [users](users.md) - One person, made by the first way in that meets them and found by any battle tag they hold or by Discord id, with the profile fields the forms write and three sync stamps.
 * [user_battle_tag](user_battle_tag.md) - One battle tag a person has played under; a tag names at most one person, and each person has at most one active tag.
 * [link_prompt](link_prompt.md) - A suggestion that an earlier player is a login, answered once by that login, or the notice that another login verified a tag and took it.
-* [clerk_account](clerk_account.md) - The Discord account behind one Clerk user, written on the first guarded request of a login so no later request asks Clerk.
+* [clerk_account](clerk_account.md) - The Discord account behind one Clerk user, from when Clerk signed members in; no code reads or writes it, and a later release drops it.
 * [admin_grant](admin_grant.md) - One Discord account that administers the site, granted on the Config page; the bootstrap ids in ADMIN_DISCORD_IDS need no row.
 * [organizer_grant](organizer_grant.md) - One Discord account that may create small events, granted by an admin directly or by approving the account's request.
 * [organizer_request](organizer_request.md) - One member's open request to become an organizer; an admin's approval or decline deletes it.

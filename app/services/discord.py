@@ -1,7 +1,7 @@
 """The Discord calls and the guild membership behind a login.
 
-The account's Discord token comes from Clerk and only identifies the
-account (`identify` scope); the bot reads the guild. Membership is all the
+The login trades Discord's authorization code for a token that only
+identifies the account (`identify` scope), once; the bot reads the guild. Membership is all the
 guild decides: app.services.admins says who administers the site.
 """
 
@@ -48,6 +48,25 @@ def _user_get(access_token: str, path: str) -> requests.Response:
         headers={"Authorization": f"Bearer {access_token}"},
         timeout=REQUEST_TIMEOUT,
     )
+
+
+def exchange_code(code: str, redirect_uri: str) -> str:
+    """The account's access token for the authorization code Discord sent back."""
+    response = _session.post(
+        f"{API_URL}/oauth2/token",
+        auth=(
+            os.environ["DISCORD_APPLICATION_ID"],
+            os.environ["DISCORD_CLIENT_SECRET"],
+        ),
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    return str(response.json()["access_token"])
 
 
 def identify(access_token: str) -> dict[str, Any]:

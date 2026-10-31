@@ -1,6 +1,6 @@
 """The local dev login: sign in as any player, to test the app as that player.
 
-A local instance has no Discord server, so no Clerk session passes the guild
+A local instance has no Discord server, so no Discord session passes the guild
 check. With DEV_LOGIN=1 on a local backend these routes mint a session for
 any player that has a Discord id, as a member, a guest or an admin; a member
 with a seat is a captain, as on a real login. Every route answers 404 unless
@@ -42,7 +42,7 @@ def _admin_token(request: Request, credentials: Credentials) -> None:
     """Admit the admin token's session, and only while the dev login is on.
 
     The switch is read first, so a machine with it off answers 404 to anyone.
-    A dev session, even one signed in as an admin, and a Clerk admin are refused.
+    A dev session, even one signed in as an admin, and a Discord admin are refused.
     """
     if not dev_login_enabled():
         raise ApiError(404, {"error": "Not Found"})

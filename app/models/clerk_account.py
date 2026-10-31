@@ -1,7 +1,8 @@
-"""The Discord account behind a Clerk user.
+"""The Discord account behind a Clerk user, from when Clerk signed members in.
 
-Clerk names the Discord account once, on the first request of a user; the row
-answers every request after, so no request waits on Clerk's API.
+No code reads or writes it: the Discord login names the account in its session.
+The table is dropped in a later release, once the code that read it is gone
+from every deployment (a migration must work with the code before it).
 """
 
 from sqlmodel import Field, SQLModel

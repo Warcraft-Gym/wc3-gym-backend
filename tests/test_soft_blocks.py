@@ -24,7 +24,7 @@ from app.models.user_block import UserBlock, UserBusy
 from app.models.user_team_season import DBUserTeamSeason
 from app.services.availability import NO_SCHEDULING, AvailabilityService
 from tests.seed import active, add_season
-from tests.test_discord_auth import SESSION, stub_clerk
+from tests.test_discord_auth import SESSION, stub_login
 
 WORK = {"label": "Work", "weekdays": 31, "start_local": "09:00", "end_local": "17:00"}
 
@@ -455,7 +455,7 @@ def captain(
     )
     assert resp.status_code == 200, resp.text
 
-    stub_clerk(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
+    stub_login(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
     return SESSION
 
 

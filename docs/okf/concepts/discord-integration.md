@@ -72,7 +72,7 @@ The cup's thread opens with its first draw or series message, under its open mes
 
 # The guild read and the roles
 
-An account's Discord token from Clerk only identifies it; the bot token reads the guild membership. `DISCORD_GUILD_ID` names the guild. Which guild it names is a maintainers' decision, never a configuration fix for a guest classification.
+The Discord login reads the account once, with a token that only identifies it, and keeps no token; the bot token reads the guild membership. `DISCORD_GUILD_ID` names the guild. Which guild it names is a maintainers' decision, never a configuration fix for a guest classification.
 
 Every Discord call goes through one `requests.Session` in `app/services/discord.py`, so calls reuse a connection. `role_for` keeps each account's member or guest answer for `ROLE_TTL` seconds in the process, so a guild join or leave shows within a minute; a failed read is never kept. `app_emojis` keeps the first successful read for the life of the process and reads again after a failure.
 
