@@ -722,7 +722,11 @@ def test_a_cup_rates_a_player_on_the_races_they_have_really_played(
     floor = eligible_cup(name="Floor", mmr_min=1000, race_games_min=20)
     refused = sign_up(client, floor, headers)
     assert refused.status_code == 400
-    assert "rated 800 on Night Elf" in refused.json()["error"]
+    # the player signs up as Human, so the refusal names the rule that picks Night Elf
+    assert (
+        "rated 800 on Night Elf, the best of their races with 20 games or more;"
+        " this event takes players rated from 1000."
+    ) in refused.json()["error"]
 
 
 def test_a_cup_refuses_a_player_with_no_race_over_its_games(
