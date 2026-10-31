@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-27
+
+* **Update**: a cup lets its sign-ups in by a line ([cup_entrant_line](data/tables/cup_entrant_line.md)). The first places are in and the rest wait. On a cup with divisions `entrant_cap` counts one division, and the waitlist comes in a whole division at a time. A withdrawal lets the first in line in, and before the draw it sends the players past the places back; once a cup over rounds is drawn the line only moves forward. A runner's hand-add joins the line as a signup does, and an admit or swap holds its entrant in. A waiting player checks in for the cup or a round, the `GET /me/events` row carries `waitlisted`, and an admit works between the rounds of a cup over rounds. The Discord card answers a waiting player. The [events module](concepts/events-module.md), [event](data/tables/event.md), [event_entrant](data/tables/event_entrant.md), [cup_leg_checkin](data/tables/cup_leg_checkin.md) and [Discord integration](concepts/discord-integration.md) state it.
+
 ## 2026-10-26
 
 * **Update**: a cup closes itself in the write that plays it out: the result that leaves every series scored on its last stage with no Swiss round left, or the finish of its last round. The close pays the awards and posts the podium, which now congratulates the podium by mention, credits each place with its series record and the champion's final, carries a card per division, and ends with the cup's figures and a thank-you. [Events module](concepts/events-module.md) and [Discord integration](concepts/discord-integration.md) state it.

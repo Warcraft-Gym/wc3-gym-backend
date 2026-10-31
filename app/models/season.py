@@ -1012,7 +1012,11 @@ class MemberEventRow(SQLModel):
     # is finished, so the page reads the bracket or the standings; `closed`
     # nothing is open to the caller yet. A player of a cup team reads
     # `check_in`, `checked_in` or `view`: the team leaves on its own panel.
+    # An entry on a cup's waitlist reads `waitlisted`, the leave, or
+    # `check_in` and `checked_in` while its check-in stands open.
     action: MemberAction
+    # The caller's entry waits on the cup's waitlist
+    waitlisted: bool = False
     # The caller's own team's next fixture with places left, on an event he
     # holds a captain seat in; null for every other caller and every other event
     captain_fixture: CaptainFixture | None = None

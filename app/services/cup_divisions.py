@@ -115,15 +115,22 @@ def hold_divisions_on(session: OrmSession, event: Season) -> None:
         raise BadRequestError(NO_DIVISIONS)
 
 
+def drawn(session: OrmSession, event_id: int) -> bool:
+    """Whether any stage of the cup holds its series, in one short read."""
+    return (
+        session.scalar(
+            select(col(CupSeries.id))
+            .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
+            .where(col(DBEventRound.season_id) == event_id)
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def hold_undrawn(session: OrmSession, event_id: int, error: str = DRAWN) -> None:
     """Refuse a change once any stage of the cup holds its series."""
-    drawn = session.scalar(
-        select(col(CupSeries.id))
-        .join(DBEventRound, col(DBEventRound.id) == col(CupSeries.round_id))
-        .where(col(DBEventRound.season_id) == event_id)
-        .limit(1)
-    )
-    if drawn is not None:
+    if drawn(session, event_id):
         raise ApiError(409, {"error": error})
 
 

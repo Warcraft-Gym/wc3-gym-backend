@@ -48,9 +48,16 @@ NO_SIGN_UP = {
     "withdraw": "You are already signed up.",
     "check_in": "You are already signed up.",
     "checked_in": "You are already signed up.",
+    "waitlisted": "You are on the waitlist already.",
     "view": "This event has started.",
     "closed": "Signups are closed for this event.",
 }
+# What a sign-up that lands on a cup's waitlist answers beside the player line
+WAITLIST = (
+    "You are on the waitlist. You move into the cup by yourself once a place "
+    "opens or enough players sign up for another division. Check in as usual; "
+    "the organizers make the final call on who plays."
+)
 NO_CHECK_IN = {
     "sign_up": "Sign up for this event first.",
     "checked_in": "You are already checked in.",
@@ -176,7 +183,8 @@ def _line(entrant: EventEntrantPublic) -> str:
 def _sign_up(
     services: "Services", row: MemberEventRow, user_id: int, discord_id: str
 ) -> str:
-    """Enter the presser on the race his profile carries; the site changes it."""
+    """Enter the presser on the race his profile carries; the site changes it.
+    A cup with no place left puts them on its waitlist, and the answer says so."""
     user = services.users.get(user_id)
     entrant = EventService().add_entrant(
         row.id,
@@ -187,6 +195,8 @@ def _sign_up(
         {"sub": discord_id},
     )
     named = event_label(row.name, row.league_short_name)
+    if entrant.waitlisted_at is not None:
+        return f"Signed up for {named}: {_line(entrant)}\n{WAITLIST}"
     return f"Signed up for {named}: {_line(entrant)}"
 
 
@@ -212,7 +222,8 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
         return {"content": GONE}, PRIVATE
     signing = prefix == SIGN_UP
     if row.action != ("sign_up" if signing else "check_in"):
-        if not signing and row.action == "withdraw":
+        # an entry in, or on a cup's waitlist, that may not check in now is on a shut window
+        if not signing and row.action in ("withdraw", "waitlisted"):
             return {"content": _window_text(row)}, PRIVATE
         refusals = NO_SIGN_UP if signing else NO_CHECK_IN
         return {"content": refusals[row.action]}, PRIVATE
