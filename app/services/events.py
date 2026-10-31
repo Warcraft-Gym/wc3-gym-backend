@@ -3303,9 +3303,10 @@ def _hold_eligible(
     """Refuse a player an event that checks eligibility does not take.
 
     W3Champions rates the player's active battle tag on the race of the signup,
-    the rating sits inside the event's bounds, and the games on that race reach
-    the event's minimum. The rule holds for a hand-added player as for a self
-    signup.
+    or, when the event sets `race_games_min`, on the best of the races with that
+    many lifetime games. The rating sits inside the event's bounds and the games
+    reach the event's minimum. The rule holds for a hand-added player as for a
+    self signup.
     """
     season = w3c_season(session)
     user = session.scalars(
@@ -3336,7 +3337,7 @@ def _hold_eligible(
                 f"W3Champions has no current rating for {tag.tag} on a race with {event.race_games_min} games or more, so this event cannot take the signup."
             )
         mmr, games = rated.mmr, rated.games
-        name = RACE_NAMES.get(rated.race.value, rated.race.value)
+        name = f"{RACE_NAMES.get(rated.race.value, rated.race.value)}, the best of their races with {event.race_games_min} games or more"
         played = f"{user.name} played {games} games recently"
     else:
         name = RACE_NAMES.get(race.value, race.value)
