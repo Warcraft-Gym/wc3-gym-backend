@@ -64,21 +64,44 @@ def _to_frontend(path: str) -> RedirectResponse:
 
 @router.get("/auth/discord/start")
 def start_discord_login(request: Request) -> RedirectResponse:
-    """Send the browser to Discord's consent page; its state is a signed token that names no one."""
+    """Send the browser to Discord's consent page; its state is a signed nonce that a cookie repeats."""
     client_id = os.getenv("DISCORD_APPLICATION_ID")
     if not client_id or not os.getenv("DISCORD_CLIENT_SECRET"):
         raise ApiError(503, {"error": "Discord login is not configured"})
+    nonce = secrets.token_urlsafe(16)
     query = urlencode(
         {
             "response_type": "code",
             "scope": "identify",
             "client_id": client_id,
             "redirect_uri": _discord_callback_url(request),
-            "state": create_access_token("start", 10, STATE_KIND),
+            "state": create_access_token(nonce, 10, STATE_KIND),
             "prompt": "none",
         }
     )
-    return RedirectResponse(f"{AUTHORIZE_URL}?{query}", status_code=302)
+    response = RedirectResponse(f"{AUTHORIZE_URL}?{query}", status_code=302)
+    # the callback reads the nonce back from this browser, so a state carried over from another is refused
+    response.set_cookie(
+        "discord_state",
+        nonce,
+        max_age=600,
+        path="/auth/discord",
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+    return response
+
+
+def _state_matches(state: str, nonce: str) -> bool:
+    """Whether the state is this flow's and names the nonce the browser's cookie holds."""
+    try:
+        claims = decode_token(state)
+    except jwt.InvalidTokenError:
+        return False
+    return claims.get("type") == STATE_KIND and secrets.compare_digest(
+        str(claims.get("sub", "")).encode(), nonce.encode()
+    )
 
 
 @router.get("/auth/discord/callback", name="discord_callback")
@@ -92,11 +115,7 @@ def discord_callback(
     """
     if error or not code:
         return _to_frontend("/login?login=error&reason=denied")
-    try:
-        valid_state = decode_token(state).get("type") == STATE_KIND
-    except jwt.InvalidTokenError:
-        valid_state = False
-    if not valid_state:
+    if not _state_matches(state, request.cookies.get("discord_state", "")):
         return _to_frontend("/login?login=error&reason=state")
     try:
         account = discord.identify(

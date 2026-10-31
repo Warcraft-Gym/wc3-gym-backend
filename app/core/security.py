@@ -11,6 +11,8 @@ import jwt
 SESSION_KIND = "discord"
 # shortcut: no refresh or revocation, a session lives this long; add a sessions table if one must end early
 SESSION_MINUTES = 30 * 24 * 60
+# an admin's power needs a sign-in this recent, however long the session lives
+ADMIN_SESSION_MINUTES = 24 * 60
 
 
 def create_access_token(
