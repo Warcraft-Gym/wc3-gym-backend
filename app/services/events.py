@@ -123,6 +123,7 @@ from app.services import (
     cup_reads,
     cup_recurrence,
     cup_rounds,
+    cup_waitlist,
     organizers,
     stage_engine,
 )
@@ -679,6 +680,10 @@ class EventService:
                 cup_rounds.follow_start(session, event)
             if cup:
                 _edit_cup(session, event, data)
+            if cup and data.model_fields_set & {"entrant_cap", "uses_divisions"}:
+                # a cup's places follow its cap and its divisions
+                session.flush()
+                cup_waitlist.settle(session, event)
             session.flush()
             hold_pool(session, event)
             return _answer(session, ident(event))
@@ -918,6 +923,8 @@ class EventService:
         A caller that has just read this player from w3champions says so, and
         the follow-up the event's kind runs asks w3champions no second time.
         An event that checks eligibility holds a hand-added player to it too.
+        A cup's hand-added player joins its line like a signup; a runner lets
+        one that waits in with `admit_entrant`.
         """
         _refresh_for(event_id, data, None)
         with Session.begin() as session:
@@ -930,6 +937,7 @@ class EventService:
                     event,
                     data,
                     user_id=ident(_named_user(session, event, data)),
+                    may_wait=event.kind is EventKind.cup,
                 )
             entrant_id = ident(row)
             public = _entrant_publics(session, event, [row])[0]
@@ -968,23 +976,22 @@ class EventService:
                 _withdraw_rows(session, event, rows)
 
     def admit_entrant(self, event_id: int, entrant_id: int) -> EventEntrantPublic:
-        """A runner lets one entrant in off the waitlist, past the cap if need be.
+        """A runner lets one entrant in off the waitlist, past the places if
+        need be, and the line never sends it back.
 
-        Once the cup is drawn its field is set: a waiting player comes in by
-        taking the place of one who has not played, through the replace write.
+        A cup over rounds lets a player in between its rounds. Once a cup
+        played on one evening is drawn its field is set: a waiting player comes
+        in by taking the place of one who has not played, through the replace
+        write.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
             row = _entrant(session, event_id, entrant_id)
             if row.waitlisted_at is None or row.withdrawn_at is not None:
                 raise BadRequestError("This entrant is not on the waitlist")
-            if _first_stage_drawn(session, event_id):
-                raise BadRequestError(
-                    "The cup is drawn: swap them in for a player who has not "
-                    "played, or undo the draw first"
-                )
-            row.waitlisted_at = None
-            session.flush()
+            if cup_waitlist.is_set(session, event):
+                raise BadRequestError(cup_waitlist.DRAWN)
+            cup_waitlist.hold_in(session, row)
             return _entrant_publics(session, event, [row])[0]
 
     def withdraw_entrant(self, event_id: int, entrant_id: int) -> None:
@@ -1027,10 +1034,8 @@ class EventService:
                 )
                 if user is None or (row.user_id != user.id and not member):
                     raise ApiError(403, {"error": "Check in your own signup"})
-            if row.waitlisted_at is not None:
-                raise BadRequestError(
-                    "A signup on the waitlist checks in once it is let in"
-                )
+            # a signup on a cup's waitlist checks in too, so a runner can let it
+            # in for a player who does not show; the draw seats it only then
             if event.checkin_enabled and not runs:
                 refusal = checkin_refusal(
                     checkin_window(event),
@@ -1154,13 +1159,19 @@ class EventService:
             }
             seed, division_id = old.seed, old.division_id
             checked_in = old.checked_in_at
+            # the new player takes the old one's place in a cup's line, so nobody else moves
+            place = cup_waitlist.take_place(session, old)
             # a seat drops the old row first, so the session and the table agree
             for seat, _ in seats:
                 seat.entrant_id = None
             session.delete(old)
             session.flush()
             new = _enter(
-                session, event, data, user_id=ident(_named_user(session, event, data))
+                session,
+                event,
+                data,
+                user_id=ident(_named_user(session, event, data)),
+                joined_at=place,
             )
             new.seed = seed
             new.division_id = division_id
@@ -1185,7 +1196,7 @@ class EventService:
     def remove_entrant(self, event_id: int, entrant_id: int) -> None:
         """Delete one entrant row; an admin removes what a withdrawal would keep.
         A cup team goes with it, its players and its open invites, so every
-        player of it is free again."""
+        player of it is free again, and a cup's line moves up into its place."""
         with Session.begin() as session:
             row = _entrant(session, event_id, entrant_id)
             team_id = row.cup_team_id
@@ -1195,6 +1206,7 @@ class EventService:
                 for model in (CupTeamInvite, CupTeamMember):
                     session.execute(delete(model).where(col(model.team_id) == team_id))
                 session.execute(delete(CupTeam).where(col(CupTeam.id) == team_id))
+            cup_waitlist.settle(session, _event(session, event_id))
 
     def place_entrant(
         self, event_id: int, entrant_id: int, data: EntrantPlacement
@@ -1559,13 +1571,15 @@ def _league_entrant_kind(session: OrmSession, league_id: int | None) -> EntrantK
 def _withdraw_rows(
     session: OrmSession, event: Season, rows: Sequence[EventEntrant]
 ) -> None:
-    """Stamp the rows withdrawn; a cup's rows forfeit the series they still owe."""
+    """Stamp the rows withdrawn; a cup's rows forfeit the series they still
+    owe, and its line moves up into the places they leave."""
     for row in rows:
         row.withdrawn_at = utcnow()
     session.flush()
     stage_engine.uncrown(session, [ident(row) for row in rows])
     if event.kind is EventKind.cup:
         cup_engine.forfeit_open(session, [ident(row) for row in rows])
+        cup_waitlist.settle(session, event)
 
 
 def _leave_night(
@@ -2262,6 +2276,7 @@ def _member_row(
             and team.players < (event.team_size or 0),
             left=left,
         ),
+        waitlisted=entrant is not None and entrant.waitlisted_at is not None,
         captain_fixture=fixture,
         captain_matches=fixtures,
         team_size=event.team_size if event.kind is EventKind.cup else None,
@@ -2298,9 +2313,15 @@ def _member_action(
     )
     if phase == "finished" or left:
         return "view"
-    # A signup on the waitlist checks in once it is let in, a team's too
+    # A signup on the waitlist checks in as one that is in, so a runner can let
+    # it in for a no-show; a team checks in once it is complete. Otherwise it
+    # may leave the waitlist, which is what `waitlisted` offers
     if waiting:
-        return "waitlisted"
+        if phase == "running":
+            return "waitlisted"
+        if checked_in_at is not None:
+            return "checked_in"
+        return "check_in" if checkin_open_now and not short else "waitlisted"
     if team:
         if checked_in_at is not None:
             return "checked_in"
@@ -3352,14 +3373,17 @@ def _enter(
     team_id: int | None = None,
     may_wait: bool = False,
     cup_team_id: int | None = None,
+    joined_at: datetime | None = None,
 ) -> EventEntrant:
     """Write the entrant row, or reopen the one that withdrew.
 
     An event whose teams are drafted takes no direct entrant: its field is
-    drafted from the players who signed up to it. A full event refuses, unless
-    the signup `may_wait`: a cup puts a signup on its waitlist once it is
-    drawn or full. A row on the waitlist is let in by a write that may not
-    wait, a runner's hand-add or swap, which reuses it.
+    drafted from the players who signed up to it. A full event refuses, but a
+    cup refuses none: its entrant joins the cup's line, which puts a signup or
+    hand-add that `may_wait` on the waitlist until a place takes it, and holds
+    a swap, which may not wait, in at once. A swap keeps the place `joined_at`
+    of the entrant it replaces. A row on the waitlist is let in by a write
+    that may not wait, which reuses it.
     """
     if event.entrant_kind is EntrantKind.drafted_teams:
         raise BadRequestError(
@@ -3409,54 +3433,36 @@ def _enter(
             if waiting
             else "This entrant is already signed up"
         )
-    waits = may_wait and _waits(session, event)
-    if not waits and not waiting:
+    cup = event.kind is EventKind.cup
+    if not cup and not waiting:
         _room_for_one_more(session, event)
+    if cup and waiting and existing is not None and joined_at is None:
+        # a waiting entrant let in by hand keeps its place in the line
+        joined_at = cup_waitlist.joined_at(session, existing)
     if existing is not None:
         # The unique key is one row per entrant, so a return signup reopens it
         existing.withdrawn_at = None
-        existing.waitlisted_at = utcnow() if waits else None
         # A player who left and comes back stands at the end of the line again
         existing.seed = None
         existing.race = race
         existing.note = data.note
         existing.channel = data.channel
-        session.flush()
-        return existing
-    row = EventEntrant(
-        event_id=ident(event),
-        user_id=user_id,
-        team_id=team_id,
-        cup_team_id=cup_team_id,
-        race=race,
-        note=data.note,
-        channel=data.channel,
-        waitlisted_at=utcnow() if waits else None,
-    )
-    session.add(row)
+        row = existing
+    else:
+        row = EventEntrant(
+            event_id=ident(event),
+            user_id=user_id,
+            team_id=team_id,
+            cup_team_id=cup_team_id,
+            race=race,
+            note=data.note,
+            channel=data.channel,
+        )
+        session.add(row)
     session.flush()
+    if cup:
+        cup_waitlist.join(session, event, row, held=not may_wait, at=joined_at)
     return row
-
-
-def _first_stage_drawn(session: OrmSession, event_id: int) -> bool:
-    """Whether the event's first stage holds its series: its field is set."""
-    first = session.scalar(
-        select(col(EventStage.id))
-        .where(col(EventStage.event_id) == event_id)
-        .order_by(col(EventStage.position))
-        .limit(1)
-    )
-    return first is not None and bool(cup_engine.stage_drawn(session, first))
-
-
-def _waits(session: OrmSession, event: Season) -> bool:
-    """Whether a new signup to this event goes on its waitlist: its first
-    stage is drawn, or it holds as many entrants as it takes."""
-    # a cup played over rounds takes a player for its later rounds after the first is drawn
-    drawn = _first_stage_drawn(session, ident(event)) and not cup_rounds.has_legs(
-        session, ident(event)
-    )
-    return drawn or _full(session, event)
 
 
 def _room_for_one_more(session: OrmSession, event: Season) -> None:

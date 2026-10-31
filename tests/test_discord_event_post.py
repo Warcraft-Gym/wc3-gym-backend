@@ -216,6 +216,31 @@ def test_a_press_on_check_in_stamps_the_entrant(
     assert reply(discord_calls) == "You are already checked in."
 
 
+def test_a_press_on_a_full_cup_puts_the_presser_on_its_waitlist(
+    client: Client,
+    cup: int,
+    seeded: dict[str, Any],
+    public_key: None,
+    discord_calls: list[tuple[str, str, Any]],
+) -> None:
+    """The reply says the player waits, and the buttons answer a waiting
+    player as the event page does: no second sign-up, a check-in while the
+    window stands open."""
+    enter(cup, seeded["player_ids"][1])
+    set_fields(cup, entrant_cap=1, checkin_opens_minutes=0)
+
+    send(client, press(event_cards.SIGN_UP, cup))
+    assert reply(discord_calls).endswith(event_cards.WAITLIST)
+    send(client, press(event_cards.SIGN_UP, cup))
+    assert reply(discord_calls) == "You are on the waitlist already."
+    send(client, press(event_cards.CHECK_IN, cup))
+    assert reply(discord_calls) == event_cards.NOT_OPEN_YET
+
+    set_fields(cup, early_checkin=True)
+    send(client, press(event_cards.CHECK_IN, cup))
+    assert reply(discord_calls) == "Checked in for GNL · Autumn Cup."
+
+
 def test_a_press_from_an_unlinked_discord_id_says_how_to_link(
     client: Client,
     cup: int,

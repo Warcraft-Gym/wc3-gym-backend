@@ -47,6 +47,7 @@ The 71 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [teams](teams.md) - One league-owned team: its league, short name, long name and the public URL of its logo.
 * [cup_settings](cup_settings.md) - A cup's own settings beside its event row; its choice to split its players into divisions, and the points each place of a round pays.
 * [cup_entrant_pin](cup_entrant_pin.md) - A cup player's two pins, its division placed by hand and its seed a reshuffle keeps, held apart from the flag KOTH reads.
+* [cup_entrant_line](cup_entrant_line.md) - A cup entrant's place in the cup's line, the order the cup lets its sign-ups in, and whether a runner let it in by hand.
 * [cup_leg](cup_leg.md) - One round of a cup played over several rounds, a competition of its own on its own date, with its own copy of the cup's stages.
 * [cup_leg_stage](cup_leg_stage.md) - Which round of a cup one of its stages is played in, so a round's draw, neighbours and places stay inside that round.
 * [cup_leg_checkin](cup_leg_checkin.md) - One player checked in for one round of a cup; the round's draw takes these players alone.

@@ -33,7 +33,7 @@ from app.models.event_entrant import EntrantAdd, EventEntrant, EventEntrantPubli
 from app.models.season import Season
 from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
-from app.services import cup_engine
+from app.services import cup_engine, cup_waitlist
 from app.services import events as event_service
 
 
@@ -70,14 +70,14 @@ def sign_up(
             captain,
             confirmed=[],
             invited=others,
-            may_wait=True,
         )
         return event_service._entrant_publics(session, event, [row])[0]
 
 
 def add_by_hand(event_id: int, data: CupTeamAdd) -> EventEntrantPublic:
     """A runner enters a whole team at once: every player confirmed, whether
-    signups stand open or not, each held to the cup's eligibility."""
+    signups stand open or not, each held to the cup's eligibility. The team
+    joins the cup's line like a captain's signup."""
     _refresh(event_id, [data.captain_id, *data.member_ids])
     with Session.begin() as session:
         event = _team_cup(session, event_id)
@@ -170,8 +170,9 @@ def leave(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None:
 
 
 def withdraw(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None:
-    """The captain withdraws the team; its open invites go with it, and on a
-    drawn cup it forfeits every series it still owes."""
+    """The captain withdraws the team; its open invites go with it, on a
+    drawn cup it forfeits every series it still owes, and the cup's line
+    moves up into its place."""
     with Session.begin() as session:
         _hold_captain(session, event_id, team_id, claims)
         entrant = _entrant_of(session, event_id, team_id)
@@ -181,6 +182,7 @@ def withdraw(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None
         )
         session.flush()
         cup_engine.forfeit_open(session, [ident(entrant)])
+        cup_waitlist.settle(session, _team_cup(session, event_id))
 
 
 def replace_member(
@@ -366,15 +368,12 @@ def _write_team(
     captain: User,
     confirmed: list[int],
     invited: list[int],
-    may_wait: bool = False,
 ) -> EventEntrant:
     """The cup team, its roster, its captain, its invites and its entrant.
-    A captain's signup to a cup that is drawn or full waits on its waitlist."""
+    The entrant joins the cup's line and waits on its waitlist until a place
+    takes it, whether its captain signed it up or a runner entered it."""
     if event.entrant_kind is not EntrantKind.team:
         event.entrant_kind = EntrantKind.team
-    waits = may_wait and event_service._waits(session, event)
-    if not waits:
-        event_service._room_for_one_more(session, event)
     team = CupTeam(name=name.strip(), event_id=ident(event))
     session.add(team)
     session.flush()
@@ -386,13 +385,10 @@ def _write_team(
         session.add(
             CupTeamInvite(team_id=team_id, user_id=user_id, event_id=ident(event))
         )
-    row = EventEntrant(
-        event_id=ident(event),
-        cup_team_id=team_id,
-        waitlisted_at=utcnow() if waits else None,
-    )
+    row = EventEntrant(event_id=ident(event), cup_team_id=team_id)
     session.add(row)
     session.flush()
+    cup_waitlist.join(session, event, row)
     return row
 
 

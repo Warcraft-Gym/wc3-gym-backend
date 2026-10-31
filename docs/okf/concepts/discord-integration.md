@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, cups announce themselves to the members who opt in, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-26T16:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-27T12:00:00Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -48,6 +48,8 @@ Six commands have a module under `app/services/commands/`; `/upcoming`, `/leader
 # Cards and posts
 
 The app posts a result card, a cast claim card and a start reminder, plus one card per event with Sign up and Check in buttons. Each post is a `discord_post` row so the app can edit it later. The result, cast and reminder cards go to the channels the `settings` rows `results_channel_id` and `content_channel_id` name, and a missing row means no card; the event card goes to the channel the admin names in the body of `POST /events/{id}/discord-post`. Every series write keeps the cards in step through `discord_posts.follow_series`: a new time edits the series cards, a first score posts the result card, a changed score edits it, and a cleared result deletes it with its row, so the next report posts a fresh one.
+
+A press on the event card answers privately from the presser's `GET /me/events` action, so the card refuses in the words the site uses. A Sign up press on a cup with no place left puts the presser on its waitlist, and the reply says they move in once a place opens or another division fills. A player on the waitlist checks in with the Check in button while the window stands open, as a player who is in does.
 
 A reported result that a player or a captain changes through the report (`PUT /player-series/{id}` or `/report-result`), or takes back (`DELETE /series/{id}/result`), also gets a note beside the card in the results channel, through `discord_posts.post_result_change`. The note names who made the change, a player of the series or a captain, and shows the score before and after behind spoilers, as the card does. When the score stands, it says the games or the races played changed. A note is a `discord_post` row of kind `result_change`, so the channel's pacing counts it, and it is never edited: it records one change. An admin's write, a captain's edit through `PUT /series/{id}` and a first report post no note.
 

@@ -240,7 +240,9 @@ def test_a_format_edit_reaches_every_round(
 
 
 def test_a_signup_after_the_first_draw_joins_the_later_rounds(
-    client: Client, auth_headers: Headers
+    client: Client,
+    auth_headers: Headers,
+    member: Any,  # noqa: ANN401
 ) -> None:
     cup = rounds_cup(client, auth_headers)
     field_of(cup["id"], (2000, 1900))
@@ -250,14 +252,13 @@ def test_a_signup_after_the_first_draw_joins_the_later_rounds(
         headers=auth_headers,
     )
     generate(client, auth_headers, cup["id"], first["stage_ids"][0])
-    from app.services.events import _waits
+    player_with_login("73", 1600)
 
-    with Session.begin() as session:
-        from app.models.season import Season
-
-        event = session.get(Season, cup["id"])
-        assert event is not None
-        assert _waits(session, event) is False
+    late = client.post(
+        f"/events/{cup['id']}/entrants", json={"race": "HU"}, headers=member("73")
+    )
+    assert late.status_code == 201, late.text
+    assert late.json()["waitlisted_at"] is None
 
 
 def test_a_round_seeds_the_players_checked_in_for_it_alone(
