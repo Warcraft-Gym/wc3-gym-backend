@@ -909,10 +909,11 @@ def test_the_sides_of_a_lobby_refuse_an_entrant_who_left_the_cup(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     event, bracket, _ = ffa()
-    gone = entrant_of(event, players_of(event)[-1])
-    withdraw(client, auth_headers, event, gone)
     generate(client, auth_headers, event, bracket)
     seeds = seeds_of(event)
+    # a row stays once the cup is drawn, so the player leaves another lobby after that
+    gone = lobbies(client, event, bracket, "Round 1")[1]["sides"][-1]["entrant_id"]
+    withdraw(client, auth_headers, event, gone)
     first = lobbies(client, event, bracket, "Round 1")[0]
     before = seated(first, seeds)
     taken = [side["entrant_id"] for side in first["sides"]][:-1] + [gone]
