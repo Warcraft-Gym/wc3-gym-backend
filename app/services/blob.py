@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.db import Session
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError, ExternalServiceError
 from app.models.map import Map
 from app.models.match import Match
 from app.models.season import Season
@@ -92,21 +92,27 @@ def _blob_api(
 
 
 def put_icon(name: str, data: bytes) -> str:
-    """Store the picture under this name, such as `teams/4`, and answer its public URL."""
+    """Store the picture under this name, such as `teams/4`, and answer its public URL. No token,
+    no store id and the store's own refusal are one failure to a caller."""
+    from vercel.oidc import VercelOidcTokenError
+
     media_type = icon_type(data)
-    response = _blob_api(
-        "PUT",
-        "/",
-        params={"pathname": f"{name}.{EXTENSION[media_type]}"},
-        data=data,
-        headers={
-            "x-content-type": media_type,
-            "x-vercel-blob-access": "public",
-            # a new URL every time, so no browser holds a replaced logo for the cache year
-            "x-add-random-suffix": "1",
-            "x-cache-control-max-age": str(ICON_CACHE_SECONDS),
-        },
-    )
+    try:
+        response = _blob_api(
+            "PUT",
+            "/",
+            params={"pathname": f"{name}.{EXTENSION[media_type]}"},
+            data=data,
+            headers={
+                "x-content-type": media_type,
+                "x-vercel-blob-access": "public",
+                # a new URL every time, so no browser holds a replaced logo for the cache year
+                "x-add-random-suffix": "1",
+                "x-cache-control-max-age": str(ICON_CACHE_SECONDS),
+            },
+        )
+    except (requests.RequestException, VercelOidcTokenError, KeyError) as error:
+        raise ExternalServiceError("The picture store could not be written") from error
     return response.json()["url"]
 
 

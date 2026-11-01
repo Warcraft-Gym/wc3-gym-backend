@@ -196,6 +196,15 @@ def quiet_w3c(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def map_source_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test starts with no remembered source list, and no source call waits."""
+    from app.services.map_sources import base, liquipedia
+
+    base._cache.clear()
+    monkeypatch.setattr(liquipedia, "API_PAUSE", 0)
+
+
+@pytest.fixture(autouse=True)
 def discord_caches() -> None:
     """Every test starts with no remembered guild role and no remembered emojis."""
     from app.services import discord

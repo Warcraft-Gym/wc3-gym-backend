@@ -1,4 +1,4 @@
-"""The ladder map import: match w3champions to warcraft3.info, then add.
+"""The ladder map import: match w3champions to the map sources, then add.
 
 warcraft3.info keeps every version of a map under its own name, so a match
 by name alone picks the stale one: "Autumn Leaves v2" is "Autumn Leaves 2.0",
@@ -7,7 +7,8 @@ none the file path does.
 
 The w3champions name is the truth: a map the app knows under an older name
 or spelling of the same lineage is renamed in place, keeping its id and
-short name; a missing picture is filled.
+short name; a missing picture is filled. A source is read only for a map that
+is new or has no picture, and one that refuses hands over to the next.
 """
 
 from collections.abc import Callable
@@ -19,7 +20,8 @@ from httpx2 import Client
 
 from app.core.db import Session
 from app.models.map import Map
-from app.services import ladder_maps
+from app.services import ladder_maps, map_sources
+from app.services.map_sources.base import SourceMap
 
 PICTURE = b"\x89PNG\r\n\x1a\nmap picture"
 
@@ -39,28 +41,74 @@ LADDER = [
 MODES = [{"id": 2, "name": "2 vs 2", "maps": []}, {"id": 1, "name": "1 vs 1"}]
 
 
-def entry(name: str, short: str, seen: str, file_name: str | None = None) -> dict:
+def entry(name: str, short: str, files: int, file_name: str | None = None) -> dict:
     return {
         "name": name,
         "short": short,
         "image": {"file_name": file_name} if file_name else None,
-        "map_files": [{"updated_at": seen}],
+        "map_files_count": files,
     }
 
 
 MAP_DB = [
-    entry("Autumn Leaves", "ALX", "2019-01-01T00:00:00Z", "old.png"),
-    entry("Autumn Leaves 2.0", "AL", "2024-01-01T00:00:00Z", "autumn.png"),
-    entry("Echo Isles", "EIX", "2018-01-01T00:00:00Z"),
-    entry("Echo Isles 2.2", "EI2", "2023-01-01T00:00:00Z", "echo.png"),
-    entry("Turtle Rock", "TRX", "2017-01-01T00:00:00Z"),
-    entry("Turtle Rock 2.0", "TR2", "2022-01-01T00:00:00Z", "turtle.png"),
-    entry("Last Refuge 1.2", "LRX", "2016-01-01T00:00:00Z"),
-    entry("Last Refuge 1.5", "LR", "2020-01-01T00:00:00Z", "refuge.png"),
-    entry("Twisted Meadows 1.1", "TM", "2021-01-01T00:00:00Z", "meadows.png"),
+    entry("Autumn Leaves", "ALX", 3, "old.png"),
+    entry("Autumn Leaves 2.0", "AL", 8, "autumn.png"),
+    entry("Echo Isles", "EIX", 2),
+    # "Echo Isles v2" names no version here, so the most files decide
+    entry("Echo Isles 2.2", "EI2", 7, "echo.png"),
+    entry("Turtle Rock", "TRX", 1),
+    entry("Turtle Rock 2.0", "TR2", 6, "turtle.png"),
+    entry("Last Refuge 1.2", "LRX", 1),
+    entry("Last Refuge 1.5", "LR", 4, "refuge.png"),
+    entry("Twisted Meadows 1.1", "TM", 5, "meadows.png"),
     # Off the ladder this season, but warcraft3.info still has the picture
-    entry("War Hail", "WH", "2020-06-01T00:00:00Z", "warhail.png"),
+    entry("War Hail", "WH", 4, "warhail.png"),
 ]
+
+# Liquipedia's pages: the title, the players its category names, and its infobox picture
+WIKI_PAGES = {
+    "Echo Isles": (2, "Wc3EchoIsles.png"),
+    "Turtle Rock": (2, "Wc3TurtleRock.png"),
+}
+WIKI_FILES = "https://liquipedia.net/commons/images/"
+
+
+def wiki_answer(params: dict[str, str], pages: dict[str, tuple[int, str]]) -> dict:
+    """What Liquipedia's API answers a query about these pages."""
+    if params.get("generator") == "categorymembers":
+        found = [
+            {
+                "title": title,
+                "categories": [
+                    {"title": "Category:Maps"},
+                    {"title": f"Category:Maps ({players} Players)"},
+                ],
+            }
+            for title, (players, _) in pages.items()
+        ]
+    elif params.get("prop") == "revisions":
+        found = [
+            {
+                "title": title,
+                "revisions": [
+                    {
+                        "slots": {
+                            "main": {
+                                "content": "{{Infobox map\n"
+                                f"|name={title}\n|image={pages[title][1]}\n|players=2\n}}}}"
+                            }
+                        }
+                    }
+                ],
+            }
+            for title in params["titles"].split("|")
+        ]
+    else:
+        found = [
+            {"title": title, "imageinfo": [{"url": f"{WIKI_FILES}{title[5:]}"}]}
+            for title in params["titles"].split("|")
+        ]
+    return {"query": {"pages": found}}
 
 
 class FakeResponse:
@@ -78,24 +126,49 @@ class FakeResponse:
         return self.body
 
 
-@pytest.fixture
-def sources(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Both sources and the picture host answer, and every url is logged."""
+def answer_with(
+    monkeypatch: pytest.MonkeyPatch,
+    map_db: FakeResponse,
+    wiki_pages: dict[str, tuple[int, str]] | None = None,
+) -> list[str]:
+    """w3champions answers, each source as named, and every url is logged. With no
+    pages named, Liquipedia cannot be read."""
     called: list[str] = []
     modes = [MODES[0], MODES[1] | {"maps": LADDER}]
 
     def fake_request(
-        self: requests.Session, method: str, url: str, **kwargs: object
+        self: requests.Session,
+        method: str,
+        url: str,
+        params: dict[str, str] | None = None,
+        **kwargs: object,
     ) -> FakeResponse:
         called.append(url)
         if "active-modes" in url:
             return FakeResponse(modes)
         if "warcraft3.info" in url:
-            return FakeResponse(MAP_DB)
+            return map_db
+        if "api.php" in url:
+            if wiki_pages is None:
+                return FakeResponse({}, status_code=503)
+            return FakeResponse(wiki_answer(params or {}, wiki_pages))
         return FakeResponse(PICTURE)
 
     monkeypatch.setattr(requests.Session, "request", fake_request)
     return called
+
+
+@pytest.fixture
+def sources(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """warcraft3.info answers, and Liquipedia knows none of its maps."""
+    return answer_with(monkeypatch, FakeResponse(MAP_DB), wiki_pages={})
+
+
+def matches() -> dict[str, SourceMap]:
+    """What warcraft3.info holds for each ladder map."""
+    names = ladder_maps.ladder_names()
+    found = map_sources.SOURCES["warcraft3_info"].find(list(names.values()))
+    return {name: found[lookup] for name, lookup in names.items() if lookup in found}
 
 
 def rows(client: Client, season_id: int, headers: dict[str, str]) -> dict[str, dict]:
@@ -107,6 +180,19 @@ def rows(client: Client, season_id: int, headers: dict[str, str]) -> dict[str, d
 def new_map(name: str, shortname: str) -> None:
     with Session.begin() as session:
         session.add(Map(name=name, shortname=shortname))
+
+
+def picture_the_ladder() -> None:
+    """The app holds every ladder map, each with a picture of its own."""
+    with Session.begin() as session:
+        for number, ladder_map in enumerate(LADDER):
+            session.add(
+                Map(
+                    name=str(ladder_map["name"]),
+                    shortname=f"M{number}",
+                    image=f"https://example.test/{number}.png",
+                )
+            )
 
 
 @pytest.mark.parametrize(
@@ -121,30 +207,19 @@ def test_a_renamed_map_matches_its_own_version(
     sources: list[str], ladder_name: str, matched: str
 ) -> None:
     """HARD GATE: matching on the name alone picks the stale map."""
-    by_name = {row.w3c_name: row for row in ladder_maps.ladder_maps()}
-
-    assert by_name[ladder_name].matched_name == matched
+    assert matches()[ladder_name].name == matched
 
 
 def test_the_path_names_the_version_the_display_name_leaves_out(
     sources: list[str],
 ) -> None:
-    by_name = {row.w3c_name: row for row in ladder_maps.ladder_maps()}
-
-    assert by_name["Last Refuge"].matched_name == "Last Refuge 1.5"
+    assert matches()["Last Refuge"].name == "Last Refuge 1.5"
 
 
 def test_a_map_warcraft3_info_does_not_know_stays_unmatched(
     sources: list[str],
 ) -> None:
-    row = {row.w3c_name: row for row in ladder_maps.ladder_maps()}["Nonesuch"]
-
-    assert (row.status, row.matched_name, row.shortname, row.image_url) == (
-        "no_match",
-        None,
-        None,
-        None,
-    )
+    assert "Nonesuch" not in matches()
 
 
 def test_the_preview_says_which_maps_the_season_already_plays(
@@ -293,16 +368,18 @@ def test_a_taken_short_name_falls_back_to_the_initials(
     assert resp.json()["maps"][-1]["shortname"] == "AL3"
 
 
-def test_a_source_that_is_down_answers_502(
+def test_w3champions_down_answers_502(
     client: Client,
     seeded: dict[str, Any],
     auth_headers: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Without the ladder there is nothing to import."""
+
     def fake_request(
         self: requests.Session, method: str, url: str, **kwargs: object
     ) -> FakeResponse:
-        return FakeResponse(MODES, status_code=200 if "active-modes" in url else 503)
+        return FakeResponse(MAP_DB, status_code=503 if "active-modes" in url else 200)
 
     monkeypatch.setattr(requests.Session, "request", fake_request)
 
@@ -312,6 +389,122 @@ def test_a_source_that_is_down_answers_502(
 
     assert resp.status_code == 502
     assert "error" in resp.json()
+
+
+def test_no_source_is_read_when_every_ladder_map_has_its_picture(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    sources: list[str],
+) -> None:
+    with Session.begin() as session:
+        Map.update(session, seeded["map_id"], image="https://example.test/hill.png")
+    picture_the_ladder()
+
+    listed = client.get("/maps/ladder-import", headers=auth_headers).json()
+    resp = client.post(
+        "/maps/ladder-import",
+        json={"names": [row["w3c_name"] for row in listed]},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert {row["status"] for row in listed} == {"known"}
+    # each row shows the picture and the name the app holds, with nothing read
+    assert listed[0]["image_url"] == "https://example.test/0.png"
+    assert listed[0]["matched_name"] == LADDER[0]["name"]
+    assert not [url for url in sources if "active-modes" not in url]
+
+
+def test_only_a_map_without_a_picture_is_looked_up(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    picture_the_ladder()
+    asked: list[list[str]] = []
+    warcraft3_info = map_sources.SOURCES["warcraft3_info"]
+    monkeypatch.setattr(
+        warcraft3_info, "find", lambda names: asked.append(names) or {}, raising=False
+    )
+    answer_with(monkeypatch, FakeResponse(MAP_DB), wiki_pages={})
+    new_map("Unlisted Plains", "UP")
+
+    resp = client.get("/maps/ladder-import", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert asked == [["Concealed Hill", "Unlisted Plains"]]
+
+
+def test_a_refused_read_goes_on_with_liquipedia_and_copies_its_pictures(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    blob_store: dict[str, bytes],
+) -> None:
+    """warcraft3.info challenges the backend. Liquipedia's pictures land in our store."""
+    pages = WIKI_PAGES | {"Plain Page": (2, "Plain.png")}
+    answer_with(monkeypatch, FakeResponse("challenge", status_code=403), pages)
+    new_map("Plain Page", "PP")
+
+    listed = {
+        row["w3c_name"]: row
+        for row in client.get("/maps/ladder-import", headers=auth_headers).json()
+    }
+
+    assert listed["Echo Isles v2"]["status"] == "new"
+    assert listed["Echo Isles v2"]["source"] == "Liquipedia"
+    assert listed["Echo Isles v2"]["matched_name"] == "Echo Isles"
+    # the wiki refuses its files to a page on another site, so the picture shows once it is ours
+    assert listed["Echo Isles v2"]["image_url"] is None
+    # no source holds a short name now, so the map shows the initials it will get
+    assert listed["Echo Isles v2"]["shortname"] == "EI"
+    assert listed["Echo Isles v2"]["unreached"] == ["warcraft3.info"]
+    assert listed["Nonesuch"]["status"] == "no_match"
+    # a map off the ladder is still offered, though its picture shows only once it is ours
+    assert listed["Plain Page"]["status"] == "off_ladder"
+    assert listed["Plain Page"]["image_url"] is None
+
+    resp = client.post(
+        "/maps/ladder-import",
+        json={"names": ["Echo Isles v2", "Nonesuch", "Plain Page"]},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    imported = {map["name"]: map for map in resp.json()}
+    assert imported["Echo Isles v2"]["image"] in blob_store
+    assert imported["Plain Page"]["image"] in blob_store
+    assert blob_store[imported["Echo Isles v2"]["image"]] == PICTURE
+    assert imported["Nonesuch"]["image"] is None
+
+
+def test_every_source_down_still_imports_with_initials_and_no_pictures(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answer_with(monkeypatch, FakeResponse("challenge", status_code=403))
+
+    listed = {
+        row["w3c_name"]: row
+        for row in client.get("/maps/ladder-import", headers=auth_headers).json()
+    }
+
+    assert listed["Echo Isles v2"]["status"] == "no_match"
+    assert listed["Echo Isles v2"]["unreached"] == ["warcraft3.info", "Liquipedia"]
+
+    resp = client.post(
+        "/maps/ladder-import", json={"names": ["Echo Isles v2"]}, headers=auth_headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [(map["name"], map["shortname"], map["image"]) for map in resp.json()] == [
+        ("Echo Isles v2", "EI", None)
+    ]
 
 
 def test_the_global_preview_says_which_maps_the_app_knows(

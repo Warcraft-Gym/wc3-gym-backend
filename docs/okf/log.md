@@ -1,5 +1,14 @@
 # Bundle history
 
+## 2026-11-01
+
+* **Update**: an upload the store cannot take answers 502, and an import keeps its maps without the picture ([pictures](concepts/pictures-and-replays.md)). A [map source](concepts/map-sources.md) that copies its pictures shows none before they are ours, because the site refuses its files to a page on another site. A source's list answers at most 500 maps. An organizer reads the sources and imports the maps it picks, as an admin does ([roles and permissions](concepts/roles-and-permissions.md)).
+
+## 2026-10-31
+
+* **Add**: [map sources](concepts/map-sources.md), the sites the app takes maps from: warcraft3.info and Liquipedia, each one module behind one contract, so a site is one more module and one line in `SOURCES`. `GET /maps/sources`, `GET /maps/sources/{key}?q=` and `POST /maps/sources/{key}` let an admin list a source, pick maps and set each one's modes. Liquipedia's pictures are copied into the store during the import.
+* **Update**: the ladder map import reads a source only for a map that is new or has no picture, asks warcraft3.info then Liquipedia, and goes on with the next when one cannot be read. `LadderMapRow` gains `source` and `unreached`, a known map's row shows the picture and the name the app holds, and warcraft3.info's tie-break between versions is the entry with the most files. [W3Champions](concepts/w3champions.md), [pictures](concepts/pictures-and-replays.md) and [maps](data/tables/maps.md) state it.
+
 ## 2026-10-27
 
 * **Update**: a cup lets its sign-ups in by a line ([cup_entrant_line](data/tables/cup_entrant_line.md)). The first places are in and the rest wait. On a cup with divisions `entrant_cap` counts one division, and the waitlist comes in a whole division at a time. A withdrawal lets the first in line in, and before the draw it sends the players past the places back; once a cup over rounds is drawn the line only moves forward. A runner's hand-add joins the line as a signup does, and an admit or swap holds its entrant in. A waiting player checks in for the cup or a round, the `GET /me/events` row carries `waitlisted`, and an admit works between the rounds of a cup over rounds. The Discord card answers a waiting player. The [events module](concepts/events-module.md), [event](data/tables/event.md), [event_entrant](data/tables/event_entrant.md), [cup_leg_checkin](data/tables/cup_leg_checkin.md) and [Discord integration](concepts/discord-integration.md) state it.

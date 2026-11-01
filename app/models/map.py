@@ -10,10 +10,14 @@ if TYPE_CHECKING:
     from app.models.relationships import DBMapSeason
 
 
+# The longest name the maps table holds
+MAP_NAME_LENGTH = 50
+
+
 class MapBase(SQLModel):
-    name: str | None = Field(default=None, max_length=50)
+    name: str | None = Field(default=None, max_length=MAP_NAME_LENGTH)
     shortname: str | None = Field(default=None, max_length=50)
-    # where the picture is published: the blob an admin uploaded, else what the ladder import found
+    # where the picture is published: our blob, else the url a map source publishes it at
     image: str | None = Field(default=None, max_length=500)
     # The modes the map is played as, as "1v1,2v2"; null names none yet
     modes: str | None = Field(default=None, max_length=100)
@@ -63,9 +67,9 @@ class LadderMapRow(SQLModel):
 
     status is `in_pool` when the season already plays it, `known` when the
     app holds it under this name or an older one of the same lineage,
-    `no_match` when warcraft3.info knows no map of that name and version,
-    else `new`. A map the app holds off the ladder lists as `off_ladder`
-    when warcraft3.info has its picture; importing it fills the picture only.
+    `no_match` when no map source knows it, else `new`. A map the app holds off
+    the ladder lists as `off_ladder` when a source has its picture; importing it
+    fills the picture only.
     """
 
     w3c_name: str
@@ -75,7 +79,44 @@ class LadderMapRow(SQLModel):
     status: str = "new"
     # The map of the app a known ladder map is, so a cup's pool can take it as it stands
     map_id: int | None = None
+    # The source that knew this map, and every source that could not be read
+    source: str | None = None
+    unreached: list[str] = Field(default_factory=list)
 
 
 class LadderMapNames(SQLModel):
     names: list[str]
+
+
+class MapSourcePublic(SQLModel):
+    """A site an admin can take maps from, with what its rows must credit."""
+
+    key: str
+    title: str
+    credit_url: str
+    license: str | None = None
+
+
+class SourceMapRow(SQLModel):
+    """One map of a source. `modes` is the source's suggestion, and `map_id` the
+    map of the app it is, which `pictured` says has a picture."""
+
+    name: str
+    players: int | None = None
+    modes: str | None = None
+    shortname: str | None = None
+    picture_url: str | None = None
+    map_id: int | None = None
+    pictured: bool = False
+
+
+class SourceMapPick(SQLModel):
+    """A map an admin picked from a source, and what it is played as."""
+
+    name: str = Field(min_length=1, max_length=MAP_NAME_LENGTH)
+    modes: Annotated[str | None, MapModes] = None
+
+
+class SourceMapPicks(SQLModel):
+    # A call copies each map's picture, so it stays inside the function's time limit
+    maps: list[SourceMapPick] = Field(min_length=1, max_length=10)

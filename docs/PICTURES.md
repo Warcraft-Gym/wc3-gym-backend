@@ -28,7 +28,7 @@ A `bytea` also crosses the wire as hex, so reading a 49 KB logo cost about 99 KB
 
 ## Map pictures
 
-The same store, under `maps/<map id>`, reached by `POST /maps/{id}/image`. `maps.image` holds the URL, and it holds a second kind: the ladder import writes the URL warcraft3.info publishes the thumbnail at, which is a CDN that costs us nothing, so those bytes are never copied into our store. `blob.ours` tells the two apart, because a replacement deletes only a blob we wrote.
+The same store, under `maps/<map id>`, reached by `POST /maps/{id}/image`. `maps.image` holds the URL, and it holds a second kind: an import from a map source that does not copy its pictures writes the URL it publishes them at, as the ladder import does with warcraft3.info's thumbnail, which is a CDN that costs us nothing, so those bytes are never copied into our store. `blob.ours` tells the two apart, because a replacement deletes only a blob we wrote.
 
 An upload wins over an import: the import fills `image` only where it is empty. The map answer carries `image`, so the season pool page and the veto board render the picture without touching the backend again.
 
