@@ -1,25 +1,28 @@
-"""The Clerk login: the Discord identity it resolves, and the role that follows.
+"""The Discord login: the session it mints, the identity it carries, and the role that follows.
 
-Clerk and Discord are stood in for: the session check, the account's Discord
-OAuth token and the reads that token makes are patched per test.
+Discord is stood in for: the code exchange, the account read and the bot's
+guild reads are patched per test.
 """
 
-from types import SimpleNamespace
+import os
+import time
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
+import jwt
 import pytest
-from clerk_backend_api import Clerk
-from clerk_backend_api.security.types import AuthStatus, RequestState
-from clerk_backend_api.users import Users
+import requests
 from httpx2 import Client
-from sqlalchemy import delete
 from starlette.requests import Request
 
 from app.core.db import Session
-from app.models.clerk_account import ClerkAccount
+from app.core.security import (
+    SESSION_KIND,
+    SESSION_MINUTES,
+    create_access_token,
+    decode_token,
+)
 from app.services import discord
-
-CLERK_USER_ID = "user_2abcdefghijklmnop"
 
 ACCOUNT = {"id": "42", "username": "player", "global_name": "Player", "avatar": "abc"}
 
@@ -29,7 +32,9 @@ GUILD_ID = "316390574808760322"
 GUILD = {"id": GUILD_ID, "name": "WC3 Gym", "owner_id": "999", "roles": []}
 ADMIN_ROLE = {"id": "guild-admins", "permissions": "8"}
 
-SESSION = {"Authorization": "Bearer a-clerk-session-token"}
+# The member's bearer: stub_login writes the session of its account in here,
+# so a test module that imported it sends that account's session.
+SESSION = {"Authorization": "Bearer no-session-yet"}
 
 
 # The account reads answer with one object or a list of them.
@@ -46,42 +51,35 @@ class FakeResponse:
         return self.body
 
 
-def stub_clerk(
+def session_for(account: dict[str, Any]) -> str:
+    """The session token the Discord login mints for that account."""
+    return create_access_token(
+        account["id"],
+        60,
+        SESSION_KIND,
+        {
+            "name": account.get("global_name") or account.get("username"),
+            "avatar": account.get("avatar"),
+        },
+    )
+
+
+def stub_login(
     monkeypatch: pytest.MonkeyPatch,
     signed_in: bool = True,
-    linked: bool = True,
     a_member: bool = True,
     member_roles: list[str] | None = None,
     guild: dict[str, Any] | None = None,
     account: dict[str, Any] | None = None,
     calls: list[str] | None = None,
 ) -> None:
-    """Answer the Clerk session check, the account's own read, and the bot's guild reads.
+    """Sign the account in through SESSION, and answer the bot's guild reads.
 
     Every path the bot reads is appended to `calls`, so a test can assert
     that a login read the guild, or that it did not.
     """
     who = account or ACCOUNT
     guild_data = {**GUILD, **(guild or {})}
-
-    def authenticate_request(
-        self: Clerk, request: object, options: object
-    ) -> RequestState:
-        if not signed_in:
-            return RequestState(status=AuthStatus.SIGNED_OUT)
-        return RequestState(
-            status=AuthStatus.SIGNED_IN, payload={"sub": CLERK_USER_ID, "sid": "sess_1"}
-        )
-
-    def oauth_token(self: Users, **kwargs: str) -> list[SimpleNamespace]:
-        assert kwargs == {"user_id": CLERK_USER_ID, "provider": "oauth_discord"}
-        if not linked:
-            return []
-        return [SimpleNamespace(token="discord-token", provider_user_id=who["id"])]
-
-    def user_get(access_token: str, path: str) -> FakeResponse:
-        assert path == "/users/@me"
-        return FakeResponse(200, who)
 
     def bot_get(path: str) -> FakeResponse:
         if calls is not None:
@@ -93,14 +91,12 @@ def stub_clerk(
             return FakeResponse(404, {"message": "Unknown Member"})
         return FakeResponse(200, {"roles": member_roles or []})
 
-    with Session.begin() as session:  # every test names its own account
-        session.execute(delete(ClerkAccount))
+    SESSION["Authorization"] = (
+        f"Bearer {session_for(who)}" if signed_in else "Bearer not-a-session"
+    )
     monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
     monkeypatch.setenv("ADMIN_DISCORD_IDS", "220202568490418179")
-    monkeypatch.setattr(Clerk, "authenticate_request", authenticate_request)
-    monkeypatch.setattr(Users, "get_o_auth_access_token", oauth_token)
-    monkeypatch.setattr(discord, "_user_get", user_get)
     monkeypatch.setattr(discord, "_bot_get", bot_get)
 
 
@@ -112,26 +108,165 @@ def _grant(client: Client, headers: dict[str, str], discord_id: str) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def test_a_bearer_no_clerk_session_backs_is_refused(
+def test_a_bearer_that_is_no_session_is_refused(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch, signed_in=False)
+    stub_login(monkeypatch, signed_in=False)
     resp = client.get("/me", headers=SESSION)
     assert resp.status_code == 401
-    assert "error" in resp.json()
+    assert resp.json() == {"error": "Not signed in"}
 
 
-def test_a_login_with_no_discord_account_is_refused(
+def test_an_expired_session_is_refused(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch, linked=False)
-    resp = client.get("/me", headers=SESSION)
+    stub_login(monkeypatch)
+    expired = create_access_token("42", -1, SESSION_KIND, {"name": "Player"})
+    resp = client.get("/me", headers={"Authorization": f"Bearer {expired}"})
     assert resp.status_code == 401
-    assert resp.json() == {"error": "No Discord account on this login"}
+
+
+@pytest.fixture
+def discord_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISCORD_APPLICATION_ID", "an-app")
+    monkeypatch.setenv("DISCORD_CLIENT_SECRET", "a-secret")
+    monkeypatch.setenv("FRONTEND_URL", "https://app.example")
+
+
+def test_the_login_starts_at_discord(client: Client, discord_app: None) -> None:
+    resp = client.get("/auth/discord/start", follow_redirects=False)
+    assert resp.status_code == 302
+    url = urlparse(resp.headers["location"])
+    query = parse_qs(url.query)
+    assert f"{url.netloc}{url.path}" == "discord.com/oauth2/authorize"
+    assert query["scope"] == ["identify"]
+    assert query["client_id"] == ["an-app"]
+    assert query["redirect_uri"][0].endswith("/auth/discord/callback")
+    state = decode_token(query["state"][0])
+    assert state["type"] == "discord_state"
+    # the browser carries the nonce back, so the state only works where it started
+    assert resp.cookies["discord_state"] == state["sub"]
+    assert "HttpOnly" in resp.headers["set-cookie"]
+
+
+def _state(client: Client, nonce: str = "a-nonce") -> str:
+    """A state as the start route hands it out: signed, with its nonce in the browser's cookie."""
+    client.cookies.set("discord_state", nonce)
+    return create_access_token(nonce, 10, "discord_state")
+
+
+def test_the_login_is_off_without_the_client_secret(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DISCORD_APPLICATION_ID", "an-app")
+    monkeypatch.delenv("DISCORD_CLIENT_SECRET", raising=False)
+    assert client.get("/auth/discord/start").status_code == 503
+
+
+def _callback(client: Client, **query: str) -> str:
+    resp = client.get("/auth/discord/callback", params=query, follow_redirects=False)
+    assert resp.status_code in (302, 307), resp.text
+    assert resp.headers["cache-control"] == "no-store"
+    return resp.headers["location"]
+
+
+def test_the_callback_hands_the_frontend_a_session(
+    client: Client, monkeypatch: pytest.MonkeyPatch, discord_app: None
+) -> None:
+    exchanged: list[str] = []
+
+    def exchange_code(code: str, redirect_uri: str) -> str:
+        exchanged.append(code)
+        return "discord-token"
+
+    monkeypatch.setattr(discord, "exchange_code", exchange_code)
+    monkeypatch.setattr(discord, "identify", lambda token: ACCOUNT)
+    location = _callback(client, code="a-code", state=_state(client))
+
+    url = urlparse(location)
+    assert (
+        f"{url.scheme}://{url.netloc}{url.path}" == "https://app.example/sso-callback"
+    )
+    assert url.query == ""  # the token rides in the fragment, never to a server
+    claims = decode_token(parse_qs(url.fragment)["token"][0])
+    assert claims["type"] == SESSION_KIND
+    assert (claims["sub"], claims["name"], claims["avatar"]) == ("42", "Player", "abc")
+    assert "role" not in claims  # read live on every request
+    assert exchanged == ["a-code"]
+
+
+@pytest.mark.parametrize(
+    ("query", "reason"),
+    [
+        ({"error": "access_denied"}, "denied"),
+        ({"code": "a-code", "state": "forged"}, "state"),
+        ({"code": "a-code", "state": "bnet"}, "state"),
+        ({"code": "a-code", "state": "other-browser"}, "state"),
+    ],
+)
+def test_a_failed_callback_says_why(
+    client: Client, discord_app: None, query: dict[str, str], reason: str
+) -> None:
+    if query.get("state") == "bnet":  # a state signed for another flow
+        query = {**query, "state": create_access_token("start", 10, "bnet_state")}
+    if (
+        query.get("state") == "other-browser"
+    ):  # a good state whose nonce this browser never held
+        query = {**query, "state": create_access_token("a-nonce", 10, "discord_state")}
+    location = _callback(client, **query)
+    assert location == f"https://app.example/login?login=error&reason={reason}"
+
+
+def test_a_code_discord_refuses_says_token(
+    client: Client, monkeypatch: pytest.MonkeyPatch, discord_app: None
+) -> None:
+    def refuse(code: str, redirect_uri: str) -> str:
+        raise requests.HTTPError("400 invalid_grant")
+
+    monkeypatch.setattr(discord, "exchange_code", refuse)
+    location = _callback(client, code="old-code", state=_state(client))
+    assert location == "https://app.example/login?login=error&reason=token"
+
+
+def _session_from(discord_id: str, days_ago: int) -> str:
+    """A session minted that many days ago, still inside its 30 days."""
+    issued = int(time.time()) - days_ago * 86400
+    return jwt.encode(
+        {
+            "sub": discord_id,
+            "type": SESSION_KIND,
+            "name": "Player",
+            "iat": issued,
+            "nbf": issued,
+            "exp": issued + SESSION_MINUTES * 60,
+        },
+        os.environ["JWT_SECRET_KEY"],
+        algorithm="HS256",
+    )
+
+
+def test_an_admin_needs_a_sign_in_within_a_day(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    old = _session_from("220202568490418179", days_ago=2)
+    resp = client.get("/me", headers={"Authorization": f"Bearer {old}"})
+    assert resp.status_code == 401
+    assert resp.json() == {"error": "Not signed in"}
+
+
+def test_a_member_keeps_an_old_session(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub_login(monkeypatch)
+    old = _session_from(ACCOUNT["id"], days_ago=2)
+    resp = client.get("/me", headers={"Authorization": f"Bearer {old}"})
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "member"
 
 
 def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> None:
-    stub_clerk(monkeypatch)
+    stub_login(monkeypatch)
     resp = client.get("/me", headers=SESSION)
     assert resp.status_code == 200
     assert resp.json() == {
@@ -152,21 +287,6 @@ def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> N
     }
 
 
-def test_clerk_names_the_account_once(
-    client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
-) -> None:
-    """The first request stores the Discord id; later ones never ask Clerk."""
-    stub_clerk(monkeypatch)
-    assert client.get("/me", headers=SESSION).status_code == 200
-
-    def no_clerk(self: Users, **kwargs: str) -> list[SimpleNamespace]:
-        raise AssertionError("Clerk was asked again")
-
-    monkeypatch.setattr(Users, "get_o_auth_access_token", no_clerk)
-    resp = client.get(f"/draft-series/match/{seeded['match_id']}", headers=SESSION)
-    assert resp.status_code == 403  # a member, known without Clerk
-
-
 def test_a_double_guard_resolves_the_claims_once(
     client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
 ) -> None:
@@ -176,7 +296,7 @@ def test_a_double_guard_resolves_the_claims_once(
     Discord rate limit is a standing constraint.
     """
     calls: list[str] = []
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"}, calls=calls)
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "1"}, calls=calls)
     resp = client.get(
         f"/player-series/{seeded['series_played_id']}/veto", headers=SESSION
     )
@@ -184,30 +304,10 @@ def test_a_double_guard_resolves_the_claims_once(
     assert calls.count(f"/guilds/{GUILD_ID}/members/1") == 1
 
 
-def test_a_relinked_discord_account_shows_at_the_next_login(
-    client: Client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    stub_clerk(monkeypatch)
-    assert client.get("/me", headers=SESSION).json()["discord_id"] == "42"
-    with (
-        Session.begin() as session
-    ):  # the same Clerk user now answers with another account
-        session.merge(ClerkAccount(clerk_user_id=CLERK_USER_ID, discord_id="42"))
-    monkeypatch.setattr(
-        Users,
-        "get_o_auth_access_token",
-        lambda self, **kwargs: [SimpleNamespace(token="t", provider_user_id="43")],
-    )
-    monkeypatch.setattr(
-        discord, "_bot_get", lambda path: FakeResponse(200, {"roles": []})
-    )
-    assert client.get("/me", headers=SESSION).json()["discord_id"] == "43"
-
-
 def test_me_carries_the_linked_user(
     client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
 ) -> None:
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "1"})
     resp = client.get("/me", headers=SESSION)
     assert resp.status_code == 200
     assert resp.json()["user"]["battleTag"] == "P1#1111"
@@ -217,7 +317,7 @@ def test_an_account_outside_the_guild_logs_in_as_a_guest(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A guest reads the public pages; the login itself is not refused."""
-    stub_clerk(monkeypatch, a_member=False)
+    stub_login(monkeypatch, a_member=False)
     resp = client.get("/me", headers=SESSION)
     assert resp.status_code == 200
     assert resp.json()["role"] == "guest"
@@ -228,7 +328,7 @@ def test_the_allowlist_makes_an_admin_without_a_guild_read(
 ) -> None:
     """The environment answers, so the login asks Discord nothing."""
     calls: list[str] = []
-    stub_clerk(
+    stub_login(
         monkeypatch, account={**ACCOUNT, "id": "220202568490418179"}, calls=calls
     )
     resp = client.get("/me", headers=SESSION)
@@ -240,7 +340,7 @@ def test_a_grant_makes_an_admin(
     client: Client, monkeypatch: pytest.MonkeyPatch, auth_headers: dict[str, str]
 ) -> None:
     _grant(client, auth_headers, ACCOUNT["id"])
-    stub_clerk(monkeypatch)
+    stub_login(monkeypatch)
     assert client.get("/me", headers=SESSION).json()["role"] == "admin"
 
 
@@ -249,14 +349,14 @@ def test_a_granted_account_outside_the_guild_is_an_admin(
 ) -> None:
     """The grant is the app's, so guild membership decides nothing for it."""
     _grant(client, auth_headers, ACCOUNT["id"])
-    stub_clerk(monkeypatch, a_member=False)
+    stub_login(monkeypatch, a_member=False)
     assert client.get("/me", headers=SESSION).json()["role"] == "admin"
 
 
 def test_a_member_session_is_no_admin_token(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch)
+    stub_login(monkeypatch)
     resp = client.get("/config/koth/nightbot-token", headers=SESSION)
     assert resp.status_code == 403
     assert resp.json() == {"error": "Admins only"}
@@ -266,7 +366,7 @@ def test_view_as_lowers_an_admin_for_the_request(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The header rewrites the role where the guards read it, so the 403 is real."""
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
     viewing = SESSION | {"X-View-As": "member"}
     me = client.get("/me", headers=viewing).json()
     assert me["role"] == "member"
@@ -280,7 +380,7 @@ def test_view_as_lowers_an_admin_for_the_request(
 def test_view_as_captain_names_the_chosen_team(
     client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
 ) -> None:
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
     viewing = SESSION | {
         "X-View-As": "captain",
         "X-View-Team": str(seeded["team_a_id"]),
@@ -299,7 +399,7 @@ def test_view_as_captain_names_the_chosen_team(
 def test_view_as_is_ignored_for_a_member(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch)
+    stub_login(monkeypatch)
     me = client.get("/me", headers=SESSION | {"X-View-As": "guest"}).json()
     assert me["role"] == "member"
     assert me["actual_role"] == "member"
@@ -309,19 +409,21 @@ def test_view_as_ignores_a_nonsense_role(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """admin is not a target either: the header only lowers, never restores."""
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
     me = client.get("/me", headers=SESSION | {"X-View-As": "superuser"}).json()
     assert me["role"] == "admin"
 
 
 def _login() -> dict[str, Any]:
-    """The claims a Clerk session resolves to, read without a route."""
+    """The claims a Discord session resolves to, read without a route."""
     from fastapi.security import HTTPAuthorizationCredentials
 
     from app.api.deps import require_login
 
     request = Request({"type": "http", "headers": []})
-    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="a-token")
+    credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer", credentials=SESSION["Authorization"].removeprefix("Bearer ")
+    )
     return require_login(request, credentials)
 
 
@@ -357,7 +459,7 @@ def test_a_captain_slot_makes_a_captain(
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     _set_captains(client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][0]])
 
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "1"})
     claims = _login()
     assert claims["role"] == "captain"
     assert claims["team_id"] == seeded["team_a_id"]
@@ -377,7 +479,7 @@ def test_a_captain_slot_in_no_season_of_this_account_is_no_captain(
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     _set_captains(client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][0]])
 
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "2"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "2"})
     assert client.get("/me", headers=SESSION).json()["role"] == "member"
 
 
@@ -389,9 +491,11 @@ def test_require_captain_refuses_a_member(
     from app.api.deps import require_captain
     from app.core.exceptions import ApiError
 
-    stub_clerk(monkeypatch)
+    stub_login(monkeypatch)
     request = Request({"type": "http", "headers": []})
-    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="a-token")
+    credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer", credentials=SESSION["Authorization"].removeprefix("Bearer ")
+    )
 
     with pytest.raises(ApiError) as refused:
         require_captain(request, credentials)
@@ -407,9 +511,11 @@ def test_require_captain_admits_an_admin(
 
     from app.api.deps import require_captain
 
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
     request = Request({"type": "http", "headers": []})
-    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="a-token")
+    credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer", credentials=SESSION["Authorization"].removeprefix("Bearer ")
+    )
 
     assert require_captain(request, credentials)["role"] == "admin"
 
@@ -434,8 +540,6 @@ def test_saving_captains_writes_the_guild_role(
         return FakeResponse(200, {"roles": ["role-1"] if url == f"{members}/1" else []})
 
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
-    with Session.begin() as session:  # every test names its own account
-        session.execute(delete(ClerkAccount))
     monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
     monkeypatch.setattr(discord._session, "request", request)
     team = _set_captains(

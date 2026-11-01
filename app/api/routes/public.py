@@ -23,7 +23,6 @@ from app.api.deps import (
     SoftBlockServiceDep,
     UserServiceDep,
     claim_seats,
-    discord_token,
     require_login,
     require_member,
 )
@@ -71,7 +70,6 @@ from app.models.user_block import (
     UserBusyUpdate,
 )
 from app.services import (
-    discord,
     discord_posts,
     discord_roles,
     player_history,
@@ -100,7 +98,7 @@ def _validated[T: SQLModel](model: type[T], fields: dict[str, Any]) -> T:
 
 
 def _identity(request: Request, credentials: Credentials) -> dict[str, Any]:
-    """The Discord identity behind a player request: the member's Clerk session."""
+    """The Discord identity behind a player request: the member's session."""
     claims = require_member(request, credentials)
     if claims["sub"] == "admin":
         raise ApiError(401, {"error": "not_a_discord_member"})
@@ -113,17 +111,10 @@ Identity = Annotated[dict[str, Any], Depends(_identity)]
 def _entry(claims: dict[str, Any]) -> dict[str, Any]:
     """The Discord account behind a set of claims, and the season it acts in.
 
-    A local dev login has no Clerk account, so its name stands in for the tag."""
-    account = (
-        discord.identify(discord_token(claims["clerk_user_id"]).token)
-        if "clerk_user_id" in claims
-        else {"global_name": claims.get("name")}
-    )
+    The session names the account as Discord showed it at sign-in."""
     return {
         "discord_id": str(claims["sub"]),
-        "discord_tag": account.get("global_name")
-        or account.get("username")
-        or str(claims["sub"]),
+        "discord_tag": claims.get("name") or str(claims["sub"]),
         "season_id": discord_roles.current_season(),
     }
 

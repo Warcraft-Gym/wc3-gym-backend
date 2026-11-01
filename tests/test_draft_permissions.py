@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
-from tests.test_discord_auth import SESSION, stub_clerk
+from tests.test_discord_auth import SESSION, stub_login
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def captain(
     )
     assert resp.status_code == 200, resp.text
 
-    stub_clerk(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
+    stub_login(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
     return SESSION
 
 
@@ -97,7 +97,7 @@ def captain_of_gamma(
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
-    stub_clerk(monkeypatch, account={"id": "2", "username": "p2", "avatar": None})
+    stub_login(monkeypatch, account={"id": "2", "username": "p2", "avatar": None})
     return SESSION
 
 
@@ -165,7 +165,7 @@ def test_a_member_cannot_publish(
     resp = client.post("/draft-series", json=draft_body(seeded), headers=captain)
     assert resp.status_code == 201, resp.text
     draft_id = resp.json()["id"]
-    stub_clerk(monkeypatch, account={"id": "2", "username": "p2", "avatar": None})
+    stub_login(monkeypatch, account={"id": "2", "username": "p2", "avatar": None})
 
     resp = client.post(f"/draft-series/{draft_id}/promote", headers=SESSION)
     assert resp.status_code == 403, resp.text

@@ -21,7 +21,7 @@ from app.models.user import User
 from app.models.user_block import UserBusy
 from app.models.user_team_season import DBUserTeamSeason
 from app.services.availability import AvailabilityService
-from tests.test_discord_auth import SESSION, stub_clerk
+from tests.test_discord_auth import SESSION, stub_login
 
 
 def write(
@@ -206,7 +206,7 @@ def captain(
     )
     assert resp.status_code == 200, resp.text
 
-    stub_clerk(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
+    stub_login(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
     return SESSION
 
 

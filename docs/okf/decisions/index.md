@@ -7,7 +7,7 @@
 * [Cup teams live for one cup](cup-teams-live-for-one-cup.md) - A team of a team cup is made for that cup alone, signed up by its captain and confirmed by every player; it lives in the cup's own tables and no league reads it.
 * [App-managed roles, manual sync](app-managed-roles.md) - Access comes from the database, Discord roles are a mirror of season facts, and the mirror updates only when an admin presses a button.
 * [Ask when someone cannot play](availability-blocklist.md) - Availability is collected as blocks, blank meaning fully open, and a block informs pairings without ever constraining them.
-* [Clerk owns the session](clerk-auth.md) - Members sign in through Clerk with Discord as the only social connection; the guild check and the roles stay app code.
+* [The backend signs members in with Discord](discord-login.md) - Members sign in with a Discord OAuth flow the backend runs, and the backend signs their session token; the guild check and the roles stay app code.
 * [Derived, not stored](derived-not-stored.md) - Every score, standing, rating and fantasy total is computed at read time; no rollup column and no recalculate button exists.
 * [Discord's edit limit is a core constraint](discord-rate-limit.md) - Every channel post and edit goes through the discord_post rows, which pace edits to Discord's five per five seconds per channel and collapse a burst to its last state.
 * [Draft order is a rerank, not an MMR](draft-order-rerank.md) - A hand correction to the draft order is a position on the signup row, never an adjusted MMR value.

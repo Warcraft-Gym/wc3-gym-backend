@@ -568,10 +568,10 @@ def test_the_profile_signup_reads_the_battle_tag_of_the_logged_in_player(
     from sqlalchemy import update
     from sqlmodel import col
 
-    from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
+    from tests.test_discord_auth import ACCOUNT, SESSION, stub_login
 
     rate("P4#4444", Race.NE, 1700)
-    stub_clerk(monkeypatch)
+    stub_login(monkeypatch)
     with Session.begin() as session:
         session.execute(
             update(User)
@@ -595,10 +595,10 @@ def test_a_player_withdraws_their_own_signup(
     from sqlalchemy import update
     from sqlmodel import col
 
-    from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
+    from tests.test_discord_auth import ACCOUNT, SESSION, stub_login
 
     rate("P4#4444", Race.NE, 1700)
-    stub_clerk(monkeypatch)
+    stub_login(monkeypatch)
     with Session.begin() as session:
         session.execute(
             update(User)

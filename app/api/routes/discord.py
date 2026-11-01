@@ -29,7 +29,7 @@ async def discord_interaction(
 ) -> dict:
     """One interaction, forwarded by the adapter with Discord's signature headers.
 
-    The signature is the whole auth: no Clerk session, no admin token. A bad
+    The signature is the whole auth: no member session, no admin token. A bad
     or missing signature answers 401 and nothing is read.
     """
     body = await request.body()

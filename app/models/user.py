@@ -48,7 +48,7 @@ class UserBase(SQLModel):
 
 class User(UserBase, DBModel, table=True):
     __tablename__ = "users"
-    # The fantasy importer matches a bettor by Discord tag, case blind. A Clerk
+    # The fantasy importer matches a bettor by Discord tag, case blind. A member's
     # session matches a player by Discord id. Blank or null means unknown.
     __table_args__ = (
         Index(

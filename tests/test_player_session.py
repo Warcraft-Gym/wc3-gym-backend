@@ -1,4 +1,4 @@
-"""The player routes identify the member by their Clerk session.
+"""The player routes identify the member by their Discord session.
 
 The session names the Discord account; the profile form and the dashboard
 never carry the identity themselves.
@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from httpx2 import Client, Response
 
 from tests.seed import active
-from tests.test_discord_auth import SESSION, stub_clerk
+from tests.test_discord_auth import SESSION, stub_login
 
 
 @pytest.fixture
@@ -34,8 +34,8 @@ def member_session(
     name: str = "p1",
     a_member: bool = True,
 ) -> dict[str, str]:
-    """Stand Clerk and Discord in for one account, and answer the headers it sends."""
-    stub_clerk(
+    """Stand Discord in for one account, and answer the headers it sends."""
+    stub_login(
         monkeypatch,
         a_member=a_member,
         account={"id": discord_id, "username": name, "avatar": None},

@@ -4,7 +4,7 @@ title: wc3-gym-backend
 description: The FastAPI backend of the Warcraft Gym league app, on Vercel with a Supabase Postgres, serving the web app, the GNL website, the Discord adapter and Nightbot.
 resource: https://github.com/Warcraft-Gym/wc3-gym-backend
 tags: [data, api, deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-09T12:46:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-27T12:00:00Z }
 sources:
   - id: readme
     resource: ../../README.md
@@ -16,7 +16,7 @@ sources:
 
 # What it is
 
-The one backend of the Gym Newbie League (GNL) and the other Warcraft Gym events: players, teams, seasons, series, results, the fantasy game, King of the Hill nights, the W3Champions ladder mirror, and the Discord commands and cards. It is a FastAPI application on SQLModel and Postgres, deployed as one Vercel function, with Clerk sessions for members and a shared admin token for the admin UI and scripts.
+The one backend of the Gym Newbie League (GNL) and the other Warcraft Gym events: players, teams, seasons, series, results, the fantasy game, King of the Hill nights, the W3Champions ladder mirror, and the Discord commands and cards. It is a FastAPI application on SQLModel and Postgres, deployed as one Vercel function, with Discord sessions it signs for members and a shared admin token for the admin UI and scripts.
 
 # Where it runs
 

@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-26T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-27T12:00:00Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -21,7 +21,7 @@ sources:
 
 | Consumer | Repository | Reads | Auth |
 |---|---|---|---|
-| the web app | `wc3-gym-frontend` | most routes | Clerk session or the admin token |
+| the web app | `wc3-gym-frontend` | most routes | a member's Discord session or the admin token |
 | the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams/summary`, `/matches`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}/profile?event_id=` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` when the `next_run` it holds comes, and at least once a day; the backend calls it back on `POST /next-run` with each new `next_run` | `CLOUDFLARE_CRON_SECRET` bearer, both ways |

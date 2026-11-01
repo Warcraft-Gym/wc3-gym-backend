@@ -14,18 +14,18 @@ from app.services import casts
 from app.services.users import UserService
 from tests.conftest import Client
 from tests.seed import active
-from tests.test_discord_auth import SESSION, stub_clerk
+from tests.test_discord_auth import SESSION, stub_login
 
 AVATAR = "https://cdn.discordapp.com/avatars/1/abc.png"
 
 
 @pytest.fixture
 def player_one(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
-    """The Clerk session of the seeded player with Discord id 1."""
+    """The Discord session of the seeded player with Discord id 1."""
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     monkeypatch.setattr(UserService, "validate_battle_tag", lambda self, tag: True)
     monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, uid: None)
-    stub_clerk(monkeypatch, account={"id": "1", "username": "p1", "avatar": "abc"})
+    stub_login(monkeypatch, account={"id": "1", "username": "p1", "avatar": "abc"})
     return SESSION
 
 

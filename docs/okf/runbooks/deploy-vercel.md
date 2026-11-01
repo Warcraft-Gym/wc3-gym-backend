@@ -4,7 +4,7 @@ title: Deploy to Vercel
 description: A merge to main builds staging and migrates the staging database in that build; a GitHub Release of a commit on main builds production and migrates it in the build; the Hobby plan sets the limits.
 resource: ../../../vercel.json
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-27T12:00:00Z }
 stale_after: 2027-04-06T00:00:00Z
 sources:
   - id: vercel-json
@@ -48,7 +48,7 @@ The README's variable table is the whole deploy list. Vercel adds `VERCEL_ENV`, 
 
 # Previews
 
-No push builds a preview: staging is the workflow's preview of `main`, and a preview of another branch exists only when someone makes one by hand. A preview build picks its database in the staging Supabase project by its branch name, `PREVIEW_BRANCH` or else the git branch: `main` migrates and uses the shared staging database; another branch with no migration uses the shared database; a branch with a migration gets a copy of the locked template and migrates it. A branch that does not know the shared database's revision fails its build with "rebase onto main". The copy is dropped when the branch is deleted. A preview deployed from an export of the tree carries no branch name, so the build picks no database for it: it shows that the code builds and starts, and nothing about data. See [preview databases](../../PREVIEW-DATABASES.md). Previews sign in on the Clerk dev instance and are public.
+No push builds a preview: staging is the workflow's preview of `main`, and a preview of another branch exists only when someone makes one by hand. A preview build picks its database in the staging Supabase project by its branch name, `PREVIEW_BRANCH` or else the git branch: `main` migrates and uses the shared staging database; another branch with no migration uses the shared database; a branch with a migration gets a copy of the locked template and migrates it. A branch that does not know the shared database's revision fails its build with "rebase onto main". The copy is dropped when the branch is deleted. A preview deployed from an export of the tree carries no branch name, so the build picks no database for it: it shows that the code builds and starts, and nothing about data. See [preview databases](../../PREVIEW-DATABASES.md). A preview signs members in with Discord only when its `/auth/discord/callback` is a redirect of the Discord application; previews are public.
 
 # The recipes
 

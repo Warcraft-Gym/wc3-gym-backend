@@ -130,7 +130,7 @@ def test_the_caller_is_resolved_off_the_event_loop(
     member: Callable[..., dict[str, str]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The identity check reads Clerk, the database and Discord, so it runs in a
+    """The identity check reads the database and Discord, so it runs in a
     worker thread and never stalls the other requests on the event loop."""
     from app.api.routes import public
 

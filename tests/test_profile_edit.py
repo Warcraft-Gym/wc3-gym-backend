@@ -11,16 +11,16 @@ from fastapi import FastAPI
 from httpx2 import Client
 
 from app.services.users import UserService
-from tests.test_discord_auth import SESSION, stub_clerk
+from tests.test_discord_auth import SESSION, stub_login
 
 
 @pytest.fixture
 def member(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
-    """P1's Clerk session, with the W3C reads stubbed out."""
+    """P1's Discord session, with the W3C reads stubbed out."""
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     monkeypatch.setattr(UserService, "validate_battle_tag", lambda self, tag: True)
     monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, uid: None)
-    stub_clerk(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
+    stub_login(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
     return SESSION
 
 

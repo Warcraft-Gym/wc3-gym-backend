@@ -1,18 +1,15 @@
 ---
 type: Data Model
 title: clerk_account
-description: The Discord account behind one Clerk user, written on the first guarded request of a login so no later request asks Clerk.
+description: The Discord account behind one Clerk user, from when Clerk signed members in; no code reads or writes it, and a later release drops it.
 resource: ../../../../app/models/clerk_account.py
 tags: [auth, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-27T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/clerk_account.py
     title: ClerkAccount
-  - id: deps
-    resource: ../../../../app/api/deps.py
-    title: The login dependency merges the row
 ---
 
 # Schema
@@ -28,4 +25,4 @@ Primary key `clerk_user_id`. No foreign keys. `discord_id` matches [users](users
 
 # Rules
 
-The row is a cache of Clerk's answer. No route reads or writes it directly. See [authentication](../../api/auth.md) and [the decision](../../decisions/clerk-auth.md).
+No code reads or writes the table. A migration drops it in a release after the one whose code stopped reading it is live, as [the migration rule](../../conventions/git-and-pull-requests.md) says.

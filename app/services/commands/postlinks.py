@@ -1,7 +1,7 @@
 """/postlinks: the site's links as buttons, posted by an admin.
 
-The site signs a member in through Clerk with Discord OAuth, so the buttons
-are plain links and carry no token.
+The site signs a member in with Discord OAuth, so the buttons are plain
+links and carry no token.
 """
 
 from typing import Any

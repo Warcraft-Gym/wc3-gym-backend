@@ -31,7 +31,7 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import W3CLadderMatch
 from app.models.w3c_stats import W3CStats
 from tests.seed import active
-from tests.test_discord_auth import SESSION, stub_clerk
+from tests.test_discord_auth import SESSION, stub_login
 from tests.test_query_budget import count_statements
 
 RACES = [Race.HU, Race.OC, Race.NE, Race.UD]
@@ -120,7 +120,7 @@ def captain(
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
-    stub_clerk(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
+    stub_login(monkeypatch, account={"id": "1", "username": "p1", "avatar": None})
     return SESSION
 
 
@@ -393,7 +393,7 @@ def test_a_captain_of_a_team_that_does_not_play_the_match_is_refused(
     assert client.get(url, headers=captain).status_code == 200
 
     # P2 captains Gamma, which does not play the seeded match
-    stub_clerk(monkeypatch, account={"id": "2", "username": "p2", "avatar": None})
+    stub_login(monkeypatch, account={"id": "2", "username": "p2", "avatar": None})
     with Session() as session:
         gamma = Team(
             name="Gamma", long_name="Team Gamma", league_id=board_league["league_id"]

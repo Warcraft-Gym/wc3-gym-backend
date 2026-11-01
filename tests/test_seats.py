@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
-from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
+from tests.test_discord_auth import ACCOUNT, SESSION, stub_login
 from tests.test_player_session import (  # noqa: F401
     SIGNUP_BODY,
     member_session,
@@ -174,7 +174,7 @@ def test_view_as_seats_names_both_seats(
 ) -> None:
     """An admin debugging a captain lists the pairs in one header."""
     later = _add_season("Season next", complete=False, seeded=seeded)
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    stub_login(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
     viewing = SESSION | {
         "X-View-As": "captain",
         "X-View-Seats": (
