@@ -7,6 +7,7 @@
 * [Fantasy league](fantasy.md) - A member drafts players, one team and one race for a season, places bets on series, and scores six derived parts.
 * [GNL season](gnl-season.md) - Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived on every read and ends on the admin's close.
 * [KOTH night](koth.md) - A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
+* [Map sources](map-sources.md) - The sites the app takes maps from, each one module behind one contract, which an organizer or an admin picks maps from and the ladder import asks in a fixed order.
 * [Pictures and replays](pictures-and-replays.md) - Team logos and map thumbnails live in Vercel Blob as public URLs, replays live in a Cloudflare R2 bucket reached through presigned URLs, and both stores follow the rows.
 * [Roles and permissions](roles-and-permissions.md) - Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.
 * [Scheduling and availability](scheduling-and-availability.md) - A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time and each player's blocked time are read as intervals, for a series and before one exists.

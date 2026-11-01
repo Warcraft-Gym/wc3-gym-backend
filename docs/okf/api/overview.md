@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-three route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-20T00:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-31T12:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -39,7 +39,7 @@ sources:
 | `draft_series.py` | `/draft-series`, `/matches/{match_id}/draft-board` | a captain's proposed series, the Ready, seen and MMR state of one fixture's draft, and every figure its draft board draws |
 | `home.py` | `/home/series`, `/home/series/upcoming` | the home page's cross-event series lists, and every booked series with its casts |
 | `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet`, `/events/{event_id}/rounds` | a member's own flows, and a captain's read of the hours a pair shares in a round |
-| `maps.py` | `/maps` | maps and the ladder import |
+| `maps.py` | `/maps` | maps, the ladder import and the [map sources](../concepts/map-sources.md) |
 | `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |
 | `koth.py`, `koth_nights.py` | `/koth` | nights, the live night an admin runs, the board, and the old KOTH payloads |
 | `config.py` | `/config` | settings, admins, role bindings, role sync |

@@ -20,7 +20,10 @@ from app.models.map import (
     LadderMapRow,
     MapCreate,
     MapPublic,
+    MapSourcePublic,
     MapUpdate,
+    SourceMapPicks,
+    SourceMapRow,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,6 +94,31 @@ def apply_ladder_import(
     ids = service.import_ladder_maps(
         data.names, LADDER_MODES[mode], ladder_only=not is_admin(claims)
     )
+    return [service.get(map_id) for map_id in ids]
+
+
+@router.get("/maps/sources", dependencies=[Depends(require_organizer)])
+def list_map_sources(service: MapServiceDep) -> list[MapSourcePublic]:
+    """The sites an organizer or an admin can take maps from."""
+    return service.sources()
+
+
+@router.get("/maps/sources/{key}", dependencies=[Depends(require_organizer)])
+def list_source_maps(
+    key: str,
+    service: MapServiceDep,
+    q: Annotated[str, Query(max_length=100)] = "",
+) -> list[SourceMapRow]:
+    """One source's maps matching a search, each with the map of the app it is."""
+    return service.source_rows(key, q)
+
+
+@router.post("/maps/sources/{key}", dependencies=[Depends(require_organizer)])
+def import_source_maps(
+    key: str, data: SourceMapPicks, service: MapServiceDep
+) -> list[MapPublic]:
+    """Add the picked maps with the modes chosen, and copy or link their pictures."""
+    ids = service.import_from_source(key, data.maps)
     return [service.get(map_id) for map_id in ids]
 
 

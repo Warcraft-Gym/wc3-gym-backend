@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from httpx2 import Client, Response
 
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError, ExternalServiceError
 from app.services import blob
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
@@ -94,6 +94,34 @@ def test_a_jpeg_is_accepted(
     resp = upload(client, seeded, auth_headers, JPEG)
     assert resp.status_code == 200
     assert list(blob_store.values()) == [JPEG]
+
+
+def test_a_store_that_cannot_be_written_is_a_service_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A machine with no store and a store that refuses read the same to a caller."""
+    import requests
+    import vercel.oidc
+
+    def no_token() -> str:
+        raise vercel.oidc.VercelOidcTokenError("no token")
+
+    def refused(*args: object, **kwargs: object) -> None:
+        raise requests.HTTPError("503 from the store")
+
+    monkeypatch.setattr(requests, "request", refused)
+    monkeypatch.setenv("BLOB_STORE_ID", "store_AbC123")
+    monkeypatch.setattr(vercel.oidc, "get_vercel_oidc_token", no_token)
+    with pytest.raises(ExternalServiceError):
+        REAL_PUT_ICON("teams/7", JPEG)
+
+    monkeypatch.setattr(vercel.oidc, "get_vercel_oidc_token", lambda: "oidc-token")
+    with pytest.raises(ExternalServiceError):
+        REAL_PUT_ICON("teams/7", JPEG)
+
+    monkeypatch.delenv("BLOB_STORE_ID")
+    with pytest.raises(ExternalServiceError):
+        REAL_PUT_ICON("teams/7", JPEG)
 
 
 def test_put_icon_follows_the_bytes(monkeypatch: pytest.MonkeyPatch) -> None:

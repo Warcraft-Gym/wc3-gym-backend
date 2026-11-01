@@ -3,6 +3,12 @@
 ## 2026-11-01
 
 * **Update**: a cup not drawn yet forgets an entrant that withdraws, with its place in the line and its team, and taking the last draw back forgets the ones who withdrew after it. Once drawn, a withdrawn row stays. [The events module](concepts/events-module.md) and [event_entrant](data/tables/event_entrant.md) state it.
+* **Update**: an upload the store cannot take answers 502, and an import keeps its maps without the picture ([pictures](concepts/pictures-and-replays.md)). A [map source](concepts/map-sources.md) that copies its pictures shows none before they are ours, because the site refuses its files to a page on another site. A source's list answers at most 500 maps. An organizer reads the sources and imports the maps it picks, as an admin does ([roles and permissions](concepts/roles-and-permissions.md)).
+
+## 2026-10-31
+
+* **Add**: [map sources](concepts/map-sources.md), the sites the app takes maps from: warcraft3.info and Liquipedia, each one module behind one contract, so a site is one more module and one line in `SOURCES`. `GET /maps/sources`, `GET /maps/sources/{key}?q=` and `POST /maps/sources/{key}` let an admin list a source, pick maps and set each one's modes. Liquipedia's pictures are copied into the store during the import.
+* **Update**: the ladder map import reads a source only for a map that is new or has no picture, asks warcraft3.info then Liquipedia, and goes on with the next when one cannot be read. `LadderMapRow` gains `source` and `unreached`, a known map's row shows the picture and the name the app holds, and warcraft3.info's tie-break between versions is the entry with the most files. [W3Champions](concepts/w3champions.md), [pictures](concepts/pictures-and-replays.md) and [maps](data/tables/maps.md) state it.
 
 ## 2026-10-27
 

@@ -4,7 +4,7 @@ title: W3Champions
 description: The ranked ladder service the app reads MMR, per-race stats and match history from, with a timeout, a throttle answer, and two separate sync pipelines.
 resource: ../../../app/services/w3c.py
 tags: [w3champions]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-25T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-31T12:00:00Z }
 sources:
   - id: client
     resource: ../../../app/services/w3c.py
@@ -25,7 +25,7 @@ sources:
 | the flag of a player with no country | personal settings | `users.country`; a country already set is never replaced | every stats sync of a player with no country |
 | ranked 1v1 matches | match search, 100 per page | `w3c_ladder_matches`, the `ladder_sync` ledger | the Sync Ladder button, `POST /events/{id}/ladder-sync` in chunks, a cup signup (the current W3Champions season, once the answer is out, at most once an hour per player), the daily job |
 | the season list | ladder seasons | nothing; read when `current_w3c_season` is unset | on demand |
-| the 1v1 map pool | maps | `maps`, paired with warcraft3.info by name and version | the ladder map import |
+| the map pool of a game mode | active modes | `maps`, each new or unpictured map looked up in the [map sources](map-sources.md) | the ladder map import |
 
 The base URL is the `w3c_url` setting, else the `W3C_URL` variable, else the built-in default. Every call has a 10 second timeout; a caller that answers a chat message passes a shorter one, and a KOTH signup uses five seconds. A refused burst raises `W3CThrottledError`, which answers 502 with a fixed message and logs at warning, not error: the other side pacing the app is not an incident.
 
