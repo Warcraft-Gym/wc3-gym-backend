@@ -1,5 +1,14 @@
 # Bundle history
 
+## 2026-11-01
+
+* **Update**: an upload the store cannot take answers 502, and an import keeps its maps without the picture ([pictures](concepts/pictures-and-replays.md)). A [map source](concepts/map-sources.md) that copies its pictures shows none before they are ours, because the site refuses its files to a page on another site. A source's list answers at most 500 maps. An organizer reads the sources and imports the maps it picks, as an admin does ([roles and permissions](concepts/roles-and-permissions.md)).
+
+## 2026-10-31
+
+* **Add**: [map sources](concepts/map-sources.md), the sites the app takes maps from: warcraft3.info and Liquipedia, each one module behind one contract, so a site is one more module and one line in `SOURCES`. `GET /maps/sources`, `GET /maps/sources/{key}?q=` and `POST /maps/sources/{key}` let an admin list a source, pick maps and set each one's modes. Liquipedia's pictures are copied into the store during the import.
+* **Update**: the ladder map import reads a source only for a map that is new or has no picture, asks warcraft3.info then Liquipedia, and goes on with the next when one cannot be read. `LadderMapRow` gains `source` and `unreached`, a known map's row shows the picture and the name the app holds, and warcraft3.info's tie-break between versions is the entry with the most files. [W3Champions](concepts/w3champions.md), [pictures](concepts/pictures-and-replays.md) and [maps](data/tables/maps.md) state it.
+
 ## 2026-10-27
 
 * **Update**: members sign in with a Discord OAuth flow the backend runs, `GET /auth/discord/start` and `GET /auth/discord/callback`; the callback signs a 30-day session token of type `discord` that names the Discord account. `DISCORD_CLIENT_SECRET` is new; the `CLERK_*` variables are gone. [Authentication](api/auth.md) and [the decision](decisions/discord-login.md) state it, in place of the decision that Clerk owns the session. [clerk_account](data/tables/clerk_account.md) is no longer read and is dropped in a later release.

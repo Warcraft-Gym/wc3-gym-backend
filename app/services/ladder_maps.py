@@ -1,22 +1,13 @@
-"""The 1v1 maps w3champions runs, matched to what warcraft3.info knows.
+"""The maps w3champions runs, and how a map's name reads.
 
-w3champions names the maps of the ladder and warcraft3.info holds the short
-name and the picture of every map ever published, so the import reads both
-and pairs them. The pairing is by name and version: warcraft3.info keeps the
-old versions of a map under their own names, so "Autumn Leaves v2" belongs to
-"Autumn Leaves 2.0" and not to the older "Autumn Leaves".
+w3champions names the maps of the ladder and nothing more; a short name and a
+picture come from the map sources (app.services.map_sources). A name carries its
+version, or the map's file path does: "Last Refuge" runs "4_LastRefuge_v1.5.w3x".
 """
 
 import re
 
-from app.models.map import LadderMapRow
 from app.services.w3c import W3CService
-
-# Every map warcraft3.info knows, with its short name and its picture.
-MAP_DB_URL = "https://warcraft3.info/api/v1/maps"
-
-# Where warcraft3.info serves the pictures it names.
-IMAGE_BASE_URL = "https://d3upx5peno0o6w.cloudfront.net/"
 
 # The w3champions game mode the league plays.
 SOLO_MODE = 1
@@ -28,9 +19,6 @@ _VERSION = re.compile(r"^v?(\d+(?:\.\d+)*)$")
 
 # The version in a map file path: "44_w3c_260615_2308_AutumnLeaves_v2.0.w3x".
 _PATH_VERSION = re.compile(r"[_-]v(\d+(?:\.\d+)*)")
-
-# A warcraft3.info map, keyed by the base name it was published under.
-type MapIndex = dict[str, list[tuple[str | None, dict]]]
 
 
 def _normalize(name: str) -> str:
@@ -45,7 +33,7 @@ def _canonical(version: str) -> str:
     return version
 
 
-def _split_version(name: str) -> tuple[str, str | None]:
+def split_version(name: str) -> tuple[str, str | None]:
     """The name without its trailing version word, and that version."""
     words = _normalize(name).split()
     found = _VERSION.match(words[-1]) if words else None
@@ -60,22 +48,14 @@ def _path_version(path: str) -> str | None:
     return _canonical(found[1]) if found else None
 
 
-def _newest_file(entry: dict) -> str:
-    """When warcraft3.info last saw a file of this map."""
-    return max(
-        (file.get("updated_at") or "" for file in entry.get("map_files") or []),
-        default="",
-    )
-
-
 def folded_base(name: str) -> str:
     """The name folded to its lineage: case, spacing and the version word dropped."""
-    return _split_version(name)[0].replace(" ", "")
+    return split_version(name)[0].replace(" ", "")
 
 
 def initials(name: str) -> str:
     """The short name a map falls back to: the initials of its base name."""
-    base = _split_version(name)[0]
+    base = split_version(name)[0]
     return "".join(word[0] for word in base.split()).upper() or "MAP"
 
 
@@ -90,46 +70,18 @@ def free_shortname(preferred: str | None, name: str, taken: set[str]) -> str:
     return shortname
 
 
-def _match(ladder_map: dict, by_base: MapIndex) -> dict | None:
-    """The warcraft3.info map behind a ladder map, by base name and version."""
-    base, version = _split_version(ladder_map.get("name") or "")
-    if version is None:
-        version = _path_version(ladder_map.get("path") or "")
-    candidates = by_base.get(base) or []
-    exact = [entry for entry_version, entry in candidates if entry_version == version]
-    # With no version to go by, the map published last is the one meant
-    return max(
-        exact or [entry for _, entry in candidates], key=_newest_file, default=None
-    )
-
-
-def _row(ladder_map: dict, by_base: MapIndex) -> LadderMapRow:
-    """One ladder map, and the short name and picture matched to it."""
+def _versioned(ladder_map: dict) -> str:
+    """A ladder map's name, with its file's version when the name leaves it out."""
     name = ladder_map.get("name") or ""
-    entry = _match(ladder_map, by_base)
-    if entry is None:
-        return LadderMapRow(w3c_name=name, status="no_match")
-    file_name = (entry.get("image") or {}).get("file_name")
-    return LadderMapRow(
-        w3c_name=name,
-        matched_name=entry.get("name"),
-        shortname=entry.get("short"),
-        image_url=f"{IMAGE_BASE_URL}{file_name}" if file_name else None,
-    )
+    version = _path_version(ladder_map.get("path") or "")
+    if version and split_version(name)[1] is None:
+        return f"{name} v{version}"
+    return name
 
 
-def map_index() -> MapIndex:
-    """Every map warcraft3.info knows, keyed by base name."""
-    by_base: MapIndex = {}
-    for entry in W3CService().send_request(url=MAP_DB_URL) or []:
-        base, version = _split_version(entry.get("name") or "")
-        by_base.setdefault(base, []).append((version, entry))
-    return by_base
-
-
-def ladder_rows(by_base: MapIndex, mode: int = SOLO_MODE) -> list[LadderMapRow]:
-    """Every ladder map of one W3Champions game mode, the 1v1 one unless named,
-    with the short name and picture matched to it."""
+def ladder_names(mode: int = SOLO_MODE) -> dict[str, str]:
+    """Every map of one W3Champions game mode, the 1v1 one unless named: its name,
+    and the name a source is asked for, which carries its version."""
     w3c = W3CService()
     modes = w3c.send_request(url=f"{w3c.base_url()}/ladder/active-modes") or []
     maps = next(
@@ -140,13 +92,4 @@ def ladder_rows(by_base: MapIndex, mode: int = SOLO_MODE) -> list[LadderMapRow]:
         ),
         [],
     )
-    return [_row(ladder_map, by_base) for ladder_map in maps]
-
-
-def ladder_maps() -> list[LadderMapRow]:
-    return ladder_rows(map_index())
-
-
-def lookup(name: str, by_base: MapIndex) -> LadderMapRow:
-    """One map by its name alone: what warcraft3.info holds for a map off the ladder."""
-    return _row({"name": name}, by_base)
+    return {ladder_map.get("name") or "": _versioned(ladder_map) for ladder_map in maps}

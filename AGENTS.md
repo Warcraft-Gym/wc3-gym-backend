@@ -11,7 +11,7 @@
 - **A value.** No token, password, connection string, hostname, bucket, database, project, guild, channel, role or account id, and no default credential, even a local one. An environment variable name is fine. Its value never.
 - **A posture.** Nothing about which safeguards exist or are missing, which checks are on or off, what is reachable from where, what data an environment holds, or which plan, quota or cost applies. Write the operator instruction instead.
 - **A weakness.** No unfixed defect, bypass or lost data. Open an issue with the detail. The bundle states the rule that holds once it is fixed.
-- **Another organisation.** The vendors the code depends on are fine: Vercel, Supabase, Clerk, Cloudflare, GitHub, Discord, W3Champions. No other site, community, sponsor or person.
+- **Another organisation.** The vendors the code depends on are fine: Vercel, Supabase, Clerk, Cloudflare, GitHub, Discord, W3Champions, warcraft3.info, Liquipedia. No other site, community, sponsor or person.
 
 ### Before you commit
 

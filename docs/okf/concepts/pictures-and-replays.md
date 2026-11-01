@@ -4,7 +4,7 @@ title: Pictures and replays
 description: Team logos and map thumbnails live in Vercel Blob as public URLs, replays live in a Cloudflare R2 bucket reached through presigned URLs, and both stores follow the rows.
 resource: ../../PICTURES.md
 tags: [storage]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-10-06T10:27:53Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-01T12:00:00Z }
 sources:
   - id: pictures
     resource: ../../PICTURES.md
@@ -21,7 +21,7 @@ sources:
 
 `teams.icon_url` and `maps.image` hold public URLs into a Vercel Blob store, one per environment: `gnl-media` for production, `gnl-media-staging` for preview and development. Calls authenticate with `BLOB_STORE_ID` and the Vercel OIDC token, which only the connected store accepts, so no environment can delete another's files. A caller that reads the URL off the answer fetches the picture from the store; `GET /leagues/{league_id}/teams/{team_id}/image` still redirects, uncacheable, for the old consumers. `POST /leagues/{league_id}/teams/{team_id}/image` and `POST /maps/{id}/image` upload: magic bytes checked, 2 MB cap, a new random suffix per upload so the year-long cache never serves a stale logo, and the blob it replaced deleted after the commit.
 
-A map's `image` may also hold the URL warcraft3.info publishes, written by the ladder map import; `blob.ours` tells the two apart, so a replacement deletes only a blob the app wrote. An upload wins over an import.
+A map's `image` may also hold the URL a [map source](map-sources.md) publishes it at, as warcraft3.info's are; `blob.ours` tells the two apart, so a replacement deletes only a blob the app wrote. Liquipedia's pictures are copied into the store instead, through the same upload path. An upload wins over an import. An upload the store cannot take answers 502.
 
 The store follows the rows: a deleted team or map drops its picture after the commit. The listeners are registered on the session in `app/core/db.py`.
 
