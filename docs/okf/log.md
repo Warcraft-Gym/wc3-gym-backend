@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-11-01
+
+* **Update**: a cup not drawn yet forgets an entrant that withdraws, with its place in the line and its team, and taking the last draw back forgets the ones who withdrew after it. Once drawn, a withdrawn row stays. [The events module](concepts/events-module.md) and [event_entrant](data/tables/event_entrant.md) state it.
+
 ## 2026-10-27
 
 * **Update**: members sign in with a Discord OAuth flow the backend runs, `GET /auth/discord/start` and `GET /auth/discord/callback`; the callback signs a 30-day session token of type `discord` that names the Discord account. `DISCORD_CLIENT_SECRET` is new; the `CLERK_*` variables are gone. [Authentication](api/auth.md) and [the decision](decisions/discord-login.md) state it, in place of the decision that Clerk owns the session. [clerk_account](data/tables/clerk_account.md) is no longer read and is dropped in a later release.

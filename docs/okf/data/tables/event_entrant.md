@@ -1,10 +1,10 @@
 ---
 type: Data Model
 title: event_entrant
-description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
+description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row, unless it left a cup not drawn yet.
 resource: ../../../../app/models/event_entrant.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-27T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-01T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -42,7 +42,7 @@ sources:
 | `qualified_from_event_id` | INTEGER | yes | The qualifier the entrant came through. Null for a direct signup. Answered on the payload; no route writes it. |
 | `channel` | VARCHAR | no | Where the signup came from: `web`, `bot` or `twitch`. |
 | `checked_in_at` | TIMESTAMP | yes | When the entrant checked in. Null while not checked in. |
-| `withdrawn_at` | TIMESTAMP | yes | When the entrant withdrew. Null means live. A return signup clears it and reuses the row. |
+| `withdrawn_at` | TIMESTAMP | yes | When the entrant withdrew. Null means live. A return signup clears it and reuses the row. A cup not drawn yet writes no stamp: it deletes the row. |
 | `waitlisted_at` | TIMESTAMP | yes | A cup entrant that waits on the cup's waitlist, because its places were taken or a cup played on one evening was drawn. It stamps the entrant's place in the cup's line ([cup_entrant_line](cup_entrant_line.md)), so the waitlist reads in line order. A waiting entrant takes no seat in the draw, the seeds or the counts, and checks in as one that is in does; the line clears it when a place takes the entrant, and so does a runner's admit or swap. Null means the entrant is in. |
 | `created_at` | TIMESTAMP | no | When the row was written. Set by the app. No route reads it. |
 

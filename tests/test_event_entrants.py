@@ -63,8 +63,8 @@ def test_a_member_signs_up_checks_in_and_withdraws(
         client.delete(f"/events/{event}/entrants/me", headers=headers).status_code
         == 204
     )
-    row = entrants(client, event)[0]
-    assert row["withdrawn_at"] is not None
+    # a cup not drawn yet forgets the row
+    assert entrants(client, event) == []
     assert client.get(f"/events/{event}").json()["entrant_count"] == 0
 
 
@@ -72,10 +72,11 @@ def test_a_withdrawn_player_signs_up_again_on_the_same_row(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
     """One entrant is one row, so a return signup reopens the one left behind."""
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.signup, league_id=seeded["league_id"])
     headers = member("1")
     assert sign_up(client, event, headers).status_code == 201
     client.delete(f"/events/{event}/entrants/me", headers=headers)
+    assert entrants(client, event)[0]["withdrawn_at"] is not None
 
     again = sign_up(client, event, headers, race="OC")
 
@@ -436,7 +437,7 @@ def test_a_withdraw_names_one_race_and_the_count_is_of_players(
 
     assert gone.status_code == 204, gone.text
     rows = {row["race"]: row["withdrawn_at"] for row in entrants(client, event)}
-    assert rows["HU"] is not None
+    assert "HU" not in rows
     assert rows["OC"] is None
     assert client.get(f"/events/{event}").json()["entrant_count"] == 1
 

@@ -273,10 +273,17 @@ def undraw(event_id: int, stage_id: int, confirm: bool = False) -> dict[str, int
     vetoes and sides, so the stage stands as it did before the
     draw, with its entrants, and its seeds open again. A finished event keeps
     its draw, and a later stage that is drawn already is taken back first. A
-    stage whose series hold results keeps them unless the caller confirms.
+    stage whose series hold results keeps them unless the caller confirms. A
+    cup left with no draw forgets the entrants who withdrew after it.
     """
+    from app.services import cup_waitlist
+
     with Session.begin() as session:
-        return undo_in(session, event_id, stage_id, confirm)
+        undone = undo_in(session, event_id, stage_id, confirm)
+        event = session.get(Season, event_id)
+        if event is not None:
+            cup_waitlist.forget_withdrawn(session, event)
+        return undone
 
 
 def undo_in(

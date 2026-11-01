@@ -22,7 +22,7 @@ The 71 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [event_stage](event_stage.md) - One format played over the entrants of an event, with the points, the tie breaks and the advance rule; standings are computed from it, never stored.
 * [event_round](event_round.md) - One round of a stage: its number, its date window and the fixed map of game 1; a GNL playday is a round.
 * [event_division](event_division.md) - One MMR band of an event that runs the whole stage list on its own and never merges; a KOTH bracket is a division.
-* [event_entrant](event_entrant.md) - One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
+* [event_entrant](event_entrant.md) - One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row, unless it left a cup not drawn yet.
 * [event_organizer](event_organizer.md) - One Discord account that runs one event beside the admins, the organizer that created it or a co-organizer it added.
 * [event_award](event_award.md) - One place of a finished event, frozen from the table of its last stage when an admin closes it; a trophy read lists these rows.
 * [koth_crown_event](koth_crown_event.md) - One crown change of a KOTH bracket that no result shows, a hand pass, a step down or a throne a rule emptied, placed after the series it followed in the order of play.

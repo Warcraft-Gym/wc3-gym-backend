@@ -448,7 +448,8 @@ def withdraw(
     service: EventServiceDep,
     race: Race | None = None,
 ) -> None:
-    """Withdraw the caller's own signup, or the one race named; the row stays."""
+    """Withdraw the caller's own signup, or the one race named. A cup not drawn
+    yet forgets the row, and any other event keeps it."""
     service.withdraw(event_id, claims, race)
 
 
@@ -470,8 +471,8 @@ def admit_entrant(
     dependencies=[Depends(require_event_runner)],
 )
 def withdraw_entrant(event_id: int, entrant_id: int, service: EventServiceDep) -> None:
-    """A runner withdraws one entrant: the row stays, and on a drawn cup the
-    entrant forfeits every series it still owes."""
+    """A runner withdraws one entrant. A cup not drawn yet forgets the row; on a
+    drawn cup the row stays and the entrant forfeits every series it still owes."""
     service.withdraw_entrant(event_id, entrant_id)
 
 
@@ -828,8 +829,9 @@ def draw_next_round(
 )
 def undraw_stage(event_id: int, stage_id: int, confirm: bool = False) -> dict[str, int]:
     """Take the stage's draw back: every round and series of it goes, and the
-    seeds open again, so the field may change and be drawn anew. A stage whose
-    series hold results answers 409 until the call sends `confirm=true`."""
+    seeds open again, so the field may change and be drawn anew. A cup left with
+    no draw forgets the entrants who withdrew after it. A stage whose series hold
+    results answers 409 until the call sends `confirm=true`."""
     return cup_engine.undraw(event_id, stage_id, confirm)
 
 
