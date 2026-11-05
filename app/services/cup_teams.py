@@ -31,9 +31,8 @@ from app.models.cup_team import (
 from app.models.enums import EntrantKind
 from app.models.event_entrant import EntrantAdd, EventEntrant, EventEntrantPublic
 from app.models.season import Season
-from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
-from app.services import cup_engine, cup_waitlist
+from app.services import cup_waitlist
 from app.services import events as event_service
 
 
@@ -170,19 +169,16 @@ def leave(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None:
 
 
 def withdraw(event_id: int, team_id: int, claims: dict[str, Any] | None) -> None:
-    """The captain withdraws the team; its open invites go with it, on a
-    drawn cup it forfeits every series it still owes, and the cup's line
-    moves up into its place."""
+    """The captain withdraws the team; its open invites go with it. A cup not
+    drawn yet forgets the team, and on a drawn cup it forfeits every series it
+    still owes. The cup's line moves up into its place."""
     with Session.begin() as session:
         _hold_captain(session, event_id, team_id, claims)
         entrant = _entrant_of(session, event_id, team_id)
-        entrant.withdrawn_at = utcnow()
         session.execute(
             delete(CupTeamInvite).where(col(CupTeamInvite.team_id) == team_id)
         )
-        session.flush()
-        cup_engine.forfeit_open(session, [ident(entrant)])
-        cup_waitlist.settle(session, _team_cup(session, event_id))
+        event_service._withdraw_rows(session, _team_cup(session, event_id), [entrant])
 
 
 def replace_member(

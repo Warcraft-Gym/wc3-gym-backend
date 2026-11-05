@@ -18,13 +18,14 @@ let in one who did when a player does not show; the draw never seats one.
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.waitlist import places
 from app.models.base import ident
 from app.models.cup_settings import CupEntrantLine
+from app.models.cup_team import CupTeam, CupTeamInvite, CupTeamMember
 from app.models.enums import EventKind
 from app.models.event_entrant import EventEntrant
 from app.models.season import Season
@@ -119,6 +120,33 @@ def settle(session: OrmSession, event: Season) -> None:
             # the waitlist reads in line order, so a player sent back keeps their place in it
             row.waitlisted_at = at
     session.flush()
+
+
+def drop(session: OrmSession, row: EventEntrant) -> None:
+    """Delete one entrant row, and its place in the line with it. A cup team goes
+    too, its players and its open invites, so every player of it is free again."""
+    team_id = row.cup_team_id
+    session.delete(row)
+    session.flush()
+    if team_id is not None:
+        for model in (CupTeamInvite, CupTeamMember):
+            session.execute(delete(model).where(col(model.team_id) == team_id))
+        session.execute(delete(CupTeam).where(col(CupTeam.id) == team_id))
+
+
+def forget_withdrawn(session: OrmSession, event: Season) -> None:
+    """A cup whose last draw was taken back stands before its draw again, where
+    nobody who left keeps a row. Those rows held no place, so the line stays."""
+    event_id = ident(event)
+    if event.kind is not EventKind.cup or cup_divisions.drawn(session, event_id):
+        return
+    for row in session.scalars(
+        select(EventEntrant).where(
+            col(EventEntrant.event_id) == event_id,
+            col(EventEntrant.withdrawn_at).is_not(None),
+        )
+    ).all():
+        drop(session, row)
 
 
 def _line(

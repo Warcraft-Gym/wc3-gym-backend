@@ -946,7 +946,8 @@ class EventService:
     def withdraw(
         self, event_id: int, claims: dict[str, Any] | None, race: Race | None = None
     ) -> None:
-        """Stamp the caller's own entrant rows as withdrawn; the rows stay.
+        """Withdraw the caller's own entrant rows: a cup not drawn yet forgets
+        them, and any other event stamps them withdrawn and keeps them.
 
         A race names one row of an event that takes one entry per race; no
         race withdraws every active row of the caller. A KOTH night takes a
@@ -995,8 +996,9 @@ class EventService:
             return _entrant_publics(session, event, [row])[0]
 
     def withdraw_entrant(self, event_id: int, entrant_id: int) -> None:
-        """A runner withdraws one entrant and keeps the row; on a drawn cup it
-        forfeits what it still owes, as the entrant's own withdraw does."""
+        """A runner withdraws one entrant, as the entrant's own withdraw does: a
+        cup not drawn yet forgets the row, and on a drawn cup the row stays and
+        forfeits what it still owes."""
         with Session.begin() as session:
             event = _event(session, event_id)
             if event.kind is EventKind.koth:
@@ -1198,14 +1200,7 @@ class EventService:
         A cup team goes with it, its players and its open invites, so every
         player of it is free again, and a cup's line moves up into its place."""
         with Session.begin() as session:
-            row = _entrant(session, event_id, entrant_id)
-            team_id = row.cup_team_id
-            session.delete(row)
-            session.flush()
-            if team_id is not None:
-                for model in (CupTeamInvite, CupTeamMember):
-                    session.execute(delete(model).where(col(model.team_id) == team_id))
-                session.execute(delete(CupTeam).where(col(CupTeam.id) == team_id))
+            cup_waitlist.drop(session, _entrant(session, event_id, entrant_id))
             cup_waitlist.settle(session, _event(session, event_id))
 
     def place_entrant(
@@ -1571,8 +1566,14 @@ def _league_entrant_kind(session: OrmSession, league_id: int | None) -> EntrantK
 def _withdraw_rows(
     session: OrmSession, event: Season, rows: Sequence[EventEntrant]
 ) -> None:
-    """Stamp the rows withdrawn; a cup's rows forfeit the series they still
-    owe, and its line moves up into the places they leave."""
+    """A cup not drawn yet forgets the rows, so a player signs up and leaves
+    without trace. Any other rows are stamped withdrawn, and a drawn cup's forfeit
+    the series they still owe. A cup's line moves up into the places they leave."""
+    if event.kind is EventKind.cup and not cup_divisions.drawn(session, ident(event)):
+        for row in rows:
+            cup_waitlist.drop(session, row)
+        cup_waitlist.settle(session, event)
+        return
     for row in rows:
         row.withdrawn_at = utcnow()
     session.flush()

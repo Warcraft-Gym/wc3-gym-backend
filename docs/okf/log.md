@@ -2,6 +2,7 @@
 
 ## 2026-11-01
 
+* **Update**: a cup not drawn yet forgets an entrant that withdraws, with its place in the line and its team, and taking the last draw back forgets the ones who withdrew after it. Once drawn, a withdrawn row stays. [The events module](concepts/events-module.md) and [event_entrant](data/tables/event_entrant.md) state it.
 * **Update**: an upload the store cannot take answers 502, and an import keeps its maps without the picture ([pictures](concepts/pictures-and-replays.md)). A [map source](concepts/map-sources.md) that copies its pictures shows none before they are ours, because the site refuses its files to a page on another site. A source's list answers at most 500 maps. An organizer reads the sources and imports the maps it picks, as an admin does ([roles and permissions](concepts/roles-and-permissions.md)).
 
 ## 2026-10-31

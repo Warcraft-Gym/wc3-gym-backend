@@ -1,5 +1,6 @@
 """A withdrawal from a drawn cup forfeits every series the entrant still owes:
-an open one at once, and one it reaches later as soon as both its sides fill."""
+an open one at once, and one it reaches later as soon as both its sides fill.
+One from a cup not drawn yet leaves no trace."""
 
 from typing import Any
 
@@ -9,10 +10,13 @@ from sqlmodel import col, select
 
 from app.core.db import Session
 from app.models.base import ident
+from app.models.cup_settings import CupEntrantLine
+from app.models.cup_team import CupTeam
 from app.models.enums import EventKind, StageFormat
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.season import Season
+from tests.test_cup_waitlist import line_cup, sign_up_all, waiting
 from tests.test_event_organizers import Member
 from tests.test_stage_engine import bracket, cup, generate, players, score
 from tests.test_team_cups import accept, headers_of, no_refresh, sign_up
@@ -308,3 +312,125 @@ def test_a_team_that_withdraws_forfeits_its_open_series(
             )
         ).all()
         assert row.result_kind == "forfeit"
+
+
+def rows_of(event: int) -> list[EventEntrant]:
+    with Session.begin() as session:
+        rows = session.scalars(
+            select(EventEntrant).where(col(EventEntrant.event_id) == event)
+        ).all()
+        session.expunge_all()
+        return list(rows)
+
+
+def test_a_player_leaving_before_the_draw_leaves_no_trace(
+    client: Client, auth_headers: dict[str, str], member: Member
+) -> None:
+    """The row and its place in the line go, so a return signup is a new one."""
+    event = line_cup(client, auth_headers, 2)
+    ids = players(3)
+    sign_up_all(client, member, event, ids)
+    gone = entrant_of(event, ids[0])
+
+    response = client.delete(
+        f"/events/{event}/entrants/me", headers=headers_of(member, ids[0])
+    )
+
+    assert response.status_code == 204, response.text
+    assert sorted(row.user_id or 0 for row in rows_of(event)) == sorted(ids[1:])
+    with Session.begin() as session:
+        assert session.get(CupEntrantLine, gone) is None
+    # the line moved up into the place, and the return signup stands at its end
+    assert waiting(event) == []
+    sign_up_all(client, member, event, ids[:1])
+    assert waiting(event) == ids[:1]
+    assert len(rows_of(event)) == 3
+
+
+def test_a_player_who_checked_in_still_leaves_before_the_draw(
+    client: Client, auth_headers: dict[str, str], member: Member
+) -> None:
+    event = line_cup(client, auth_headers, 2, checkin_enabled=True)
+    user, *_ = ids = players(2)
+    sign_up_all(client, member, event, ids)
+    checked = client.post(
+        f"/events/{event}/entrants/{entrant_of(event, user)}/checkin",
+        headers=auth_headers,
+    )
+    assert checked.status_code == 200, checked.text
+
+    response = client.delete(
+        f"/events/{event}/entrants/me", headers=headers_of(member, user)
+    )
+
+    assert response.status_code == 204, response.text
+    assert [row.user_id for row in rows_of(event)] == ids[1:]
+
+
+def test_a_runner_withdrawing_before_the_draw_leaves_no_trace(
+    client: Client, auth_headers: dict[str, str], member: Member
+) -> None:
+    event = line_cup(client, auth_headers, 2)
+    ids = players(2)
+    sign_up_all(client, member, event, ids)
+
+    withdraw(client, auth_headers, event, entrant_of(event, ids[0]))
+
+    assert [row.user_id for row in rows_of(event)] == ids[1:]
+
+
+def test_a_team_leaving_before_the_draw_leaves_no_trace(
+    client: Client,
+    member: Member,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The team goes, so its players are free to sign up again."""
+    no_refresh(monkeypatch)
+    event = team_cup()
+    captain, mate = players(2)
+    made = sign_up(client, event, headers_of(member, captain), "Leaving", mate)
+    assert made.status_code == 201, made.text
+    team = made.json()["team"]["id"]
+    accept(client, event, team, headers_of(member, mate))
+
+    gone = client.delete(
+        f"/events/{event}/cup-teams/{team}", headers=headers_of(member, captain)
+    )
+
+    assert gone.status_code == 204, gone.text
+    assert rows_of(event) == []
+    with Session.begin() as session:
+        assert session.get(CupTeam, team) is None
+    again = sign_up(client, event, headers_of(member, mate), "Back", captain)
+    assert again.status_code == 201, again.text
+
+
+def test_a_player_leaving_after_the_draw_keeps_the_row_and_counts(
+    client: Client, auth_headers: dict[str, str], member: Member
+) -> None:
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    first, *_ = users_of(event)
+
+    client.delete(f"/events/{event}/entrants/me", headers=headers_of(member, first))
+
+    rows = {row.user_id: row for row in rows_of(event)}
+    assert len(rows) == 4
+    assert rows[first].withdrawn_at is not None
+
+
+def test_taking_the_draw_back_forgets_who_left_after_it(
+    client: Client, auth_headers: dict[str, str], member: Member
+) -> None:
+    """The cup stands before its draw again, where nobody who left keeps a row."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    first, *others = users_of(event)
+    client.delete(f"/events/{event}/entrants/me", headers=headers_of(member, first))
+
+    undone = client.delete(
+        f"/events/{event}/stages/{stage}/series?confirm=true", headers=auth_headers
+    )
+
+    assert undone.status_code == 200, undone.text
+    assert sorted(row.user_id or 0 for row in rows_of(event)) == sorted(others)

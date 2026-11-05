@@ -1,8 +1,8 @@
 """One entrant of an event: a player, a pre-made team, a cup team, or an archival identity.
 
 Eligibility warns and never blocks (NE-8), so nothing here refuses a signup:
-a withdrawn or unchecked-in entrant keeps its row and its stamps say so. The
-one thing the row does refuse is naming anything other than exactly one identity.
+an unchecked-in entrant keeps its row and its stamps say so, as does a withdrawn
+one on anything but a cup not drawn yet, which forgets it. The one thing the row does refuse is naming anything other than exactly one identity.
 """
 
 from datetime import datetime
